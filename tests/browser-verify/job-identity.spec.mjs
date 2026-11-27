@@ -1,0 +1,34 @@
+import {test,expect} from '@playwright/test';
+import {startHarness} from './lib.mjs';
+let harness;
+test.beforeAll(async()=>{harness=await startHarness();});
+test.afterAll(async()=>{await harness?.stop();});
+test('historical lender job has one roster name, laptop glyph and actual agent across Home, Jobs and detail',async({page})=>{
+ const circle={id:'identity-circle',name:'Weekend projects',origin:'http://fixture'},digest='sha256:'+'e'.repeat(64);
+ const job={job_digest:digest,circle,role:'ran',state:'result-accepted',result_digest:'sha256:'+'f'.repeat(64),current_attempt:{holder:'holder'},historyIdentity:{author:'sam',deviceName:null,localName:null}};
+ const receipt={harness:'claude-code-subscription',candidate_format:'diff',diffstat:{files:1,insertions:1,deletions:0}};
+ await page.route('**/api/circles',r=>r.fulfill({json:[circle]}));
+ await page.route('**/api/devices',r=>r.fulfill({json:{fingerprint:'holder',name:'My computer',circles:[{circle:circle.id,members:[{key_id:'sam',device_name:'Sam'}]}]}}));
+ await page.route('**/api/jobs',r=>r.fulfill({json:[job]}));
+ await page.route('**/api/jobs/**',route=>{
+  const path=new URL(route.request().url()).pathname;
+  if(path.endsWith('/receipt'))return route.fulfill({json:{receipt,checks:[]}});
+  if(path.endsWith('/changes'))return route.fulfill({json:{format:'diff',files:[{path:'date.mjs',insertions:1,deletions:0}],receipt,checks:[]}});
+  if(path.endsWith('/retention'))return route.fulfill({json:{}});
+  if(path.endsWith('/transcript'))return route.fulfill({json:{text:''}});
+  return route.fulfill({json:job});
+ });
+ await page.goto((await harness.link('lender'))+'#/home');
+ const recent=page.getByRole('region',{name:'Recently finished'});
+ await expect(recent.getByText('Job for Sam',{exact:true})).toBeVisible();
+ await expect(recent.locator('use[href$="#laptop"]')).toHaveCount(1);
+ await page.evaluate(()=>{location.hash='#/jobs';});
+ await expect(page.locator('.jlist').getByText('Job for Sam',{exact:true}).filter({visible:true}).first()).toBeVisible();
+ await expect(page.locator('.jlist').getByText('Claude Code',{exact:true}).filter({visible:true}).first()).toBeVisible();
+ await expect(page.locator('.jlist use[href$="#laptop"]')).toHaveCount(1);
+ await page.locator('.jlist a.row').first().click();
+ await expect(page.getByRole('heading',{level:1,name:'Job for Sam'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Result delivered',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Changes',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Add as a branch…',exact:true})).toHaveCount(0);
+});

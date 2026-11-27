@@ -1,0 +1,146 @@
+// Synthetic callback examples; numeric labels select the tested functions.
+2300:     // A damaged model/effort entry falls back to the agent default; it must not stop the app from starting.
+2301:     if(!settings.agentRun||typeof settings.agentRun!=='object'||Array.isArray(settings.agentRun))settings.agentRun={};
+2302:     for(const [id,value] of Object.entries(settings.agentRun)){try{agentRun(value);}catch{delete settings.agentRun[id];}}
+2303:     device=await (options.device??openDevice({...options,home,clock:seconds}));
+2304:     backend=await (options.backendFactory?options.backendFactory({home}):new DockerSbxBackend());
+2305:     // Backends without an explicit capability contract remain unavailable.
+2306:     if(typeof backend.lenderCapabilities!=='function')backend.lenderCapabilities=()=>({available:false,backend_id:'docker-sbx',pinned_git:false,enforced_limits:[]});
+2307:     checkSandboxes=createCheckSandboxes({backend,file:join(directory,'check-sandboxes.json'),now,timeoutMs:SIGNIN_TIMEOUT_MS,isClosed:()=>closed});
+2308:     const pendingChecks=await counterStore.get();
+2309:     await checkSandboxes.reap({protectedJobIds:[pendingChecks?.pending?.jobId,pendingChecks?.resultPending?.jobId].filter(id=>typeof id==='string')}).catch(()=>{});
+2310:     const liveCounters=await counterStore.get();
+2311:     // Owner cap, presence override and window-origin evidence belong to the one durable lending engine.
+2312:     ownerSettings=createOwnerSettings({directory:join(directory,'owner-settings')});
+2313:     const ownerSettingsView=()=>({values:ownerSettings.values(),audit:ownerSettings.audit(),defaultMaxJobUsd:DEFAULT_OWNER_MAX_JOB_USD,
+2314:       minimums:lendableModelsFor('claude').map(model=>({model,minimumMaxJobUsd:minimumMaxJobUsdForModel(model)}))});
+2315:     presenceOverrides=createPresenceOverrideStore({directory:join(directory,'presence-override')});
+2316:     windowOrigins=createWindowOriginStore({directory:join(directory,'window-origin')});
+2317:     const meterLedger=options.lendingLedger??createLendingLedger({file:join(directory,'lending-meter-ledger.json'),now:options.lendingNow??now});
+2318:     // One local-only lane fences imports, setting changes and deletion. Off invalidates
+2319:     // an adapter awaiting I/O immediately; its queued deletion also runs after any commit.
+2320:     let historyLearningEnabled=settings.learnFromLocalAgentLogs!==false, historyLearningGeneration=0;
+2365:           open:open.map(row=>[row.resource,row.account_week_id,row.observed_at,row.meter_points]).sort()});
+2366:         if(signature!==completedHistorySignature){
+2367:           await importLocalHistory();
+2368:           completedHistorySignature=signature;
+2369:         }
+2370:       }finally{checkingHistoryPeriods=false;}
+2371:     };
+2372:     const histories=new Map();
+2373:     const historyFor=provider=>{
+2374:       const injected=typeof options.lendingHistory==='function'?options.lendingHistory(provider):options.lendingHistory?.[provider];
+2375:       if(injected)return injected;
+2376:       if(!histories.has(provider))histories.set(provider,createLendingHistory({home,account:provider,ledger:meterLedger,now:options.lendingNow??now}));
+2377:       return histories.get(provider);
+2378:     };
+2379:     const runLendingProbe=options.lendingProbeRunner??(backend instanceof DockerSbxBackend
+2380:       ?createLendingProbeRunner({backend,now:options.lendingNow??now}):async()=>{throw new Error('probe runner unavailable');});
+2381:     const lendingProbe=createLendingProbe({runGuest:runLendingProbe,ledger:meterLedger,history:historyFor,now:options.lendingNow??now});
+2382:     const lenderSourceReadings=createLendingReadings({ledger:meterLedger,probe:lendingProbe,
+2383:       plans:()=>settings?.limits?.lendingPolicy?.accountPlans??{},jobRunning:provider=>lendingRuntime?.busy(provider)===true,
+2384:       now:options.lendingNow??now});
+2385:     const localIdentity=provider=>{
+2475:       // selecting the legacy whole-week band here would bypass the imported model input and reset-time conditioning.
+2476:       return {demandModel:model,modelDataByResource,frozenProtectionSource:'model',
+2477:         job:{friendValue,estimateUsdMicro:Number.isSafeInteger(requestedUsdMicro)?requestedUsdMicro:0}};
+2478:     };
+2479:     const objectiveInputFor=async evidence=>{
+2480:       const circle=evidence.request?.circle;
+2481:       const lendingPolicy=settings.limits?.lendingPolicy??{};
+2482:       const strategy=evidence.context?.strategy??lendingPolicy.strategy??'automatic';
+2483:       const automatic=evidence.context?.automatic!==false;
+2484:       let laterBurnCapacityMicro=0,resetIndexedSchedule=null;
+2485:       if(automatic&&evidence.request?.objective_status!==true){
+2486:         const fixtureQueue=options.lendingPace50?.source?.kind==='synthetic'&&
+2487:           typeof options.lendingPace50?.source?.objectiveInputFor==='function';
+2488:         if(fixtureQueue){
+2489:           // The explicit synthetic test source declares an empty queue in its
+2490:           // objective fixture. Production always uses the live queue reader.
+2491:         }else if(typeof options.lendingQueueReader==='function'){
+2492:           const queue=await options.lendingQueueReader({circle,jobId:evidence.request?.job_id,provider:evidence.request?.provider,
+2493:             now:evidence.now,stopMarginMs:evidence.request?.stop_ms});
+2494:           if(!queue||queue.known!==true||!Number.isSafeInteger(queue.laterBurnCapacityMicro)||queue.laterBurnCapacityMicro<0)
+2495:             return {refuse:'queue_unknown'};
+2496:           laterBurnCapacityMicro=queue.laterBurnCapacityMicro;
+2497:           resetIndexedSchedule=queue.resetIndexedSchedule??null;
+2498:         }else{
+2499:           if(typeof circle!=='string'||!circle)return {refuse:'queue_unknown'};
+2500:           try{
+2501:             const client=await device.client(circle);
+2502:             for await(const offer of client.listOffers({limit:100,waitSeconds:0}))
+2503:               if(offer?.job_digest!==evidence.request?.job_id)return {refuse:'queue_unknown'};
+2504:           }catch{return {refuse:'queue_unknown'};}
+2505:         }
+2506:       }
+2507:       const injectedBuilder=options.lendingPace50?.objectiveInputFor??
+2508:         options.lendingPace50?.source?.objectiveInputFor??options.lendingObjectiveInputFor;
+2509:       let supplied;
+2510:       try{supplied=automatic
+2511:         ?typeof injectedBuilder==='function'
+2512:           ?await injectedBuilder({...evidence,laterBurnCapacityMicro})
+2513:           :await continuousDemandEvidence({...evidence,laterBurnCapacityMicro})
+2514:         :{job:{friendValue:null,estimateUsdMicro:evidence.request?.requested_usd_micro??0}};}
+2515:       catch{return {refuse:'objective_evidence_unknown'};}
+2516:       if(!supplied||typeof supplied!=='object')return {refuse:'objective_evidence_unknown'};
+2517:       if(typeof supplied.refuse==='string')return supplied;
+2518:       if(automatic&&(!supplied.job||!(Number.isFinite(supplied.job.friendValue)||Array.isArray(supplied.job.chunkCandidates))))
+2519:         return {refuse:'friend_value_unknown'};
+2520:       if(!supplied.job)supplied.job={estimateUsdMicro:0};
+2521:       const windows=Object.fromEntries(evidence.input.windows.map(window=>{
+2522:         const committed=evidence.state.attempts.flatMap(attempt=>attempt.resources)
+2523:           .filter(resource=>resource.id===window.id&&resource.instance===window.instance&&resource.epoch===window.epoch)
+2524:           .reduce((sum,resource)=>sum+resource.held_micro+resource.unrepresented_micro,0);
+2525:         return [window.id,{kind:window.kind,known:true,fresh:true,compatible:true,usedMicro:window.used_micro,
+2526:           committedMicro:committed,uncertaintyMicro:window.uncertainty_micro??0,
+2527:           pointsPerUsdMicro:window.kappa_micro,pointsPerUsdLowerMicro:window.kappa_lower_micro??null,resetAtMs:window.resets_at,
+2528:           anchorAtMs:window.anchor_at,durationMs:window.duration_ms,ownerUsedMicro:window.owner_used_micro??window.used_micro,
+2529:         }];
+2530:       }));
+2531:       const gates={consent:evidence.context?.consent===true,
+2532:         limits:evidence.input.controls.people&&evidence.input.controls.agents&&evidence.input.controls.schedule&&evidence.input.controls.unexpired,
+2533:         funding:evidence.observation.funding?.subscription_only==='proven',
+2534:         stopping:evidence.state.mode==='on'&&evidence.context?.intent==='on'&&evidence.context?.paused!==true&&
+2535:           evidence.context?.ownerAbsent===true&&!evidence.state.owner_present};
+2536:       const model=evidence.request?.model;
+2537:       const headroom=claudeCallHeadroomUsd(model);
+2538:       if(evidence.request?.provider==='claude'&&(!Number.isFinite(headroom)||headroom<=0))return {refuse:'conversion_unknown'};
+2539:       const worstCallUsdMicro=Number.isFinite(supplied.job.worstCallUsdMicro)
+2540:         ?supplied.job.worstCallUsdMicro:Math.ceil(headroom*MICRO);
+2541:       if(!Number.isSafeInteger(worstCallUsdMicro)||worstCallUsdMicro<0)return {refuse:'conversion_unknown'};
+2542:       return {automatic,position:lendingPolicy.protectionPosition,strategy,
+2543:         strategyParams:lendingPolicy.strategyParams,band:evidence.band,
+2544:         owner:supplied.owner,demandModel:supplied.demandModel??(defaultDemandModel?.kind===CONTINUOUS_DEMAND_MODEL_KIND?defaultDemandModel:null),
+2545:         resetIndexedSchedule:supplied.resetIndexedSchedule??resetIndexedSchedule,
+2546:         modelDataByResource:supplied.modelDataByResource??{},frozenProtectionSource:supplied.frozenProtectionSource??null,
+2547:         job:{...supplied.job,worstCallUsdMicro},windows,weeklyResource:evidence.input.weekly_resource_id,
+2548:         gates,laterBurnCapacityMicro};
+2549:     };
+2550:     const injectedHistory=options.lendingPace50?.history??options.lendingPace50?.source?.history;
+2551:     const defaultPace50={account:device.keyId,account_week_id:'unobserved:'+device.keyId,source:realSource,
+2552:       history:injectedHistory??historyFor,objectiveInputFor};
+2553:     // Status has a separate local-only reading contract; injected/probing readings remain admission-only.
+2554:     const statusReadings=provider=>meterLedger.snapshot(provider,{plan:settings?.limits?.lendingPolicy?.accountPlans?.[provider]??'unknown'});
+2555:     const runtimeReadings=options.lendingReadings??statusReadings;
+2556:     lendingRuntime=createLendingRuntime({directory,backend,settings:()=>settings,now:options.lendingNow??now,presence:userActive,lastActiveAt:()=>ownerPresence.lastActiveAt(),selfKey:()=>device.keyId,
+2557:       onWarning:warning=>notificationFeed.lendingWarning(warning,settings.notifications),
+2558:       readOverride:runtimeReadings,statusRead:statusReadings,runGuest:runLendingProbe,canProbe:backend instanceof DockerSbxBackend,
+2559:       liveAttemptIds:()=>[liveCounters?.pending?.attemptId,...Object.values(liveCounters?.accounts??{}).map(c=>c.pending?.attemptId)].filter(Boolean),
+2560:       // Internal opt-in only. Trusted evidence comes from startup options, never from a request body.
+2561:       pace50:{...defaultPace50,...(options.lendingPace50??{}),backend,pendingRecords:()=>pendingAttempts(liveCounters??{}),ownerSettings,presenceOverrides,windowOrigins}});
+2562:     lendingRuntime.start();
+3398:                    typeof input.deadline==='string'&&!Number.isNaN(Date.parse(input.deadline))))||
+3399:                  (input.estimatedWallMs!==undefined&&!(Number.isFinite(input.estimatedWallMs)&&input.estimatedWallMs>0)))fail('invalid_request');
+3400:               if(!lendingRuntime)fail('pace50_disabled',404);
+3401:               let budget=null;
+3402:               if(input.budget_v1!==undefined){try{budget=requestedBudget({budget_v1:input.budget_v1});}catch{fail('invalid_request');}}
+3403:               return send(await lendingRuntime.previewAdmission({jobId:input.jobId,provider:input.provider,model:input.model??null,
+3404:                 job:{id:input.jobId,...(budget?{budget_v1:budget}:{})},
+3405:                 ...(input.deadline!==undefined?{deadline:input.deadline}:{}),
+3406:                 ...(input.estimatedWallMs!==undefined?{estimatedWallMs:input.estimatedWallMs}:{})}));
+3407:             }
+3408:             if(parts[2]==='owner-settings') {
+3409:               // The owner's saved per-job limit. It is saved and audited, and an out-of-range or unauditable change is refused by name.
+3410:               if(!ownerSettings)fail('pace50_disabled',404);
+3411:               if(Object.keys(input).some(k=>!['maxJobUsd','reason','replaceUnreadable'].includes(k)))fail('invalid_request');
+3412:               try{ownerSettings.set({by:'owner',reason:input.reason,now:now(),maxJobUsd:input.maxJobUsd,replaceUnreadable:input.replaceUnreadable===true});}

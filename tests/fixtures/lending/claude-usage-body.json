@@ -1,0 +1,56 @@
+{
+ "five_hour": {
+  "utilization": 25.0,
+  "resets_at": "2026-10-20T16:19:59.550398+00:00",
+  "limit_dollars": null,
+  "used_dollars": null,
+  "remaining_dollars": null,
+  "locked_reason": null
+ },
+ "seven_day": {
+  "utilization": 37.0,
+  "resets_at": "2026-10-23T01:59:59.550422+00:00",
+  "limit_dollars": null,
+  "used_dollars": null,
+  "remaining_dollars": null,
+  "locked_reason": null
+ },
+ "seven_day_opus": null,
+ "seven_day_sonnet": null,
+ "iguana_necktie": {
+  "utilization": 3.0,
+  "resets_at": "2026-11-01T00:00:00+00:00",
+  "limit_dollars": 50,
+  "used_dollars": 1.5,
+  "remaining_dollars": 48.5,
+  "locked_reason": null
+ },
+ "extra_usage": {
+  "is_enabled": false,
+  "monthly_limit": null,
+  "used_credits": null,
+  "utilization": null,
+  "currency": null,
+  "decimal_places": null,
+  "disabled_reason": null,
+  "user_disabled": false,
+  "spend_limit_reached": false,
+  "credits_ever_enabled": false,
+  "daily": null,
+  "weekly": null
+ },
+ "limits": [
+  {
+   "kind": "weekly",
+   "group": "all",
+   "percent": 37,
+   "severity": "ok",
+   "resets_at": "2026-10-23T01:59:59Z",
+   "scope": null,
+   "is_active": true
+  }
+ ],
+ "member_dashboard_available": false,
+ "email": "FAKE-not-real@example.invalid",
+ "account_uuid": "00000000-fake"
+}

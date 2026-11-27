@@ -1,0 +1,13 @@
+/* Result actions besides Add as a branch: Open in editor, Apply to working tree, Remove this branch (result-actions.jsx). */
+.result-editor{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}
+.result-apply-form{display:flex;align-items:flex-end;gap:var(--s-3);flex-wrap:wrap}.result-apply-form .field{min-width:min(100%,280px)}
+.result-apply-files{list-style:none;padding:0;margin:0;border:1px solid var(--line);border-radius:var(--r-sm,6px)}
+.result-apply-files li+li{border-top:1px solid var(--line)}
+.result-apply-files label{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:var(--s-2);row-gap:var(--s-1);min-height:var(--touch);padding:var(--s-2) var(--s-3);cursor:pointer}
+.result-apply-files input{accent-color:var(--ink-btn);width:16px;height:16px;flex:none}
+.result-apply-files code{grid-column:2;min-width:0;overflow-wrap:anywhere}
+.result-apply-files .diff-count{flex:none;font-variant-numeric:tabular-nums}
+.result-apply-state{grid-column:2 / -1;color:var(--text-2)}.result-apply-state.is-blocked{color:var(--bad-text)}
+.result-apply-files li:has(input:disabled) label{cursor:default}
+@media(max-width:699px){.result-apply-form>.btn{width:100%}}
+.result-actions>section+section{border-top:1px solid var(--line);padding-top:var(--s-4)}

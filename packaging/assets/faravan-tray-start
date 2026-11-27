@@ -1,0 +1,61 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+. /usr/lib/faravan/lib/session-environment.sh
+
+# A caller without a desktop session (an SSH shell, a cron job) must not rewrite the shared user
+# manager's session or restart a tray that has one; it only makes sure the tray runs.
+if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+  exec /usr/bin/systemctl --user start faravan-tray.service
+fi
+
+# Restart an active tray only when the graphical caller changes its session values.
+# The manager owns XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS when the caller omits them.
+manager_environment=$(/usr/bin/systemctl --user show-environment)
+manager_has_key() {
+  printf '%s\n' "$manager_environment" | /usr/bin/grep -q "^$1="
+}
+manager_has_value() {
+  printf '%s\n' "$manager_environment" | /usr/bin/grep -Fqx "$1=$2"
+}
+changed=no
+for key in $FARAVAN_SESSION_VARIABLES; do
+  eval 'present=${'"$key"'+x}'
+  if [ "$present" = x ]; then
+    eval 'value=${'"$key"'}'
+    if ! manager_has_value "$key" "$value"; then changed=yes; fi
+  else
+    case "$key" in XDG_RUNTIME_DIR|DBUS_SESSION_BUS_ADDRESS) continue ;; esac
+    if manager_has_key "$key"; then changed=yes; fi
+  fi
+done
+
+if [ "$changed" = yes ]; then
+  set --
+  for key in $FARAVAN_SESSION_VARIABLES; do
+    case "$key" in XDG_RUNTIME_DIR|DBUS_SESSION_BUS_ADDRESS) continue ;; esac
+    eval 'present=${'"$key"'+x}'
+    if [ -z "$present" ] && manager_has_key "$key"; then set -- "$@" "$key"; fi
+  done
+  if [ "$#" -gt 0 ]; then /usr/bin/systemctl --user unset-environment "$@"; fi
+
+  set --
+  for key in $FARAVAN_SESSION_VARIABLES; do
+    eval 'present=${'"$key"'+x}'
+    if [ "$present" = x ]; then
+      eval 'value=${'"$key"'}'
+      if ! manager_has_value "$key" "$value"; then set -- "$@" "$key"; fi
+    fi
+  done
+  if [ "$#" -gt 0 ]; then /usr/bin/systemctl --user import-environment "$@"; fi
+fi
+
+if /usr/bin/systemctl --user is-active --quiet faravan-tray.service; then
+  if [ "$changed" = yes ]; then
+    exec /usr/bin/systemctl --user restart faravan-tray.service
+  fi
+  exit 0
+fi
+exec /usr/bin/systemctl --user start faravan-tray.service

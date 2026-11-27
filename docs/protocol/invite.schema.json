@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faravan.dev/protocol/v1/invite.schema.json",
+  "title": "Faravan v1 invite",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "faravan.invite.v1"
+        },
+        "circle": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "coordinator": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 4096
+        },
+        "root_fingerprint": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "root_public_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "invite_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "invite_public_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "description": "One-time Ed25519 invite public key. Its private seed exists only in the invite-link fragment (/join#invite=... or /i/CODE#SEED); never in this public envelope."
+        },
+        "lan_mode": {
+          "const": true
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "owner_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Label of the owner's device, so a joiner can say whom it waits for."
+        },
+        "role": {
+          "enum": [
+            "borrow",
+            "lend",
+            "both"
+          ],
+          "description": "Invitation purpose, not an authorization grant. Absent means lend."
+        },
+        "max_uses": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "Maximum distinct enrolling devices. Absent preserves one-use enrollment."
+        },
+        "approval": {
+          "const": "each",
+          "description": "Present when the owner approves each device by hand. Absent means the owner's device approves a redeemed one-time invite automatically."
+        },
+        "authority_chain": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "type": "object"
+          }
+        },
+        "member_origins": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "description": "Optional signed member-origin list (owner-offline topology): where each member serves the circle, carried beside the coordinator origin. Reach data only; it never grants membership.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key_id", "origin"],
+            "properties": {
+              "key_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "origin": {"type": "string", "minLength": 8, "maxLength": 256}
+            }
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "circle",
+        "coordinator",
+        "root_fingerprint",
+        "root_public_key",
+        "invite_id",
+        "invite_public_key",
+        "created_at",
+        "expires_at"
+      ]
+    },
+    "signature": {
+      "$ref": "job.schema.json#/$defs/signature"
+    }
+  },
+  "required": [
+    "payload",
+    "signature"
+  ],
+  "description": "Circle-authority-signed public invitation (root signed for legacy circles); enrollment proof binds circle, invite_id and device_public_key in faravan/enrollment/v1. See v1.md section 5."
+}

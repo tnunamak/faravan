@@ -1,0 +1,30 @@
+import './helpers/no-browser.mjs';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,readFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createServer} from 'node:net';
+import {openDevice} from '../lib/v1/device.mjs';
+import {provisionLocalCircle} from '../lib/v1/host.mjs';
+import {startCoordinator} from '../lib/coordinator.mjs';
+
+test('R3 an expired first-provisioning document is renewed by its owner and serves the same circle',{timeout:30000},async t=>{
+  const root=await mkdtemp(join(tmpdir(),'r3-provision-expired-'));
+  const probe=createServer();await new Promise(resolve=>probe.listen(0,'127.0.0.1',resolve));
+  const port=probe.address().port;await new Promise(resolve=>probe.close(resolve));
+  const current=Math.floor(Date.now()/1000);let now=current-8*86400;
+  const device=await openDevice({home:join(root,'device'),ensureDefault:false,clock:()=>now});
+  const origin='http://127.0.0.1:'+port,circle=await device.createCircle(origin,{publish:false});
+  now=current;
+  const home=join(root,'host');
+  await provisionLocalCircle({home,circle,device});
+  const document=JSON.parse(await readFile(circle.provisioningPath,'utf8'));
+  assert.equal(document.circle_id,circle.id);assert.equal(document.root_fingerprint,circle.pinnedRootFingerprint);
+  assert.ok(Date.parse(document.roster.payload.valid_until)>Date.now());
+  const server=await startCoordinator({port,host:'127.0.0.1',v1:{dbPath:join(home,'v1','coordinator.sqlite'),blobDir:join(home,'v1','blobs'),origin}});
+  t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));});
+  await device.publishRoster(circle.id);
+  const roster=await (await device.client(circle.id)).refreshRoster();
+  assert.equal(roster.payload.circle,circle.id);assert.ok(roster.payload.epoch>=2);
+});

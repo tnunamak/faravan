@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "_cleanupId": "a6717427-fd35-4d92-9618-e2ff265d863e",
+  "job_id": "upgrade-fixture-job",
+  "sandbox_id": "wf-aa666da0f07adc47",
+  "scratch_dir": "@ROOT@/scratch/wf-job-wf-aa666da0f07adc47-fixture",
+  "compute_stopped": false,
+  "data_cleanup": "owned",
+  "policy_cleanup": "owned"
+}

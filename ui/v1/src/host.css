@@ -1,0 +1,67 @@
+/* Hosting a circle (H1). Layout from the mockups of circles.host-choose / host-running; the radio rows and the notes are ours. */
+.host-page{max-width:720px;display:grid;gap:var(--s-6)}
+.circle-empty-actions{justify-content:center}
+.host{max-width:720px}
+.host .section-legend{font-size:var(--text-sm);font-weight:600;color:var(--text-2);padding:0;margin-bottom:var(--s-2)}
+.host fieldset{border:0;padding:0;margin:0;min-width:0}
+.host .way{display:flex;gap:var(--s-3);align-items:flex-start;padding:var(--s-4) var(--s-5);cursor:pointer;min-height:44px}
+.host .way+.way{border-top:1px solid var(--line)}
+.host .way input{width:22px;height:22px;margin-top:var(--s-1);flex:none}
+.host .way .block{display:block;margin-top:var(--s-1)}
+.host .way .warn{font-weight:600;color:var(--text)}
+.host .way .grow{min-width:0}
+.host .bad-text{color:var(--bad-text)}
+.host .banner p{margin:var(--s-1) 0 0}
+.host .host-actions{margin-top:var(--s-3)}
+.host .linklike{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;cursor:pointer;min-height:24px}
+.host .cmd code{white-space:pre-wrap;overflow-wrap:anywhere}
+.member-host .banner p{margin:var(--s-1) 0 0}
+
+/* Circles, invitations, devices and activity share the v3 kit. */
+.circle-page{max-width:var(--page-max);display:grid;gap:var(--s-6)}
+.circle-page .list{padding:0;margin:0;list-style:none}
+.circle-page .row:hover{background:var(--surface-2)}
+.circle-page a.row{cursor:pointer}
+.circle-page .row-purpose{display:block;color:var(--text);margin-bottom:var(--s-1)}
+.circle-page :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.circle-page .card :focus-visible{outline-offset:-2px}
+.circle-page .panel{border:1px solid var(--line);border-radius:var(--r-md);padding:var(--s-5);display:grid;gap:var(--s-4);background:var(--surface)}
+.circle-page h2{font-size:var(--text-title3);font-weight:600}
+.circle-page form,.circle-page label{display:grid;gap:var(--s-2)}
+.circle-page form{gap:var(--s-4)}
+.circle-page input:not([type=checkbox]),.circle-page textarea,.circle-page select{width:100%;min-height:var(--touch);padding:var(--s-3);border:1px solid var(--line-input);border-radius:var(--r-md);background:var(--surface);color:var(--text);font:inherit}
+.circle-page .action{display:inline-grid;gap:var(--s-1);justify-items:start}
+.circle-page .feedback,.circle-page .muted{font-size:var(--text-sm);color:var(--text-2)}
+.circle-page .error{color:var(--bad-text)}
+.circle-page .action button:disabled{cursor:wait}
+.circle-page .actions{display:flex;gap:var(--s-2);flex-wrap:wrap}
+.circle-skeleton{display:grid;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden}
+.circle-skeleton span{display:block;min-height:var(--s-18);background:var(--surface-2);border-bottom:1px solid var(--line)}
+.member-head{display:grid;grid-template-columns:1fr auto;padding:0 var(--s-5)}
+.member-row{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-5);flex-wrap:wrap}
+.member-row>.grow{flex:1;min-width:var(--s-18)}
+.member-row .st{font-size:var(--text-sm)}
+.member-menu{position:relative}
+.member-menu summary{list-style:none;cursor:pointer}
+.member-menu summary::-webkit-details-marker{display:none}
+.member-menu-body{position:absolute;right:0;top:100%;width:min(320px,calc(100vw - var(--s-10)));z-index:10;padding:var(--s-5);border:1px solid var(--line-strong);border-radius:var(--r-md);background:var(--surface);box-shadow:var(--shadow-2)}
+@media(max-width:599px){.member-head{display:none}.member-row>.member-availability{margin-left:var(--s-10)}.member-menu{margin-left:auto}.circle-page>.hstack-3.wrap{align-items:flex-start}}
+.circle-page .hstack-3,.host .hstack-3{display:flex;align-items:center;gap:var(--s-3)}
+.circle-page .btn-primary,.host .btn-primary{background:var(--ink-btn);border-color:var(--ink-btn);color:var(--ink-btn-text);box-shadow:none}
+.host .btn-primary[aria-disabled=true]{background:var(--surface-2);border-color:var(--line);color:var(--text-2)}
+.circle-header{display:flex;align-items:center;gap:var(--s-3)}
+.circle-header>.hstack-3{flex:1;min-width:0}
+.circle-header .grow{min-width:0}
+.circle-header>.btn{flex:none}
+.circle-page .input:focus-visible,.host .input:focus-visible{outline-offset:-1px;box-shadow:none;border-color:var(--focus)}
+@media(max-width:599px){.circle-header{flex-direction:column;align-items:stretch}.circle-header>.hstack-3{align-items:flex-start}.circle-header>.btn{width:100%}}
+@media(max-width:599px){
+  .member-row{display:grid;grid-template-columns:var(--touch) minmax(0,1fr) var(--touch);align-items:start}
+  .member-row>.grow{grid-column:2;min-width:0}
+  .member-row>.member-availability{grid-column:2;grid-row:2;margin:0}
+  .member-row>.member-menu{grid-column:3;grid-row:1 / 3;margin:0}
+}
+
+.circle-list-row{display:flex;align-items:center;gap:var(--s-2)}
+.circle-list-row>.row{flex:1;min-width:0}
+.circle-list-row>.btn{margin-right:var(--s-3);flex:none}

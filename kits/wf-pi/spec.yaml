@@ -1,0 +1,35 @@
+# Faravan guest kit for the pi coding agent in broker-backed account jobs.
+#
+# The guest holds one per-job broker key and reaches the host broker only through the
+# host-controlled exec tunnel on the guest's own loopback (lib/v1/guest-broker-tunnel.mjs).
+# This kit therefore declares no network allowance and no credential source: no provider
+# host opens, and no provider credential exists in the guest.
+#
+# Pinned inputs (change them only together; scripts/build-pi-payload.sh and its --check keep them honest):
+#   base image   docker/sandbox-templates by content digest (the same base as wf-gh-cli)
+#   pi release   @earendil-works/pi-coding-agent@1.5.2, every package pinned by integrity in
+#                packaging/pi-payload/package-lock.json
+#   payload      files/home/.faravan/pi-payload.tgz, built from that lock by scripts/build-pi-payload.sh and
+#                checked against files/home/.faravan/pi-payload.sha256 inside the sandbox before it is unpacked.
+#                The sandbox has no network at create time (the registry is blocked), so the payload ships in the kit.
+# The guest tunnel relay runs `node`, which the base image provides.
+schemaVersion: "1"
+kind: sandbox
+name: wf-pi
+displayName: "Faravan pi guest"
+description: "pi coding agent for broker-backed account jobs; no provider credential, no provider network"
+
+sandbox:
+  image: "docker/sandbox-templates@sha256:b178ca62ec2e79af2a044e3ec321bdb72188690e1c15d573ea5524b397554d3d"
+  entrypoint:
+    run: ["faravan-pi"]
+
+commands:
+  install:
+    - command: "sh /home/agent/.faravan/install-pi.sh"
+      user: "0"
+      description: "Unpack the pinned pi payload shipped in this kit (no network)"
+    # Source: kits/wf-pi/faravan-pi.sh (a test keeps this copy identical).
+    - command: "echo IyEvYmluL3NoCiMgR3Vlc3QgbGF1bmNoZXIgZm9yIHBpLiBUaGUgaG9zdCBydW4gc3BlYyBwYXNzZXMgdGhlIGVuZHBvaW50IGFuZCBtb2RlbCBsaXN0IGFzIHRleHQgaW4KIyBGQVJBVkFOX1BJX01PREVMUyBhbmQgdGhlIHBlci1qb2IgYnJva2VyIGtleSBpbiB0aGUgdmFyaWFibGUgdGhhdCB0ZXh0IG5hbWVzLiBwaSBoYXMgbm8KIyBiYXNlLVVSTCB2YXJpYWJsZSwgc28gdGhpcyB3cml0ZXMgdGhlIG1vZGVscyBmaWxlIGludG8gYSBwcml2YXRlLCB0aHJvd2F3YXkgYWdlbnQgZGlyZWN0b3J5LgojIE5vIG5ldHdvcmsgaXMgdXNlZCBhdCBzdGFydHVwOyB0aGUgb25seSBlbmRwb2ludCBpcyB0aGUgZ3Vlc3QgbG9vcGJhY2sgdHVubmVsIHRvIHRoZSBob3N0IGJyb2tlci4Kc2V0IC1ldQpbIC1uICIke0ZBUkFWQU5fUElfTU9ERUxTOi19IiBdIHx8IHsgZWNobyAiRkFSQVZBTl9QSV9NT0RFTFMgaXMgbm90IHNldCIgPiYyOyBleGl0IDY0OyB9CmRpcj0kKG1rdGVtcCAtZCkKdHJhcCAncm0gLXJmICIkZGlyIicgRVhJVAp1bWFzayAwNzcKcHJpbnRmICclcycgIiRGQVJBVkFOX1BJX01PREVMUyIgPiAiJGRpci9tb2RlbHMuanNvbiIKUElfQ09ESU5HX0FHRU5UX0RJUj0kZGlyIFBJX09GRkxJTkU9MSBQSV9TS0lQX1ZFUlNJT05fQ0hFQ0s9MSBQSV9URUxFTUVUUlk9MCBwaSAiJEAiCg== | base64 -d > /usr/local/bin/faravan-pi && chmod 755 /usr/local/bin/faravan-pi"
+      user: "0"
+      description: "Install the guest launcher"

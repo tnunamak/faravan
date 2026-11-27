@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Faravan
+Comment=Start the Faravan tray helper
+Exec=/usr/lib/faravan/bin/faravan-tray-start
+Terminal=false
+Categories=Utility;Network;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

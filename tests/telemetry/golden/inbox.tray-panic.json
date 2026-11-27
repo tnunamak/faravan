@@ -1,0 +1,1 @@
+{"format":"faravan-telemetry-inbox","gen":3,"origin":"tray","record":{"attrs":{"crash.kind":"panic","crash_loop":false,"errno":"none","frames":[],"js.error_class":"other","uptime":"60"},"hour":"2026-10-21T19","kind":"event","name":"app.crash"},"schema_version":1}

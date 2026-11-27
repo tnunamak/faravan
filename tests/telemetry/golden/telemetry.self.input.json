@@ -1,0 +1,23 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "observations": [
+    {
+      "kind": "event:offer-decision",
+      "data": {
+        "offerKey": "local-hash",
+        "outcome": "ineligible",
+        "reason": "quota_reserve",
+        "harness": "claude-code",
+        "mode": "auto",
+        "wallSeconds": 900,
+        "deadline": 7200,
+        "mapOverflow": 4
+      },
+      "atMs": 0
+    }
+  ]
+}

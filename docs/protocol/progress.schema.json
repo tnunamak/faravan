@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faravan.dev/protocol/v1/progress.schema.json",
+  "title": "Faravan v1 progress entry (optional channel)",
+  "description": "An optional coarse action step or runtime stage. The request proof authenticates the attempt holder. Both variants share per-attempt limits; neither carries agent prose, contents or command lines.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "job",
+    "attempt",
+    "seq",
+    "at"
+  ],
+  "properties": {
+    "job": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "attempt": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "seq": {
+      "description": "Per-job counter assigned by the coordinator, starting at 1.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "step": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "kind": {
+      "enum": [
+        "step",
+        "done",
+        "fail"
+      ]
+    },
+    "stage": {
+      "enum": [
+        "preparing",
+        "agent",
+        "checks",
+        "screenshots",
+        "sending"
+      ]
+    },
+    "elapsed_s": {
+      "description": "Whole seconds elapsed since this attempt began preparing, measured by the lender's monotonic clock.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "step",
+        "kind"
+      ],
+      "properties": { "step": {}, "kind": {}, "stage": false, "elapsed_s": false }
+    },
+    {
+      "required": [
+        "stage",
+        "elapsed_s"
+      ],
+      "properties": { "stage": {}, "elapsed_s": {}, "step": false, "kind": false }
+    }
+  ]
+}

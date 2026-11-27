@@ -1,0 +1,633 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faravan.dev/protocol/v1/job.schema.json",
+  "title": "Faravan v1 job",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "faravan.job.v1"
+        },
+        "circle": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "author": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "roster_epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "intent_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "prompt": {
+          "$ref": "#/$defs/artifact"
+        },
+        "requirements": {
+          "$ref": "#/$defs/requirements"
+        },
+        "verify": {
+          "description": "Fixed before signing; requires verify_v1. Omitted on legacy jobs and on downgrade.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cmd": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            }
+          },
+          "required": [
+            "cmd"
+          ]
+        },
+        "result": {
+          "description": "Requested primary output; requires results_v1. Omitted means code changes (a diff, else a tree), as on every legacy job.",
+          "$ref": "#/$defs/result"
+        },
+        "parent": {
+          "description": "Requester-signed link to the exact earlier job and result used as this follow-up's base. Requires parent_link_v1 on host and lender.",
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "job_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "result_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+          },
+          "required": ["job_digest", "result_digest"]
+        },
+        "audience": {
+          "description": "Optional frozen audience; requires the host capability frozen_audience_v1. The device keys, author included, that may see or run this job, snapshotted from the roster at roster_epoch. Devices that join later are refused by the host. Omitted means every current member.",
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "device_keys": {"type": "array", "items": {"$ref": "#/$defs/digest"}, "minItems": 1, "maxItems": 1024, "uniqueItems": true}
+          },
+          "required": ["device_keys"]
+        },
+        "input_protection": {
+          "const": "none"
+        },
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "source_manifest": {
+          "type": "object",
+          "description": "Borrower-signed receipt describing the filtered archive. A filename check is not a content secret scan.",
+          "additionalProperties": false,
+          "properties": {
+            "schema": {
+              "const": "faravan.source-manifest.v1"
+            },
+            "project_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^[^/\\\\\u0000-\u001f\u007f]+$"
+            },
+            "archive_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "file_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "packed_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "files": {
+              "type": "array",
+              "maxItems": 1000,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "path",
+                  "bytes"
+                ]
+              }
+            },
+            "not_sent": {
+              "type": "array",
+              "maxItems": 1000,
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "reason": {
+                        "type": "string",
+                        "maxLength": 64
+                      },
+                      "kind": {
+                        "enum": [
+                          "directory"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "reason"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "reason": {
+                        "enum": [
+                          "credentials",
+                          "not_source",
+                          "ignored",
+                          "export_ignore",
+                          "too_large",
+                          "outside_project",
+                          "other"
+                        ]
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "kind": {
+                        "enum": [
+                          "directory"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "reason",
+                      "count"
+                    ]
+                  }
+                ]
+              }
+            },
+            "not_sent_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "files_truncated": {
+              "type": "boolean"
+            },
+            "not_sent_truncated": {
+              "type": "boolean"
+            },
+            "check": {
+              "const": "filename-rules-only"
+            }
+          },
+          "required": [
+            "schema",
+            "archive_digest",
+            "file_count",
+            "total_bytes",
+            "packed_bytes",
+            "files",
+            "not_sent",
+            "not_sent_count",
+            "files_truncated",
+            "not_sent_truncated",
+            "check"
+          ]
+        },
+        "working_directory": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Relative subdirectory for agent and checks. Requires working_directory_v1; whole source remains the result root."
+        },
+        "auto_run_v1": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Optional auto_run_v1 extension: the borrower asks the lender to choose the model and effort. The lender picks one exact pair it offers, once. Not allowed beside an explicit model or budget_v1.effort.",
+          "properties": {
+            "intent": {
+              "enum": [
+                "cheapest",
+                "strongest"
+              ]
+            }
+          },
+          "required": [
+            "intent"
+          ]
+        },
+        "runRequest": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Optional run_request_v1 extension: the models and effort the borrower allows. The lender resolves one account, model and effort from what it advertises and records it in the receipt selection. Not allowed beside auto_run_v1, an explicit model or budget_v1.effort.",
+          "properties": {
+            "schemaVersion": {"const": 1},
+            "models": {
+              "oneOf": [
+                {"const": "any"},
+                {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "object", "additionalProperties": false,
+                  "properties": {"providerId": {"type": "string", "minLength": 1, "maxLength": 256}, "modelId": {"type": "string", "minLength": 1, "maxLength": 256}},
+                  "required": ["providerId", "modelId"]}}
+              ]
+            },
+            "effortId": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1, "maxLength": 256}]}
+          },
+          "required": ["schemaVersion", "models", "effortId"]
+        },
+        "budget_v1": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Optional budget_v1 extension; amounts are whole list-price US dollars (v1 numeric profile).",
+          "properties": {
+            "max_list_usd": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            },
+            "effort": {
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            }
+          },
+          "minProperties": 1
+        },
+        "designated_member": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Optional designated_member_v1 extension (owner-offline topology): the one member whose store may dispatch this job. Any online member can accept the signed submission and preserve it; the claim fence at each store refuses a dispatch by any other member. The named member must be a roster member at publish."
+        }
+      },
+      "required": [
+        "schema",
+        "circle",
+        "author",
+        "roster_epoch",
+        "intent_id",
+        "created_at",
+        "expires_at",
+        "source",
+        "prompt",
+        "requirements",
+        "input_protection",
+        "max_attempts"
+      ]
+    },
+    "signature": {
+      "$ref": "#/$defs/signature"
+    }
+  },
+  "required": [
+    "payload",
+    "signature"
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "key_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "value": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86}$"
+        }
+      },
+      "required": [
+        "algorithm",
+        "key_id",
+        "value"
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1073741824
+        },
+        "media_type": {
+          "enum": [
+            "application/gzip",
+            "text/x-diff",
+            "text/plain",
+            "application/x-ndjson"
+          ]
+        }
+      },
+      "required": [
+        "digest",
+        "bytes",
+        "media_type"
+      ]
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wall_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "cpu": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "memory_bytes": {
+          "type": "integer",
+          "minimum": 1048576,
+          "maximum": 1099511627776
+        },
+        "disk_bytes": {
+          "type": "integer",
+          "minimum": 1048576,
+          "maximum": 1099511627776
+        },
+        "output_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1073741824
+        }
+      },
+      "required": [
+        "wall_seconds",
+        "cpu",
+        "memory_bytes",
+        "disk_bytes",
+        "output_bytes"
+      ]
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "harness": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "maxItems": 128,
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "any_of": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "maxItems": 128,
+              "uniqueItems": true,
+              "minItems": 1
+            }
+          },
+          "required": [
+            "any_of"
+          ]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "maxItems": 128,
+          "uniqueItems": true
+        },
+        "egress": {
+          "enum": [
+            "provider-only",
+            "internet"
+          ]
+        },
+        "network": {
+          "description": "Optional explicit policy. Omission preserves legacy egress; new jobs created by the app default to provider-only.",
+          "enum": [
+            "provider-only",
+            "provider+registries",
+            "internet"
+          ]
+        },
+        "registries": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "npm",
+              "pypi"
+            ]
+          },
+          "uniqueItems": true,
+          "maxItems": 2
+        },
+        "limits": {
+          "$ref": "#/$defs/limits"
+        },
+        "limit_modes": {
+          "description": "Each omitted mode is required. Preferred limits may be unenforced and must be reported honestly in the receipt.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "wall_seconds": {
+              "enum": [
+                "required",
+                "preferred"
+              ]
+            },
+            "cpu": {
+              "enum": [
+                "required",
+                "preferred"
+              ]
+            },
+            "memory_bytes": {
+              "enum": [
+                "required",
+                "preferred"
+              ]
+            },
+            "disk_bytes": {
+              "enum": [
+                "required",
+                "preferred"
+              ]
+            },
+            "output_bytes": {
+              "enum": [
+                "required",
+                "preferred"
+              ]
+            }
+          }
+        }
+      },
+      "required": [
+        "capabilities",
+        "egress",
+        "limits"
+      ]
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "message",
+            "files"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "git"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://",
+              "maxLength": 4096
+            },
+            "object_format": {
+              "enum": [
+                "sha1",
+                "sha256"
+              ]
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+            }
+          },
+          "required": [
+            "kind",
+            "url",
+            "object_format",
+            "commit"
+          ]
+        },
+        {
+          "description": "Nothing is sent: the agent starts in an empty workspace. Requires result.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "none"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "archive"
+            },
+            "artifact": {
+              "$ref": "#/$defs/artifact"
+            }
+          },
+          "required": [
+            "kind",
+            "artifact"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "observations": [
+    {
+      "kind": "event:quota-window",
+      "data": {
+        "provider": "claude",
+        "windowId": "seven_day",
+        "windowKind": "seven_day",
+        "plan": "max5",
+        "lendingOn": true,
+        "ownerUsedPct": 90,
+        "lentPoints": 5,
+        "unusedPct": 0,
+        "shortfall": true,
+        "coverage": 1,
+        "contaminated": true,
+        "history": 5,
+        "slots": [
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          }
+        ],
+        "charges": [
+          {
+            "points": 1.4,
+            "stopReason": "done"
+          }
+        ]
+      },
+      "atMs": 0
+    }
+  ]
+}

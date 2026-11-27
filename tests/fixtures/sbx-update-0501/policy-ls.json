@@ -1,0 +1,5 @@
+{
+  "code": 1,
+  "stdout": "",
+  "stderr": "  Client Version:  v0.50.1 ddb0268d7124b9cf98955d0b08ffd71a0dfcebe4\n  Server Version:  v0.50.0 30d023cbbf9af1204c91b1605b2a7a49b931d2bf\nwarning: Docker Sandboxes has been updated and needs to restart; all running sandboxes will be stopped\nerror: ensure daemon: cannot prompt for restart: stdin is not a terminal; run the command in an interactive terminal to confirm the restart\n  try: sbx daemon restart\n"
+}

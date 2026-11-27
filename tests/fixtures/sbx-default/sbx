@@ -1,0 +1,3 @@
+#!/bin/sh
+# A stable executable identity for injected sandbox runners; no sandbox command runs here.
+exit 125

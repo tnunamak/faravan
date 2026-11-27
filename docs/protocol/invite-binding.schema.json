@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faravan.dev/protocol/v1/invite-binding.schema.json",
+  "title": "Faravan v1 invite binding",
+  "$ref": "job.schema.json#/$defs/signature",
+  "description": "Signature by the one-time invite private key over the exact root-signed Invite envelope, in domain faravan/invite-binding/v1: UTF-8 'faravan/invite-binding/v1', one NUL byte, then the raw SHA-256 of JCS(the whole envelope, signature included). key_id is the fingerprint of the Invite's invite_public_key. The owner device publishes it with the Invite; the coordinator never holds the invite private key, so it cannot create one. See v1.md section 5.1."
+}

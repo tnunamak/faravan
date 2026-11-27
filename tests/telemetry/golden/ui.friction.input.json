@@ -1,0 +1,33 @@
+{
+  "ctx": {
+    "origin": "ui",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "observations": [
+    {
+      "kind": "ui",
+      "data": {
+        "kind": "recovery_shown",
+        "route": "setup",
+        "op": "readiness.get",
+        "code": "sandbox_not_ready",
+        "action": "setup",
+        "title": "Ann's MacBook"
+      },
+      "atMs": 0
+    },
+    {
+      "kind": "ui",
+      "data": {
+        "kind": "recovery_shown",
+        "route": "setup",
+        "op": "readiness.get",
+        "code": "sandbox_not_ready",
+        "action": "setup",
+        "title": "Ann's MacBook"
+      },
+      "atMs": 0
+    }
+  ]
+}

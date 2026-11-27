@@ -1,0 +1,1883 @@
+{
+  "totals": {
+    "lib/docker-backend.mjs": 393,
+    "lib/v1/cleanup-status.mjs": 0,
+    "lib/sandbox-remediation.mjs": 0,
+    "lib/sandbox-command-diagnostic.mjs": 0,
+    "lib/v1/sandbox-shared-watcher.mjs": 28,
+    "lib/durable-write.mjs": 16,
+    "lib/sandbox-deadline.mjs": 51,
+    "lib/v1/lock.mjs": 4,
+    "lib/v1/windows-process.mjs": 0,
+    "lib/v1/sandbox-watch-proofs.mjs": 2,
+    "lib/v1/sandbox-record-owner.mjs": 0,
+    "lib/guest-runtime.mjs": 22,
+    "lib/harnesses/job-framing.mjs": 0,
+    "lib/v1/lending-status-copy.mjs": 0,
+    "lib/sbx-runtime.mjs": 0,
+    "lib/v1/lending-accounts.mjs": 0,
+    "lib/credential-generations.mjs": 166,
+    "lib/claude-accounts.mjs": 32,
+    "lib/sandbox-credentials.mjs": 61,
+    "lib/v1/lending-account-key.mjs": 0,
+    "lib/sbx-daemon-owner.mjs": 0,
+    "lib/local-state.mjs": 0,
+    "lib/compat/env.mjs": 0,
+    "lib/channel-identity.mjs": 0,
+    "lib/durable-directory.mjs": 0,
+    "lib/harness-spec.mjs": 0,
+    "lib/harnesses/index.mjs": 0,
+    "lib/harnesses/shared.mjs": 0,
+    "lib/harnesses/claude-code-api-key.adapter.mjs": 0,
+    "lib/harnesses/claude-code-subscription.adapter.mjs": 0,
+    "lib/harnesses/codex.adapter.mjs": 0,
+    "lib/harnesses/gemini.adapter.mjs": 0,
+    "lib/harnesses/gh-cli.adapter.mjs": 0,
+    "lib/harnesses/opencode.adapter.mjs": 0,
+    "lib/runtime.mjs": 0,
+    "lib/network-policy.mjs": 0,
+    "lib/sandbox-policy-cleanup.mjs": 3,
+    "lib/sandbox-scratch.mjs": 44,
+    "lib/sandbox-name.mjs": 0,
+    "lib/v1/lent-claude-credential.mjs": 6,
+    "lib/sbx-image-pins.mjs": 0,
+    "lib/disk-sweep-plan.mjs": 0,
+    "lib/store-lock.mjs": 7,
+    "lib/os-lock.mjs": 0,
+    "lib/disk-ownership.mjs": 0,
+    "lib/disk-store.mjs": 0,
+    "lib/disk-ledger.mjs": 0,
+    "lib/sandbox-storage.mjs": 26,
+    "lib/sandbox-cleanup-journal.mjs": 46,
+    "lib/sandbox-create-fence.mjs": 0,
+    "lib/sandbox-command-observation.mjs": 0,
+    "lib/v1/transcript-redaction.mjs": 0,
+    "lib/v1/continuation.mjs": 1,
+    "lib/v1/request-line.mjs": 0,
+    "lib/protocol/index.mjs": 1,
+    "lib/v1/versions.mjs": 0,
+    "lib/protocol/encoding.mjs": 0,
+    "lib/v1/run-request.mjs": 0,
+    "lib/protocol/verification.mjs": 0,
+    "lib/protocol/circle-authority.mjs": 0,
+    "lib/protocol/people.mjs": 0,
+    "lib/working-directory.mjs": 0,
+    "lib/v1/credential-probe-guest.mjs": 23,
+    "lib/disk-wait.mjs": 15,
+    "lib/host-disk.mjs": 4,
+    "lib/v1/uninstall-lock.mjs": 0,
+    "lib/v1/docker-state.mjs": 0,
+    "lib/v1/docker-signin-state.mjs": 0,
+    "lib/output-collection.mjs": 10,
+    "lib/faravan-guard-host.mjs": 0,
+    "lib/v1/lending-meter.mjs": 0,
+    "lib/v1/litellm-prices.mjs": 0,
+    "lib/executor.mjs": 68,
+    "lib/v1/probe-diagnostics.mjs": 7,
+    "lib/git-source-snapshot.mjs": 0,
+    "lib/git-candidate.mjs": 0,
+    "lib/github-auth.mjs": 19,
+    "lib/disk-sweep-setting.mjs": 0
+  },
+  "static": [
+    {
+      "id": "lib/docker-backend.mjs:runSbx:0",
+      "expression": "dispatchSbx(args, options, (transportBinary,transportEnv) => { const childOptions = { env: transportEnv, maxBuffer: 16 * 1024 * 1024, timeout: 30_000, killSignal: 'SIGKILL', ...options, }; // A refusal at the process boundary (the runtime fence) is not a command result. dispatchRefused=true; const child = spawnSbxChild(runtime,args,childOptions); dispatchRefused=false; // Only a secret value is ever written to sbx's stdin, and it is written in the same turn as the launch so that no // await separates the runtime fence from the value. Always close it: an agent run through `sbx exec` otherwise // prints \"Reading additional input from stdin...\" and waits forever (seen live with codex, 2026-10-18). // The caller awaits the result next; a result that fails first is its to handle, not an unhandled rejection. child.catch?.(() => {}); recordDaemonLaunch(child.child); child.child?.stdin?.on('error', () => {}); child.child?.stdin?.end(input); return {pending:child}; })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:runSbx:1",
+      "expression": "pending"
+    },
+    {
+      "id": "lib/docker-backend.mjs:dispatchSbx:0",
+      "expression": "ensureSbxDaemon({env,commandArgs:args})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:runSbxStreaming:0",
+      "expression": "dispatchSbx(args,{signal},(transportBinary,transportEnv)=>spawnSbxChild(runtime,args,{env:transportEnv,stdio:['ignore','pipe','pipe'],signal,killSignal:'SIGKILL',mode:'spawn'}))"
+    },
+    {
+      "id": "lib/docker-backend.mjs:streamSbxOutput:0",
+      "expression": "withSbxRuntime(runtime,()=>daemonJobContext.run({handle, agentRun:false},()=>dispatchSbx(args,{signal,beforeExec},(transportBinary,transportEnv)=>spawnSbxChild(runtime,args,{ env: transportEnv, stdio: ['ignore', 'pipe', 'pipe'], signal, killSignal: 'SIGKILL', mode:'spawn', }))))"
+    },
+    {
+      "id": "lib/docker-backend.mjs:streamSbxOutput:1",
+      "expression": "closed"
+    },
+    {
+      "id": "lib/docker-backend.mjs:streamSbxOutput:2",
+      "expression": "closed"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_rowRun:0",
+      "expression": "this._retryCleanupListing(run,options)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_rowRun:1",
+      "expression": "run()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_retryCleanupListing:0",
+      "expression": "Promise.race([Promise.resolve().then(()=>run(controller.signal,observation)),bounded])"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_holdRuntime:0",
+      "expression": "intendedRuntimeDir({ home })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_admitDiskJob:0",
+      "expression": "this._diskCoordinator().acquire({ signal })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_admitDiskJob:1",
+      "expression": "handle ? this.runSbx(['template', 'ls', '--json'], {signal, sbxRuntime:handle._sbxRuntime}) : this._diskRunSbx(['template', 'ls', '--json'])"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_settleDiskCreate:0",
+      "expression": "this._diskRunSbx(['template', 'ls', '--json'], {}, handle)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_recordSandboxImage:0",
+      "expression": "this._diskRunSbx(['ls', '--json'], {}, handle)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:ensureSandboxAdmission:0",
+      "expression": "this._cleanupListingReady({signal,force})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:claudeAccountRuntime:0",
+      "expression": "claudeKitDigest()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:claudeAccountRuntime:1",
+      "expression": "this.runSbx(['version'],{binary:binary.path,beforeSpawn:boundary})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:admitJob:0",
+      "expression": "this.ensureSandboxAdmission?.()??this.recoverSandboxDeadlines()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:admitJob:1",
+      "expression": "this.storage.supported?.(version) ?? this.storage.available()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:prepare:0",
+      "expression": "this._prepareWithOptions(validatedJob,deadlineOrOptions,options)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepareWithOptions:0",
+      "expression": "this.ensureSandboxAdmission?.({signal:options.signal})??this.recoverSandboxDeadlines({signal:options.signal})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepareWithOptions:2",
+      "expression": "options.sbxRuntime?withSbxRuntime(options.sbxRuntime,()=>this._prepare(validatedJob,sharedDeadline,options)):this._prepare(validatedJob,sharedDeadline,options)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:0",
+      "expression": "this.claudeAccountRuntime({runtime:accountRuntime,beforeSpawn:()=>signal?.throwIfAborted()})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:1",
+      "expression": "this.admitJob(validatedJob,{version:initialClaudeRuntime?.version})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:admitClaude:0",
+      "expression": "readClaudeAccount(sbxHome(),id)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:admitClaude:1",
+      "expression": "readClaudeAccountValue(sbxHome(),record)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:admitClaude:2",
+      "expression": "this.claudeAccountRuntime({runtime:claudeRuntime,beforeSpawn:()=>assertAccount(claudeAccount??record,enabled)})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:admitClaude:3",
+      "expression": "claudeAccountCheckGeneration(sbxHome(),record,runtime)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:2",
+      "expression": "admitClaude()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:5",
+      "expression": "acquireCredentialPreparation(sbxHome(),{isolatedSources:true,signal})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:6",
+      "expression": "(async () => { if(admitClaude)await admitClaude(); // Keep the native-only fence under the publication lock as well as at // admission, including when this preparation is a verification sandbox. if (validatedJob.execution_scope !== 'owner' && !borrowedCredentialMechanismAllowed(validatedJob)) throw policyError('native_credentials_owner_only', BORROWED_PROXY_ONLY); const {refreshGitHubGeneration}=await import('./github-auth.mjs'); credentialGeneration=await refreshGitHubGeneration(sbxHome()); // Native generations are owner-only; borrowed jobs retain Docker's proxy. // A provider-free check never reads the lender's provider files. providerGeneration=!providerFree&&validatedJob.execution_scope==='owner'&&validatedJob.auth_strategy==='provider-file-generation' ? await refreshProviderGeneration(sbxHome(),validatedJob.image) : null; if (githubGranted && credentialGeneration) await removeLegacyGitHubSecrets(run); // A proxy value an earlier release left under this job's own provider would refuse the native generation. if (providerGeneration) await removeNativeProviderGlobalSecret(run, validatedJob, { privateHome: isPrivateSbxHome(sbxHome()), onDiagnostic: this._onDiagnostic, now: this._now }); inertServices = await restrictCredentialScope(run, validatedJob, sandboxId, credentialGeneration,providerGeneration,{ providerAccess: !providerFree }) ?? []; if(claudeAccount) { if(claudeAccount.kind==='subscription-token')await ensureClaudeBinding(sbxHome()); handle.scoped_claude_secret=claudeService(claudeAccount); } if(lentCodex)handle.scoped_claude_secret='openai'; // The cleanup record (and whether it owns a scoped GitHub value) is durable before the workspace or value exists. if (githubGranted && credentialGeneration) handle.scoped_github_secret = true; const scratch = await createSandboxScratch(sandboxId, scratchRoot(), this._scratchJournalPath(), { ownerScope:sandboxOwnerScope(),home:sbxHome(),runtime:handle.sbx_runtime, beforeCreate: scratch => { handle.scratch_dir = scratch; this.cleanupJournal.register(handle,{session:this._lendingContext.getStore()}); } }); // The kit names one fixed service, so its image is reused. The pinned generation's value is scoped to this sandbox. if (handle.scoped_github_secret) await assignSandboxGitHub(run, sbxHome(), credentialGeneration, sandboxId); return scratch; })().catch(async error => { await releasePreparation();releasePreparation=null; this.cleanupJournal.finish(handle, {}); if(!handle._cleanupId && !handle.scratch_dir)error.cleanup_receipt={removed:true,scratch_removed:true,policy_removed:true}; throw error; })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:7",
+      "expression": "admitClaude()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:8",
+      "expression": "import('./github-auth.mjs')"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:9",
+      "expression": "refreshGitHubGeneration(sbxHome())"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:13",
+      "expression": "restrictCredentialScope(run, validatedJob, sandboxId, credentialGeneration,providerGeneration,{ providerAccess: !providerFree })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:14",
+      "expression": "ensureClaudeBinding(sbxHome())"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:15",
+      "expression": "createSandboxScratch(sandboxId, scratchRoot(), this._scratchJournalPath(), { ownerScope:sandboxOwnerScope(),home:sbxHome(),runtime:handle.sbx_runtime, beforeCreate: scratch => { handle.scratch_dir = scratch; this.cleanupJournal.register(handle,{session:this._lendingContext.getStore()}); } })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:20",
+      "expression": "this.hostDisk.free()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:21",
+      "expression": "this.storage.reserve(sandboxId, validatedJob.resources.storage_mib * 1048576)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:22",
+      "expression": "this._holdRuntime(sbxHome(), signal)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:23",
+      "expression": "guardRuntimeReadiness({ home: sbxHome() }, this.guestRuntime)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:24",
+      "expression": "this.sandboxDeadlines.register(this.cleanupJournal.authority(handle))"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:25",
+      "expression": "this._admitDiskJob(sandboxId, imagePin, signal, this._diskSentry(handle).runtimeLease, handle)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:26",
+      "expression": "this._runJobCommand(handle, [creationCommand, '--name', sandboxId, ...kitArgs, '--cpus', String(validatedJob.resources.cpu), '--memory', `${validatedJob.resources.memory_mib}m`, '--skills', 'off', ...denyArgs, ...imageArgs.flags, imageArgs.positional, ...(handle._mountless ? [] : [scratchDir, ...runtimeMount])], undefined, volumes ? { env: { ...sbxChildEnv(), DOCKER_SANDBOXES_ROOT_SIZE: volumes.root / 1048576 + 'm', DOCKER_SANDBOXES_DOCKER_SIZE: volumes.docker / 1048576 + 'm' }, onDispatch: dispatch, onResult: accepted, timeout: SANDBOX_CREATE_TIMEOUT_MS(), } : { onDispatch: dispatch, onResult: accepted, timeout: SANDBOX_CREATE_TIMEOUT_MS() })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:27",
+      "expression": "this._recordSandboxImage(sandboxId, imageArgs, runtimeCache, handle)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:28",
+      "expression": "this._settleDiskCreate(protection, { created: runResult?.code === 0 }, handle)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:29",
+      "expression": "assignClaudeAccount(run,sbxHome(),claudeAccount,sandboxId,{control:accountSelfCheck==='control',value:lentClaude?.value})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:30",
+      "expression": "admitClaude()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:31",
+      "expression": "releasePreparation()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:35",
+      "expression": "this._runJobCommand(handle, ['exec', sandboxId, '--', 'true'], undefined, { onResult: result => { if (result.code === 0) this.cleanupJournal.mark(handle, { create_settled: true }); } })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:37",
+      "expression": "this._configureEgress(handle)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:46",
+      "expression": "this.storage.verify(handle)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:48",
+      "expression": "this.storage.recordQualification?.()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:49",
+      "expression": "this._runJobCommand(handle, ['exec', '-u', 'root', sandboxId, '--', 'sh', '-c', 'mkdir -p ' + shellQuote(scratchDir) + ' && chown 1000:1000 ' + shellQuote(scratchDir)])"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:52",
+      "expression": "this._copyIn(handle, input)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:53",
+      "expression": "this.assertActive(handle)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:assertActive:0",
+      "expression": "checkWall()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:assertActive:1",
+      "expression": "this.sandboxDeadlines.active(row)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:assertActive:2",
+      "expression": "checkWall()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_dispatchProtected:0",
+      "expression": "this.assertActive(handle,{guestCommand:true})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_dispatchProtected:1",
+      "expression": "this.ensureSandboxAdmission?.({signal})??this.recoverSandboxDeadlines({signal})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_runJobCommand:0",
+      "expression": "this.assertActive(handle,{guestCommand:args[0]==='exec'})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_runJobCommand:1",
+      "expression": "this.ensureSandboxAdmission?.({signal})??this.recoverSandboxDeadlines({signal})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_runJobCommand:2",
+      "expression": "daemonJobContext.run({handle,agentRun,beforeExec,commandObservation},()=>onLog||onExecutionStarted ?runSbxStreaming(args,onLog,signal,onExecutionStarted,handle._streamBudget,launchOptions) :this.runSbx(args,{...launchOptions,signal,timeout,beforeExec,...(env?{env}:{})}))"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_runJobCommand:4",
+      "expression": "this.assertActive(handle, { agentRun })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_readPolicy:0",
+      "expression": "this._runJobCommand(handle, ['policy', 'ls', handle.sandbox_id, '--json', '--type', 'network'])"
+    },
+    {
+      "id": "lib/docker-backend.mjs:worker:0",
+      "expression": "this._runJobCommand(handle, ['policy', 'check', 'network', '--sandbox', handle.sandbox_id, '--json', target])"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_verifyDecisions:0",
+      "expression": "Promise.all(Array.from({ length: Math.min(8, queue.length) }, worker))"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_configureEgress:0",
+      "expression": "this._readPolicy(handle, failPolicy)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_configureEgress:2",
+      "expression": "this._runJobCommand(handle, ['policy', action, 'network', '--sandbox', handle.sandbox_id, [...new Set(resources)].join(',')])"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_configureEgress:3",
+      "expression": "this._verifyDecisions(handle, [target], expected, failPolicy, true)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_configureEgress:4",
+      "expression": "this._readPolicy(handle, failPolicy)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_configureEgress:5",
+      "expression": "this._verifyDecisions(handle, [...sampleForChecks(plan.deny), ...keptDenied].map(probeTarget), 'denied', failPolicy)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_copyIn:0",
+      "expression": "mkdir(path.dirname(localPath), { recursive: true })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_copyIn:1",
+      "expression": "this._runJobCommand(handle, ['cp', localPath, remoteDest])"
+    },
+    {
+      "id": "lib/docker-backend.mjs:syncWorkspace:0",
+      "expression": "this._runJobCommand(handle, ['cp', handle.scratch_dir + '/.', handle.sandbox_id + ':' + handle.scratch_dir])"
+    },
+    {
+      "id": "lib/docker-backend.mjs:snapshotEgress:0",
+      "expression": "this._runJobCommand(handle,['policy','log',handle.sandbox_id,'--json'],undefined,{signal})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:start:0",
+      "expression": "handle._admitClaude()"
+    },
+    {
+      "id": "lib/docker-backend.mjs:start:1",
+      "expression": "this._installGuard(handle, lending, agentSeconds)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:start:3",
+      "expression": "onLaunchDurable({at:entry.at})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:start:4",
+      "expression": "this._runJobCommand(handle,['exec',handle.sandbox_id,'--','sh','-c', 'printf %s '+shellQuote(launchSecret)+' > '+shellQuote(guard.ctl+'/launch-ack')],null,{signal})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:start:5",
+      "expression": "running"
+    },
+    {
+      "id": "lib/docker-backend.mjs:start:6",
+      "expression": "this._runJobCommand(handle, ['exec', handle.sandbox_id, '--', 'sh', '-c', command], onLog, {signal,onExecutionStarted,agentRun:!lowBefore&&!handle._bookkeeping})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:start:7",
+      "expression": "disk.halt"
+    },
+    {
+      "id": "lib/docker-backend.mjs:start:8",
+      "expression": "this._runJobCommand(handle, ['exec', '-u', 'root', handle.sandbox_id, '--', 'sh', '-c', INNER_CONTAINERS_OFF]).catch(() => {})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:start:9",
+      "expression": "this._runJobCommand(handle, ['exec', handle.sandbox_id, '--', 'sh', '-c', 'p=$(head -c 20 ' + shellQuote(guard.ctl + '/agent.pgid') + ' 2>/dev/null) && case \"$p\" in (*[!0-9]*|\"\") ;; (*) kill -KILL -- \"-$p\" 2>/dev/null ;; esac; true']).catch(() => {})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:start:10",
+      "expression": "this._runJobCommand(handle, ['exec', handle.sandbox_id, '--', 'sh', '-c', 'head -c 4097 ' + shellQuote(guard.ctl + '/stop.json') + ' 2>/dev/null; true'])"
+    },
+    {
+      "id": "lib/docker-backend.mjs:start:11",
+      "expression": "this._runJobCommand(handle, ['policy', 'log', handle.sandbox_id, '--json'], undefined, {signal})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:ensureGuestRuntime:0",
+      "expression": "guardRuntimeReadiness({ home: sbxHome() }, this.guestRuntime)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:ensureGuestRuntime:1",
+      "expression": "installGuestRuntime({ runtime: readiness.runtime, mounted: handle._guardRuntimeMounted, sandboxId: handle.sandbox_id, run: args => this._runJobCommand(handle, args) })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_installGuard:0",
+      "expression": "this.ensureGuestRuntime(handle)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_installGuard:1",
+      "expression": "this._runJobCommand(handle, ['exec', handle.sandbox_id, '--', 'mkdir', '-p', ctl])"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_installGuard:2",
+      "expression": "this._runJobCommand(handle, ['cp', GUARD_SOURCE_PATH, `${handle.sandbox_id}:${guardPath}`])"
+    },
+    {
+      "id": "lib/docker-backend.mjs:verificationFiles:0",
+      "expression": "this._runJobCommand(handle, ['exec', handle.sandbox_id, '--', 'sh', '-c', command])"
+    },
+    {
+      "id": "lib/docker-backend.mjs:verify:0",
+      "expression": "this._runJobCommand(handle, ['exec', handle.sandbox_id, '--', 'sh', '-c', 'cd ' + shellQuote(workdir) + ' && sh -c ' + shellQuote(cmd)], undefined, { signal: stop.signal })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:cancel:0",
+      "expression": "daemonJobContext.run({handle, agentRun:false}, () => this._rowRun(handle,['stop', handle.sandbox_id]))"
+    },
+    {
+      "id": "lib/docker-backend.mjs:destroy:1",
+      "expression": "this._resolveCompute(handle,{signal,watchInventory}).catch(error => { if(error?.recovery_hold?.error_code==='sbx_daemon_unavailable')throw error; return {removed:false}; })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_resolveCompute:0",
+      "expression": "daemonJobContext.run({handle,agentRun:false,recovery:true},async()=>{ signal?.throwIfAborted(); const cached=establishedAbsentWatch(row)&&(typeof this.cleanupJournal.abandon!=='function'||!this._oldAbsentCreate(row))&&snapshotCurrent&&!watchInventory.names.includes(row.sandbox_id); const beforeResult=cached?null:await run(['ls','--json'],{signal}); const before=cached?watchInventory.names:parseSbxListing(beforeResult); if(!before||!cached&&!completeSbxListing(beforeResult))return {removed:false}; if(before.includes(row.sandbox_id)) { // The sandbox was observed, so its create is no longer in flight. if(row.create_settled!==true)this.cleanupJournal.mark(row,{create_settled:true}); // A name this install reserved, durably dispatched, and first saw absent is ours when it appears late: the // earlier empty listing is the watch that gives the removal its authority. const watched=Number.isFinite(row.absent_since); const reserved=this.cleanupJournal.nameReserved?.(row)===true; if(row.compute_created!==true&&!watched&&!reserved)return {removed:false,unknown:'present_without_receipt'}; if(reserved&&!this.cleanupJournal.retireName(row,{computeMayRun:true}))return {removed:false}; await run(['rm','--force',row.sandbox_id],{signal}); const afterResult=await run(['ls','--json'],{signal}); const after=parseSbxListing(afterResult); return {removed:completeSbxListing(afterResult)&&Array.isArray(after)&&!after.includes(row.sandbox_id)}; } if(row.create_settled===true)return {removed:true}; // The deadline prevents another dispatch under this admission. Require // both fresh daemon absence and no live create client before releasing // its resources; the permanent fence still catches late daemon work. if(!cached&&typeof this.cleanupJournal.abandon==='function'&&row.compute_created===false&&Number.isSafeInteger(row.deadline_at)&& sandboxDeadlineRemaining(row,this.deadlineClock())<=0) { if(await this._createClientAbsent(row)!==true)return {removed:false,unknown:'creation_unproven'}; if(this.cleanupJournal.abandon?.(row)===true)return {removed:true}; } // Fresh complete absence plus the persistent late-name fence permits // resource cleanup without claiming a timed-out daemon request ended. if((this.cleanupJournal.abandoned?.(row)===true||this._oldAbsentCreate(row))&&this.cleanupJournal.abandon?.(row)===true)return {removed:true}; // Dispatched but never observed. One empty listing does not show the create cannot still appear, so the row, its // scratch and its storage stay as a watch: each later listing re-checks, and a late sandbox is removed above. const at=this._now(); let since=row.absent_since; if(!Number.isFinite(since)){since=at;this.cleanupJournal.mark(row,{absent_since:since});} const empty=at-since; // A late sandbox must find no credential or network rule bound to its name. Admission waits for verified revocation of // both (idempotent, retried on every pass); a failed or thrown revocation keeps the hold with its own reason. const revoke=args=>this._rowRun(row,args,{signal}); // The failed step and a short class of the failure are kept for the owner, never sbx output. let revocation=null; const github=await removeSandboxGitHub(revoke,row.sandbox_id).catch(()=>null); if(github!==true)revocation={step:'github_secret',error:github===null?'listing_failed':'value_remains'}; else { const detail={}; const policy=await removeSandboxPolicies(revoke,row.sandbox_id,detail,{leaveProvisioned:cached||completeSbxListing(beforeResult)}).catch(()=>{detail.failure='listing_failed';return false;}); if(policy!==true)revocation={step:'network_policy',error:detail.failure??'listing_failed'}; else if(detail.left>0&&!cached)this.cleanupJournal.mark(row,{policy_rules_left:detail.left}); } if(revocation)return {removed:false,unknown:'credential_revocation_pending',revocation}; // No receipt, hold release, deadline cancellation or row rewrite from cached absence. if(cached){this._watchInventoryCurrent(watchInventory);return {removed:false,background_watch:true};} // Only the admission hold is released here, never the obligation. Time alone never discharges the row. return empty>=CREATE_CESSATION_BOUND_MS()?{removed:false,watching:true}:{removed:false,unknown:'creation_unproven'}; })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_resolveCompute:1",
+      "expression": "run(['ls','--json'],{signal})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_resolveCompute:2",
+      "expression": "run(['rm','--force',row.sandbox_id],{signal})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_resolveCompute:3",
+      "expression": "run(['ls','--json'],{signal})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_finishDestroy:1",
+      "expression": "removeSandboxPolicies(scoped, handle.sandbox_id,policy).catch(() => false)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_finishDestroy:7",
+      "expression": "verifyClaudeAccountRemoved(scoped,handle.sandbox_id,handle.scoped_claude_secret).catch(()=>false)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_finishDestroy:8",
+      "expression": "this.removeScratch(handle.scratch_dir)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_finishDestroy:9",
+      "expression": "stat(handle.scratch_dir).then( () => { scratchRemoved = false; }, (error) => { scratchRemoved = error && error.code === 'ENOENT'; }, )"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_finishDestroy:10",
+      "expression": "recoverSandboxScratch(handle.sandbox_id, scratchRoot(), this._scratchJournalPath())"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_finishDestroy:11",
+      "expression": "(handle.sbx_home?this._storageForHome(handle.sbx_home):this.storage).release(handle.sandbox_id)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:verifyRuntime:0",
+      "expression": "stat(file)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:verifyRuntime:1",
+      "expression": "readFile(file)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:0",
+      "expression": "readFile(path.join(root, 'guest-runtime/manifest.json'), 'utf8')"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:1",
+      "expression": "verifyRuntime(source, entry?.sha256)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:2",
+      "expression": "mkdir(path.dirname(dir), { recursive: true, mode: 0o755 })"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:3",
+      "expression": "mkdir(dir, { mode: 0o755 })"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:4",
+      "expression": "verifyRuntime(node, entry.sha256)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:5",
+      "expression": "copyFile(source, partial)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:6",
+      "expression": "chmod(partial, 0o555)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:7",
+      "expression": "verifyRuntime(partial, entry.sha256)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:8",
+      "expression": "rename(partial, node)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:9",
+      "expression": "rm(partial, { force: true })"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:10",
+      "expression": "stat(node)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:11",
+      "expression": "chmod(node, 0o555)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:stageGuestRuntime:12",
+      "expression": "verifyRuntime(node, entry.sha256)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:guardRuntimeReadiness:0",
+      "expression": "stage(options)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:installGuestRuntime:0",
+      "expression": "exec(mount)"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:installGuestRuntime:1",
+      "expression": "exec(guestHashCommand(runtime.sha256, runtime.node))"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:installGuestRuntime:2",
+      "expression": "exec('mkdir -p ' + shellQuote(dir))"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:installGuestRuntime:3",
+      "expression": "run(['cp', runtime.node, `${sandboxId}:${node}`])"
+    },
+    {
+      "id": "lib/guest-runtime.mjs:installGuestRuntime:4",
+      "expression": "exec('chmod 0555 ' + shellQuote(node) + ' && ' + guestHashCommand(runtime.sha256, node))"
+    },
+    {
+      "id": "lib/credential-generations.mjs:privateDirectory:0",
+      "expression": "lstat(directory).catch(()=>{throw unresolved();})"
+    },
+    {
+      "id": "lib/credential-generations.mjs:generationDirectory:0",
+      "expression": "privateDirectory(home)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:generationDirectory:1",
+      "expression": "privateDirectory(join(home,'credential-generations'))"
+    },
+    {
+      "id": "lib/credential-generations.mjs:generationDirectory:2",
+      "expression": "privateDirectory(directory)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:syncDirectory:0",
+      "expression": "open(directory,'r')"
+    },
+    {
+      "id": "lib/credential-generations.mjs:syncDirectory:1",
+      "expression": "fd.sync()"
+    },
+    {
+      "id": "lib/credential-generations.mjs:syncDirectory:2",
+      "expression": "fd.close()"
+    },
+    {
+      "id": "lib/credential-generations.mjs:save:0",
+      "expression": "open(file,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:save:1",
+      "expression": "fd.writeFile(value)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:save:2",
+      "expression": "fd.sync()"
+    },
+    {
+      "id": "lib/credential-generations.mjs:save:3",
+      "expression": "fd.close()"
+    },
+    {
+      "id": "lib/credential-generations.mjs:readPrivate:0",
+      "expression": "open(file,constants.O_RDONLY|constants.O_NOFOLLOW)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:readPrivate:1",
+      "expression": "fd.stat()"
+    },
+    {
+      "id": "lib/credential-generations.mjs:readPrivate:2",
+      "expression": "fd.readFile()"
+    },
+    {
+      "id": "lib/credential-generations.mjs:readPrivate:3",
+      "expression": "fd.close()"
+    },
+    {
+      "id": "lib/credential-generations.mjs:approveServiceBinding:0",
+      "expression": "mkdir(directory,{recursive:true,mode:0o700})"
+    },
+    {
+      "id": "lib/credential-generations.mjs:approveServiceBinding:1",
+      "expression": "lstat(path)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:approveServiceBinding:3",
+      "expression": "save(pending,String(document))"
+    },
+    {
+      "id": "lib/credential-generations.mjs:approveServiceBinding:4",
+      "expression": "rename(pending,file)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:approveServiceBinding:5",
+      "expression": "syncDirectory(directory)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:approveServiceBinding:6",
+      "expression": "syncDirectory(config)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:approveServiceBinding:7",
+      "expression": "syncDirectory(home)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:validClaudePointer:0",
+      "expression": "generationDirectory(home,record.id)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:validClaudePointer:1",
+      "expression": "readPrivate(join(directory,'claude-account.json'))"
+    },
+    {
+      "id": "lib/credential-generations.mjs:readClaudeAccount:0",
+      "expression": "privateDirectory(home)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:readClaudeAccount:1",
+      "expression": "validClaudePointer(home,accountId,await readPrivate(join(home,'claude-account-'+accountId+'.json')))"
+    },
+    {
+      "id": "lib/credential-generations.mjs:readClaudeAccount:2",
+      "expression": "readPrivate(join(home,'claude-account-'+accountId+'.json'))"
+    },
+    {
+      "id": "lib/credential-generations.mjs:readClaudeAccountValue:0",
+      "expression": "generationDirectory(home,record.id)"
+    },
+    {
+      "id": "lib/credential-generations.mjs:readClaudeAccountValue:1",
+      "expression": "readPrivate(join(directory,'value'))"
+    },
+    {
+      "id": "lib/claude-accounts.mjs:claudeKitDigest:0",
+      "expression": "readFile(join(CLAUDE_KIT,'spec.yaml'))"
+    },
+    {
+      "id": "lib/claude-accounts.mjs:ensureClaudeBinding:0",
+      "expression": "approveServiceBinding(home,CLAUDE_SERVICE,['api.anthropic.com'])"
+    },
+    {
+      "id": "lib/claude-accounts.mjs:assignClaudeAccount:0",
+      "expression": "readClaudeAccountValue(home,account)"
+    },
+    {
+      "id": "lib/claude-accounts.mjs:assignClaudeAccount:1",
+      "expression": "run(['secret','set',service,'--sandbox',sandboxId,'--force'],{input})"
+    },
+    {
+      "id": "lib/claude-accounts.mjs:assignClaudeAccount:2",
+      "expression": "run(['secret','ls','--json','--sandbox',sandboxId])"
+    },
+    {
+      "id": "lib/claude-accounts.mjs:verifyClaudeAccountRemoved:0",
+      "expression": "run(['secret','ls','--json','--sandbox',sandboxId])"
+    },
+    {
+      "id": "lib/claude-accounts.mjs:verifyClaudeAccountRemoved:1",
+      "expression": "run(['secret','rm',service,'--sandbox',sandboxId,'--force']).catch(()=>{})"
+    },
+    {
+      "id": "lib/claude-accounts.mjs:verifyClaudeAccountRemoved:2",
+      "expression": "run(['secret','ls','--json','--sandbox',sandboxId])"
+    },
+    {
+      "id": "lib/claude-accounts.mjs:claudeAccountCheckGeneration:0",
+      "expression": "readClaudeAccountValue(home,account)"
+    },
+    {
+      "id": "lib/claude-accounts.mjs:claudeAccountCheckGeneration:1",
+      "expression": "readFile(checkFile(home,account),'utf8')"
+    },
+    {
+      "id": "lib/sandbox-credentials.mjs:acquireCredentialPreparation:0",
+      "expression": "lock(home)"
+    },
+    {
+      "id": "lib/sandbox-credentials.mjs:acquireCredentialPreparation:2",
+      "expression": "checkWriters(home,isolatedSources)"
+    },
+    {
+      "id": "lib/sandbox-credentials.mjs:restrictCredentialScope:0",
+      "expression": "run(['secret', 'ls', '--json'])"
+    },
+    {
+      "id": "lib/sandbox-credentials.mjs:restrictCredentialScope:1",
+      "expression": "run(['settings', 'set', 'ssh.agentForwardingEnabled', 'false'])"
+    },
+    {
+      "id": "lib/sandbox-credentials.mjs:restrictCredentialScope:2",
+      "expression": "run(['settings', 'set', 'ssh.agentSocketPath', ''])"
+    },
+    {
+      "id": "lib/sandbox-credentials.mjs:restrictCredentialScope:3",
+      "expression": "run(['settings', 'get', 'ssh.agentForwardingEnabled'])"
+    },
+    {
+      "id": "lib/sandbox-credentials.mjs:restrictCredentialScope:4",
+      "expression": "run(['settings', 'get', 'ssh.agentSocketPath'])"
+    },
+    {
+      "id": "lib/sandbox-policy-cleanup.mjs:removeSandboxPolicies:0",
+      "expression": "run(['policy', 'ls', '--json'])"
+    },
+    {
+      "id": "lib/sandbox-policy-cleanup.mjs:removeSandboxPolicies:2",
+      "expression": "run(['policy', 'ls', '--json'])"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:syncDirectory:0",
+      "expression": "open(directory, 'r')"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:syncDirectory:1",
+      "expression": "fd.sync()"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:syncDirectory:2",
+      "expression": "fd.close()"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:journalDirectory:0",
+      "expression": "mkdir(directory, { recursive: true, mode: 0o700 })"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:journalDirectory:1",
+      "expression": "lstat(directory)"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:withSandboxScratchLock:0",
+      "expression": "acquireProcessLock(join(journal + '-locks', sandboxId), { timeoutMs: 30000 })"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:withSandboxScratchLock:1",
+      "expression": "operation()"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:withSandboxScratchLock:2",
+      "expression": "release()"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:createSandboxScratch:0",
+      "expression": "realpath(root).catch(error=>{if(error.code==='ENOENT')return resolve(root);throw error;})"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:createScratch:0",
+      "expression": "mkdir(root, { recursive: true })"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:createScratch:1",
+      "expression": "realpath(root)"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:createScratch:2",
+      "expression": "journalDirectory(journal)"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:createScratch:3",
+      "expression": "open(join(journal, sandboxId + '.json'), 'wx', 0o600)"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:createScratch:4",
+      "expression": "record.writeFile(payload)"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:createScratch:5",
+      "expression": "record.sync()"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:createScratch:6",
+      "expression": "record.close()"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:createScratch:7",
+      "expression": "syncDirectory(journal)"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:createScratch:8",
+      "expression": "beforeCreate?.(scratch)"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:createScratch:11",
+      "expression": "mkdir(scratch, { mode: 0o700 })"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:recoverSandboxScratch:0",
+      "expression": "lstat(journal)"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:recoverSandboxScratch:1",
+      "expression": "open(recordPath, constants.O_RDONLY | (constants.O_NOFOLLOW || 0))"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:recoverSandboxScratch:2",
+      "expression": "record.stat()"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:recoverSandboxScratch:3",
+      "expression": "record.readFile('utf8')"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:recoverSandboxScratch:4",
+      "expression": "record.close()"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:recoverSandboxScratch:5",
+      "expression": "realpath(root)"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:recoverSandboxScratch:6",
+      "expression": "lstat(value.scratch).catch(error => { if (error.code === 'ENOENT') return null; throw error; })"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:recoverSandboxScratch:7",
+      "expression": "rm(value.scratch, { recursive: true, force: true })"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:recoverSandboxScratch:9",
+      "expression": "rm(recordPath)"
+    },
+    {
+      "id": "lib/sandbox-scratch.mjs:recoverSandboxScratch:10",
+      "expression": "syncDirectory(journal)"
+    },
+    {
+      "id": "lib/store-lock.mjs:acquire:0",
+      "expression": "waitFor(turn, until, signal)"
+    },
+    {
+      "id": "lib/store-lock.mjs:acquire:1",
+      "expression": "tryLockAsync(dispatchFile, { signal, timeoutMs: Math.min(ASYNC_WAIT_MS, left) })"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:0",
+      "expression": "mkdir(home(), { recursive: true, mode: 0o700 })"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:1",
+      "expression": "acquireProcessLock(join(home(), 'storage-reservations.lock'), { timeoutMs: 30000 })"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:2",
+      "expression": "readFile(file(), 'utf8').then(JSON.parse).catch(error => { if (error.code === 'ENOENT') return {}; throw error; })"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:3",
+      "expression": "fn(rows)"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:4",
+      "expression": "open(temporary, 'wx', 0o600)"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:5",
+      "expression": "fd.writeFile(JSON.stringify(rows))"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:6",
+      "expression": "fd.sync()"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:7",
+      "expression": "fd.close()"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:8",
+      "expression": "rename(temporary, file())"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:9",
+      "expression": "open(home(), 'r')"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:10",
+      "expression": "directory.sync()"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:11",
+      "expression": "directory.close()"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:change:12",
+      "expression": "release()"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:createStoragePool:10",
+      "expression": "run(['exec', handle.sandbox_id, '--', 'lsblk', '-b', '-J', '-o', 'NAME,SIZE,RO,TYPE'],{handle})"
+    },
+    {
+      "id": "lib/sandbox-storage.mjs:createStoragePool:11",
+      "expression": "run(['exec', handle.sandbox_id, '--', 'findmnt', '-J', '-o', 'TARGET,FSTYPE,OPTIONS'],{handle})"
+    },
+    {
+      "id": "lib/host-disk.mjs:existing:0",
+      "expression": "statPath(at)"
+    },
+    {
+      "id": "lib/host-disk.mjs:createHostDisk:0",
+      "expression": "existing(candidate, statPath)"
+    },
+    {
+      "id": "lib/host-disk.mjs:createHostDisk:1",
+      "expression": "statfsPath(at)"
+    },
+    {
+      "id": "lib/host-disk.mjs:tick:0",
+      "expression": "Promise.race([disk.free(), new Promise((_, reject) => { const started = monotonic(); let due = started + readTimeoutMs; const expire = () => { const now = monotonic(); if (now - due > HOST_DISK_STALL_SLACK_MS && now - started < HOST_DISK_READ_CAP_MS) { due = now + readTimeoutMs; late = timers.setTimeout(expire, readTimeoutMs); late?.unref?.(); return; } setImmediate(() => reject(new Error('disk read timed out'))); }; late = timers.setTimeout(expire, readTimeoutMs); late?.unref?.(); })])"
+    },
+    {
+      "id": "lib/github-auth.mjs:refreshGitHubGeneration:0",
+      "expression": "currentGitHubGeneration(home)"
+    }
+  ],
+  "covered": [
+    "cleanup/lib/claude-accounts.mjs:verifyClaudeAccountRemoved:0@0",
+    "cleanup/lib/claude-accounts.mjs:verifyClaudeAccountRemoved:1@0",
+    "cleanup/lib/claude-accounts.mjs:verifyClaudeAccountRemoved:2@0",
+    "cleanup/lib/docker-backend.mjs:_finishDestroy:10@0",
+    "cleanup/lib/docker-backend.mjs:_finishDestroy:11@0",
+    "cleanup/lib/docker-backend.mjs:_finishDestroy:1@0",
+    "cleanup/lib/docker-backend.mjs:_finishDestroy:7@0",
+    "cleanup/lib/docker-backend.mjs:_finishDestroy:8@0",
+    "cleanup/lib/docker-backend.mjs:_finishDestroy:9@0",
+    "cleanup/lib/docker-backend.mjs:_resolveCompute:0@0",
+    "cleanup/lib/docker-backend.mjs:_resolveCompute:1@0",
+    "cleanup/lib/docker-backend.mjs:_resolveCompute:2@0",
+    "cleanup/lib/docker-backend.mjs:_resolveCompute:3@0",
+    "cleanup/lib/docker-backend.mjs:_retryCleanupListing:0@0",
+    "cleanup/lib/docker-backend.mjs:_retryCleanupListing:0@1",
+    "cleanup/lib/docker-backend.mjs:_rowRun:0@0",
+    "cleanup/lib/docker-backend.mjs:_rowRun:0@1",
+    "cleanup/lib/docker-backend.mjs:_rowRun:1@0",
+    "cleanup/lib/docker-backend.mjs:_rowRun:1@1",
+    "cleanup/lib/docker-backend.mjs:_rowRun:1@2",
+    "cleanup/lib/docker-backend.mjs:_rowRun:1@3",
+    "cleanup/lib/docker-backend.mjs:_rowRun:1@4",
+    "cleanup/lib/docker-backend.mjs:_rowRun:1@5",
+    "cleanup/lib/docker-backend.mjs:_rowRun:1@6",
+    "cleanup/lib/docker-backend.mjs:cancel:0@0",
+    "cleanup/lib/docker-backend.mjs:destroy:1@0",
+    "cleanup/lib/docker-backend.mjs:dispatchSbx:0@0",
+    "cleanup/lib/docker-backend.mjs:dispatchSbx:0@1",
+    "cleanup/lib/docker-backend.mjs:dispatchSbx:0@2",
+    "cleanup/lib/docker-backend.mjs:dispatchSbx:0@3",
+    "cleanup/lib/docker-backend.mjs:dispatchSbx:0@4",
+    "cleanup/lib/docker-backend.mjs:dispatchSbx:0@5",
+    "cleanup/lib/docker-backend.mjs:dispatchSbx:0@6",
+    "cleanup/lib/docker-backend.mjs:dispatchSbx:0@7",
+    "cleanup/lib/docker-backend.mjs:dispatchSbx:0@8",
+    "cleanup/lib/docker-backend.mjs:runSbx:0@0",
+    "cleanup/lib/docker-backend.mjs:runSbx:0@1",
+    "cleanup/lib/docker-backend.mjs:runSbx:0@2",
+    "cleanup/lib/docker-backend.mjs:runSbx:0@3",
+    "cleanup/lib/docker-backend.mjs:runSbx:0@4",
+    "cleanup/lib/docker-backend.mjs:runSbx:0@5",
+    "cleanup/lib/docker-backend.mjs:runSbx:0@6",
+    "cleanup/lib/docker-backend.mjs:runSbx:0@7",
+    "cleanup/lib/docker-backend.mjs:runSbx:0@8",
+    "cleanup/lib/docker-backend.mjs:runSbx:1@0",
+    "cleanup/lib/docker-backend.mjs:runSbx:1@1",
+    "cleanup/lib/docker-backend.mjs:runSbx:1@2",
+    "cleanup/lib/docker-backend.mjs:runSbx:1@3",
+    "cleanup/lib/docker-backend.mjs:runSbx:1@4",
+    "cleanup/lib/docker-backend.mjs:runSbx:1@5",
+    "cleanup/lib/docker-backend.mjs:runSbx:1@6",
+    "cleanup/lib/docker-backend.mjs:runSbx:1@7",
+    "cleanup/lib/docker-backend.mjs:runSbx:1@8",
+    "cleanup/lib/sandbox-policy-cleanup.mjs:removeSandboxPolicies:0@0",
+    "cleanup/lib/sandbox-policy-cleanup.mjs:removeSandboxPolicies:2@0",
+    "cleanup/lib/sandbox-scratch.mjs:recoverSandboxScratch:0@0",
+    "cleanup/lib/sandbox-scratch.mjs:recoverSandboxScratch:10@0",
+    "cleanup/lib/sandbox-scratch.mjs:recoverSandboxScratch:1@0",
+    "cleanup/lib/sandbox-scratch.mjs:recoverSandboxScratch:2@0",
+    "cleanup/lib/sandbox-scratch.mjs:recoverSandboxScratch:3@0",
+    "cleanup/lib/sandbox-scratch.mjs:recoverSandboxScratch:4@0",
+    "cleanup/lib/sandbox-scratch.mjs:recoverSandboxScratch:5@0",
+    "cleanup/lib/sandbox-scratch.mjs:recoverSandboxScratch:6@0",
+    "cleanup/lib/sandbox-scratch.mjs:recoverSandboxScratch:7@0",
+    "cleanup/lib/sandbox-scratch.mjs:recoverSandboxScratch:9@0",
+    "cleanup/lib/sandbox-scratch.mjs:syncDirectory:0@0",
+    "cleanup/lib/sandbox-scratch.mjs:syncDirectory:1@0",
+    "cleanup/lib/sandbox-scratch.mjs:syncDirectory:2@0",
+    "cleanup/lib/sandbox-storage.mjs:change:0@0",
+    "cleanup/lib/sandbox-storage.mjs:change:10@0",
+    "cleanup/lib/sandbox-storage.mjs:change:11@0",
+    "cleanup/lib/sandbox-storage.mjs:change:12@0",
+    "cleanup/lib/sandbox-storage.mjs:change:1@0",
+    "cleanup/lib/sandbox-storage.mjs:change:2@0",
+    "cleanup/lib/sandbox-storage.mjs:change:3@0",
+    "cleanup/lib/sandbox-storage.mjs:change:4@0",
+    "cleanup/lib/sandbox-storage.mjs:change:5@0",
+    "cleanup/lib/sandbox-storage.mjs:change:6@0",
+    "cleanup/lib/sandbox-storage.mjs:change:7@0",
+    "cleanup/lib/sandbox-storage.mjs:change:8@0",
+    "cleanup/lib/sandbox-storage.mjs:change:9@0",
+    "output/lib/docker-backend.mjs:_dispatchProtected:0@0",
+    "output/lib/docker-backend.mjs:assertActive:0@0",
+    "output/lib/docker-backend.mjs:assertActive:1@0",
+    "output/lib/docker-backend.mjs:assertActive:2@0",
+    "output/lib/docker-backend.mjs:dispatchSbx:0@0",
+    "output/lib/docker-backend.mjs:streamSbxOutput:0@0",
+    "output/lib/docker-backend.mjs:streamSbxOutput:1@0",
+    "output/lib/docker-backend.mjs:streamSbxOutput:2@0",
+    "prepare/lib/claude-accounts.mjs:assignClaudeAccount:0@0",
+    "prepare/lib/claude-accounts.mjs:assignClaudeAccount:1@0",
+    "prepare/lib/claude-accounts.mjs:assignClaudeAccount:2@0",
+    "prepare/lib/claude-accounts.mjs:claudeAccountCheckGeneration:0@0",
+    "prepare/lib/claude-accounts.mjs:claudeAccountCheckGeneration:0@1",
+    "prepare/lib/claude-accounts.mjs:claudeAccountCheckGeneration:0@2",
+    "prepare/lib/claude-accounts.mjs:claudeAccountCheckGeneration:1@0",
+    "prepare/lib/claude-accounts.mjs:claudeAccountCheckGeneration:1@1",
+    "prepare/lib/claude-accounts.mjs:claudeAccountCheckGeneration:1@2",
+    "prepare/lib/claude-accounts.mjs:claudeKitDigest:0@0",
+    "prepare/lib/claude-accounts.mjs:ensureClaudeBinding:0@0",
+    "prepare/lib/credential-generations.mjs:approveServiceBinding:0@0",
+    "prepare/lib/credential-generations.mjs:approveServiceBinding:1@0",
+    "prepare/lib/credential-generations.mjs:approveServiceBinding:1@1",
+    "prepare/lib/credential-generations.mjs:approveServiceBinding:3@0",
+    "prepare/lib/credential-generations.mjs:approveServiceBinding:4@0",
+    "prepare/lib/credential-generations.mjs:approveServiceBinding:5@0",
+    "prepare/lib/credential-generations.mjs:approveServiceBinding:6@0",
+    "prepare/lib/credential-generations.mjs:approveServiceBinding:7@0",
+    "prepare/lib/credential-generations.mjs:generationDirectory:0@0",
+    "prepare/lib/credential-generations.mjs:generationDirectory:0@1",
+    "prepare/lib/credential-generations.mjs:generationDirectory:0@2",
+    "prepare/lib/credential-generations.mjs:generationDirectory:0@3",
+    "prepare/lib/credential-generations.mjs:generationDirectory:0@4",
+    "prepare/lib/credential-generations.mjs:generationDirectory:0@5",
+    "prepare/lib/credential-generations.mjs:generationDirectory:0@6",
+    "prepare/lib/credential-generations.mjs:generationDirectory:0@7",
+    "prepare/lib/credential-generations.mjs:generationDirectory:0@8",
+    "prepare/lib/credential-generations.mjs:generationDirectory:0@9",
+    "prepare/lib/credential-generations.mjs:generationDirectory:1@0",
+    "prepare/lib/credential-generations.mjs:generationDirectory:1@1",
+    "prepare/lib/credential-generations.mjs:generationDirectory:1@2",
+    "prepare/lib/credential-generations.mjs:generationDirectory:1@3",
+    "prepare/lib/credential-generations.mjs:generationDirectory:1@4",
+    "prepare/lib/credential-generations.mjs:generationDirectory:1@5",
+    "prepare/lib/credential-generations.mjs:generationDirectory:1@6",
+    "prepare/lib/credential-generations.mjs:generationDirectory:1@7",
+    "prepare/lib/credential-generations.mjs:generationDirectory:1@8",
+    "prepare/lib/credential-generations.mjs:generationDirectory:1@9",
+    "prepare/lib/credential-generations.mjs:generationDirectory:2@0",
+    "prepare/lib/credential-generations.mjs:generationDirectory:2@1",
+    "prepare/lib/credential-generations.mjs:generationDirectory:2@2",
+    "prepare/lib/credential-generations.mjs:generationDirectory:2@3",
+    "prepare/lib/credential-generations.mjs:generationDirectory:2@4",
+    "prepare/lib/credential-generations.mjs:generationDirectory:2@5",
+    "prepare/lib/credential-generations.mjs:generationDirectory:2@6",
+    "prepare/lib/credential-generations.mjs:generationDirectory:2@7",
+    "prepare/lib/credential-generations.mjs:generationDirectory:2@8",
+    "prepare/lib/credential-generations.mjs:generationDirectory:2@9",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@0",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@1",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@10",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@11",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@12",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@13",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@14",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@15",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@16",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@17",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@18",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@19",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@2",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@20",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@21",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@22",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@23",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@24",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@25",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@26",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@27",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@28",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@29",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@3",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@30",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@31",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@32",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@4",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@5",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@6",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@7",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@8",
+    "prepare/lib/credential-generations.mjs:privateDirectory:0@9",
+    "prepare/lib/credential-generations.mjs:readClaudeAccount:0@0",
+    "prepare/lib/credential-generations.mjs:readClaudeAccount:0@1",
+    "prepare/lib/credential-generations.mjs:readClaudeAccount:0@2",
+    "prepare/lib/credential-generations.mjs:readClaudeAccount:1@0",
+    "prepare/lib/credential-generations.mjs:readClaudeAccount:1@1",
+    "prepare/lib/credential-generations.mjs:readClaudeAccount:1@2",
+    "prepare/lib/credential-generations.mjs:readClaudeAccount:2@0",
+    "prepare/lib/credential-generations.mjs:readClaudeAccount:2@1",
+    "prepare/lib/credential-generations.mjs:readClaudeAccount:2@2",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:0@0",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:0@1",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:0@2",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:0@3",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:0@4",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:0@5",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:0@6",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:1@0",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:1@1",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:1@2",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:1@3",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:1@4",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:1@5",
+    "prepare/lib/credential-generations.mjs:readClaudeAccountValue:1@6",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@0",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@1",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@10",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@11",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@12",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@2",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@3",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@4",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@5",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@6",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@7",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@8",
+    "prepare/lib/credential-generations.mjs:readPrivate:0@9",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@0",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@1",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@10",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@11",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@12",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@2",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@3",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@4",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@5",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@6",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@7",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@8",
+    "prepare/lib/credential-generations.mjs:readPrivate:1@9",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@0",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@1",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@10",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@11",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@12",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@2",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@3",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@4",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@5",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@6",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@7",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@8",
+    "prepare/lib/credential-generations.mjs:readPrivate:2@9",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@0",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@1",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@10",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@11",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@12",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@2",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@3",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@4",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@5",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@6",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@7",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@8",
+    "prepare/lib/credential-generations.mjs:readPrivate:3@9",
+    "prepare/lib/credential-generations.mjs:save:0@0",
+    "prepare/lib/credential-generations.mjs:save:1@0",
+    "prepare/lib/credential-generations.mjs:save:2@0",
+    "prepare/lib/credential-generations.mjs:save:3@0",
+    "prepare/lib/credential-generations.mjs:syncDirectory:0@0",
+    "prepare/lib/credential-generations.mjs:syncDirectory:0@1",
+    "prepare/lib/credential-generations.mjs:syncDirectory:0@2",
+    "prepare/lib/credential-generations.mjs:syncDirectory:1@0",
+    "prepare/lib/credential-generations.mjs:syncDirectory:1@1",
+    "prepare/lib/credential-generations.mjs:syncDirectory:1@2",
+    "prepare/lib/credential-generations.mjs:syncDirectory:2@0",
+    "prepare/lib/credential-generations.mjs:syncDirectory:2@1",
+    "prepare/lib/credential-generations.mjs:syncDirectory:2@2",
+    "prepare/lib/credential-generations.mjs:validClaudePointer:0@0",
+    "prepare/lib/credential-generations.mjs:validClaudePointer:0@1",
+    "prepare/lib/credential-generations.mjs:validClaudePointer:0@2",
+    "prepare/lib/credential-generations.mjs:validClaudePointer:1@0",
+    "prepare/lib/credential-generations.mjs:validClaudePointer:1@1",
+    "prepare/lib/credential-generations.mjs:validClaudePointer:1@2",
+    "prepare/lib/docker-backend.mjs:_admitDiskJob:0@0",
+    "prepare/lib/docker-backend.mjs:_admitDiskJob:1@0",
+    "prepare/lib/docker-backend.mjs:_configureEgress:0@0",
+    "prepare/lib/docker-backend.mjs:_configureEgress:2@0",
+    "prepare/lib/docker-backend.mjs:_configureEgress:2@1",
+    "prepare/lib/docker-backend.mjs:_configureEgress:3@0",
+    "prepare/lib/docker-backend.mjs:_configureEgress:3@1",
+    "prepare/lib/docker-backend.mjs:_configureEgress:3@2",
+    "prepare/lib/docker-backend.mjs:_configureEgress:3@3",
+    "prepare/lib/docker-backend.mjs:_configureEgress:3@4",
+    "prepare/lib/docker-backend.mjs:_configureEgress:3@5",
+    "prepare/lib/docker-backend.mjs:_configureEgress:3@6",
+    "prepare/lib/docker-backend.mjs:_configureEgress:3@7",
+    "prepare/lib/docker-backend.mjs:_configureEgress:3@8",
+    "prepare/lib/docker-backend.mjs:_configureEgress:3@9",
+    "prepare/lib/docker-backend.mjs:_configureEgress:4@0",
+    "prepare/lib/docker-backend.mjs:_configureEgress:5@0",
+    "prepare/lib/docker-backend.mjs:_copyIn:0@0",
+    "prepare/lib/docker-backend.mjs:_copyIn:1@0",
+    "prepare/lib/docker-backend.mjs:_dispatchProtected:0@0",
+    "prepare/lib/docker-backend.mjs:_dispatchProtected:0@1",
+    "prepare/lib/docker-backend.mjs:_dispatchProtected:0@2",
+    "prepare/lib/docker-backend.mjs:_dispatchProtected:0@3",
+    "prepare/lib/docker-backend.mjs:_dispatchProtected:0@4",
+    "prepare/lib/docker-backend.mjs:_dispatchProtected:1@0",
+    "prepare/lib/docker-backend.mjs:_holdRuntime:0@0",
+    "prepare/lib/docker-backend.mjs:_prepare:0@0",
+    "prepare/lib/docker-backend.mjs:_prepare:13@0",
+    "prepare/lib/docker-backend.mjs:_prepare:14@0",
+    "prepare/lib/docker-backend.mjs:_prepare:15@0",
+    "prepare/lib/docker-backend.mjs:_prepare:1@0",
+    "prepare/lib/docker-backend.mjs:_prepare:20@0",
+    "prepare/lib/docker-backend.mjs:_prepare:21@0",
+    "prepare/lib/docker-backend.mjs:_prepare:22@0",
+    "prepare/lib/docker-backend.mjs:_prepare:23@0",
+    "prepare/lib/docker-backend.mjs:_prepare:24@0",
+    "prepare/lib/docker-backend.mjs:_prepare:25@0",
+    "prepare/lib/docker-backend.mjs:_prepare:26@0",
+    "prepare/lib/docker-backend.mjs:_prepare:27@0",
+    "prepare/lib/docker-backend.mjs:_prepare:28@0",
+    "prepare/lib/docker-backend.mjs:_prepare:29@0",
+    "prepare/lib/docker-backend.mjs:_prepare:2@0",
+    "prepare/lib/docker-backend.mjs:_prepare:30@0",
+    "prepare/lib/docker-backend.mjs:_prepare:31@0",
+    "prepare/lib/docker-backend.mjs:_prepare:35@0",
+    "prepare/lib/docker-backend.mjs:_prepare:37@0",
+    "prepare/lib/docker-backend.mjs:_prepare:46@0",
+    "prepare/lib/docker-backend.mjs:_prepare:48@0",
+    "prepare/lib/docker-backend.mjs:_prepare:49@0",
+    "prepare/lib/docker-backend.mjs:_prepare:52@0",
+    "prepare/lib/docker-backend.mjs:_prepare:53@0",
+    "prepare/lib/docker-backend.mjs:_prepare:5@0",
+    "prepare/lib/docker-backend.mjs:_prepare:6@0",
+    "prepare/lib/docker-backend.mjs:_prepare:7@0",
+    "prepare/lib/docker-backend.mjs:_prepare:8@0",
+    "prepare/lib/docker-backend.mjs:_prepare:9@0",
+    "prepare/lib/docker-backend.mjs:_prepareWithOptions:0@0",
+    "prepare/lib/docker-backend.mjs:_prepareWithOptions:2@0",
+    "prepare/lib/docker-backend.mjs:_readPolicy:0@0",
+    "prepare/lib/docker-backend.mjs:_readPolicy:0@1",
+    "prepare/lib/docker-backend.mjs:_recordSandboxImage:0@0",
+    "prepare/lib/docker-backend.mjs:_retryCleanupListing:0@0",
+    "prepare/lib/docker-backend.mjs:_rowRun:0@0",
+    "prepare/lib/docker-backend.mjs:_rowRun:1@0",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@0",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@1",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@10",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@11",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@12",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@13",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@14",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@15",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@16",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@17",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@18",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@19",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@2",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@3",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@4",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@5",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@6",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@7",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@8",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:0@9",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:1@0",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@0",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@1",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@10",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@11",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@12",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@13",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@14",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@15",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@16",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@17",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@18",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@19",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@2",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@3",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@4",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@5",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@6",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@7",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@8",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:2@9",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@0",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@1",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@10",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@11",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@12",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@13",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@14",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@15",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@16",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@17",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@18",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@19",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@2",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@3",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@4",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@5",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@6",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@7",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@8",
+    "prepare/lib/docker-backend.mjs:_runJobCommand:4@9",
+    "prepare/lib/docker-backend.mjs:_settleDiskCreate:0@0",
+    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@0",
+    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@1",
+    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@10",
+    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@2",
+    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@3",
+    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@4",
+    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@5",
+    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@6",
+    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@7",
+    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@8",
+    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@9",
+    "prepare/lib/docker-backend.mjs:admitClaude:0@0",
+    "prepare/lib/docker-backend.mjs:admitClaude:0@1",
+    "prepare/lib/docker-backend.mjs:admitClaude:0@2",
+    "prepare/lib/docker-backend.mjs:admitClaude:1@0",
+    "prepare/lib/docker-backend.mjs:admitClaude:1@1",
+    "prepare/lib/docker-backend.mjs:admitClaude:1@2",
+    "prepare/lib/docker-backend.mjs:admitClaude:2@0",
+    "prepare/lib/docker-backend.mjs:admitClaude:2@1",
+    "prepare/lib/docker-backend.mjs:admitClaude:2@2",
+    "prepare/lib/docker-backend.mjs:admitClaude:3@0",
+    "prepare/lib/docker-backend.mjs:admitClaude:3@1",
+    "prepare/lib/docker-backend.mjs:admitClaude:3@2",
+    "prepare/lib/docker-backend.mjs:admitJob:0@0",
+    "prepare/lib/docker-backend.mjs:admitJob:1@0",
+    "prepare/lib/docker-backend.mjs:assertActive:0@0",
+    "prepare/lib/docker-backend.mjs:assertActive:0@1",
+    "prepare/lib/docker-backend.mjs:assertActive:0@10",
+    "prepare/lib/docker-backend.mjs:assertActive:0@11",
+    "prepare/lib/docker-backend.mjs:assertActive:0@12",
+    "prepare/lib/docker-backend.mjs:assertActive:0@13",
+    "prepare/lib/docker-backend.mjs:assertActive:0@14",
+    "prepare/lib/docker-backend.mjs:assertActive:0@15",
+    "prepare/lib/docker-backend.mjs:assertActive:0@16",
+    "prepare/lib/docker-backend.mjs:assertActive:0@17",
+    "prepare/lib/docker-backend.mjs:assertActive:0@18",
+    "prepare/lib/docker-backend.mjs:assertActive:0@19",
+    "prepare/lib/docker-backend.mjs:assertActive:0@2",
+    "prepare/lib/docker-backend.mjs:assertActive:0@20",
+    "prepare/lib/docker-backend.mjs:assertActive:0@21",
+    "prepare/lib/docker-backend.mjs:assertActive:0@22",
+    "prepare/lib/docker-backend.mjs:assertActive:0@23",
+    "prepare/lib/docker-backend.mjs:assertActive:0@24",
+    "prepare/lib/docker-backend.mjs:assertActive:0@25",
+    "prepare/lib/docker-backend.mjs:assertActive:0@26",
+    "prepare/lib/docker-backend.mjs:assertActive:0@27",
+    "prepare/lib/docker-backend.mjs:assertActive:0@28",
+    "prepare/lib/docker-backend.mjs:assertActive:0@29",
+    "prepare/lib/docker-backend.mjs:assertActive:0@3",
+    "prepare/lib/docker-backend.mjs:assertActive:0@30",
+    "prepare/lib/docker-backend.mjs:assertActive:0@31",
+    "prepare/lib/docker-backend.mjs:assertActive:0@32",
+    "prepare/lib/docker-backend.mjs:assertActive:0@33",
+    "prepare/lib/docker-backend.mjs:assertActive:0@34",
+    "prepare/lib/docker-backend.mjs:assertActive:0@35",
+    "prepare/lib/docker-backend.mjs:assertActive:0@36",
+    "prepare/lib/docker-backend.mjs:assertActive:0@37",
+    "prepare/lib/docker-backend.mjs:assertActive:0@38",
+    "prepare/lib/docker-backend.mjs:assertActive:0@39",
+    "prepare/lib/docker-backend.mjs:assertActive:0@4",
+    "prepare/lib/docker-backend.mjs:assertActive:0@40",
+    "prepare/lib/docker-backend.mjs:assertActive:0@41",
+    "prepare/lib/docker-backend.mjs:assertActive:0@42",
+    "prepare/lib/docker-backend.mjs:assertActive:0@43",
+    "prepare/lib/docker-backend.mjs:assertActive:0@44",
+    "prepare/lib/docker-backend.mjs:assertActive:0@45",
+    "prepare/lib/docker-backend.mjs:assertActive:0@5",
+    "prepare/lib/docker-backend.mjs:assertActive:0@6",
+    "prepare/lib/docker-backend.mjs:assertActive:0@7",
+    "prepare/lib/docker-backend.mjs:assertActive:0@8",
+    "prepare/lib/docker-backend.mjs:assertActive:0@9",
+    "prepare/lib/docker-backend.mjs:assertActive:1@0",
+    "prepare/lib/docker-backend.mjs:assertActive:1@1",
+    "prepare/lib/docker-backend.mjs:assertActive:1@2",
+    "prepare/lib/docker-backend.mjs:assertActive:1@3",
+    "prepare/lib/docker-backend.mjs:assertActive:1@4",
+    "prepare/lib/docker-backend.mjs:assertActive:1@5",
+    "prepare/lib/docker-backend.mjs:assertActive:1@6",
+    "prepare/lib/docker-backend.mjs:assertActive:1@7",
+    "prepare/lib/docker-backend.mjs:assertActive:1@8",
+    "prepare/lib/docker-backend.mjs:assertActive:2@0",
+    "prepare/lib/docker-backend.mjs:assertActive:2@1",
+    "prepare/lib/docker-backend.mjs:assertActive:2@2",
+    "prepare/lib/docker-backend.mjs:assertActive:2@3",
+    "prepare/lib/docker-backend.mjs:assertActive:2@4",
+    "prepare/lib/docker-backend.mjs:assertActive:2@5",
+    "prepare/lib/docker-backend.mjs:assertActive:2@6",
+    "prepare/lib/docker-backend.mjs:assertActive:2@7",
+    "prepare/lib/docker-backend.mjs:assertActive:2@8",
+    "prepare/lib/docker-backend.mjs:claudeAccountRuntime:0@0",
+    "prepare/lib/docker-backend.mjs:claudeAccountRuntime:1@0",
+    "prepare/lib/docker-backend.mjs:claudeAccountRuntime:1@1",
+    "prepare/lib/docker-backend.mjs:claudeAccountRuntime:1@2",
+    "prepare/lib/docker-backend.mjs:claudeAccountRuntime:1@3",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@0",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@1",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@10",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@11",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@12",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@13",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@14",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@15",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@16",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@17",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@18",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@19",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@2",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@20",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@21",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@22",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@23",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@24",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@25",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@26",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@27",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@28",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@29",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@3",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@4",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@5",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@6",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@7",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@8",
+    "prepare/lib/docker-backend.mjs:dispatchSbx:0@9",
+    "prepare/lib/docker-backend.mjs:ensureSandboxAdmission:0@0",
+    "prepare/lib/docker-backend.mjs:ensureSandboxAdmission:0@1",
+    "prepare/lib/docker-backend.mjs:ensureSandboxAdmission:0@2",
+    "prepare/lib/docker-backend.mjs:ensureSandboxAdmission:0@3",
+    "prepare/lib/docker-backend.mjs:prepare:0@0",
+    "prepare/lib/docker-backend.mjs:runSbx:0@0",
+    "prepare/lib/docker-backend.mjs:runSbx:0@1",
+    "prepare/lib/docker-backend.mjs:runSbx:0@10",
+    "prepare/lib/docker-backend.mjs:runSbx:0@11",
+    "prepare/lib/docker-backend.mjs:runSbx:0@12",
+    "prepare/lib/docker-backend.mjs:runSbx:0@13",
+    "prepare/lib/docker-backend.mjs:runSbx:0@14",
+    "prepare/lib/docker-backend.mjs:runSbx:0@15",
+    "prepare/lib/docker-backend.mjs:runSbx:0@16",
+    "prepare/lib/docker-backend.mjs:runSbx:0@17",
+    "prepare/lib/docker-backend.mjs:runSbx:0@18",
+    "prepare/lib/docker-backend.mjs:runSbx:0@19",
+    "prepare/lib/docker-backend.mjs:runSbx:0@2",
+    "prepare/lib/docker-backend.mjs:runSbx:0@20",
+    "prepare/lib/docker-backend.mjs:runSbx:0@21",
+    "prepare/lib/docker-backend.mjs:runSbx:0@22",
+    "prepare/lib/docker-backend.mjs:runSbx:0@23",
+    "prepare/lib/docker-backend.mjs:runSbx:0@24",
+    "prepare/lib/docker-backend.mjs:runSbx:0@25",
+    "prepare/lib/docker-backend.mjs:runSbx:0@26",
+    "prepare/lib/docker-backend.mjs:runSbx:0@27",
+    "prepare/lib/docker-backend.mjs:runSbx:0@28",
+    "prepare/lib/docker-backend.mjs:runSbx:0@29",
+    "prepare/lib/docker-backend.mjs:runSbx:0@3",
+    "prepare/lib/docker-backend.mjs:runSbx:0@30",
+    "prepare/lib/docker-backend.mjs:runSbx:0@31",
+    "prepare/lib/docker-backend.mjs:runSbx:0@32",
+    "prepare/lib/docker-backend.mjs:runSbx:0@33",
+    "prepare/lib/docker-backend.mjs:runSbx:0@4",
+    "prepare/lib/docker-backend.mjs:runSbx:0@5",
+    "prepare/lib/docker-backend.mjs:runSbx:0@6",
+    "prepare/lib/docker-backend.mjs:runSbx:0@7",
+    "prepare/lib/docker-backend.mjs:runSbx:0@8",
+    "prepare/lib/docker-backend.mjs:runSbx:0@9",
+    "prepare/lib/docker-backend.mjs:runSbx:1@0",
+    "prepare/lib/docker-backend.mjs:runSbx:1@1",
+    "prepare/lib/docker-backend.mjs:runSbx:1@10",
+    "prepare/lib/docker-backend.mjs:runSbx:1@11",
+    "prepare/lib/docker-backend.mjs:runSbx:1@12",
+    "prepare/lib/docker-backend.mjs:runSbx:1@13",
+    "prepare/lib/docker-backend.mjs:runSbx:1@14",
+    "prepare/lib/docker-backend.mjs:runSbx:1@15",
+    "prepare/lib/docker-backend.mjs:runSbx:1@16",
+    "prepare/lib/docker-backend.mjs:runSbx:1@17",
+    "prepare/lib/docker-backend.mjs:runSbx:1@18",
+    "prepare/lib/docker-backend.mjs:runSbx:1@19",
+    "prepare/lib/docker-backend.mjs:runSbx:1@2",
+    "prepare/lib/docker-backend.mjs:runSbx:1@20",
+    "prepare/lib/docker-backend.mjs:runSbx:1@21",
+    "prepare/lib/docker-backend.mjs:runSbx:1@22",
+    "prepare/lib/docker-backend.mjs:runSbx:1@23",
+    "prepare/lib/docker-backend.mjs:runSbx:1@24",
+    "prepare/lib/docker-backend.mjs:runSbx:1@3",
+    "prepare/lib/docker-backend.mjs:runSbx:1@4",
+    "prepare/lib/docker-backend.mjs:runSbx:1@5",
+    "prepare/lib/docker-backend.mjs:runSbx:1@6",
+    "prepare/lib/docker-backend.mjs:runSbx:1@7",
+    "prepare/lib/docker-backend.mjs:runSbx:1@8",
+    "prepare/lib/docker-backend.mjs:runSbx:1@9",
+    "prepare/lib/docker-backend.mjs:worker:0@0",
+    "prepare/lib/docker-backend.mjs:worker:0@1",
+    "prepare/lib/docker-backend.mjs:worker:0@2",
+    "prepare/lib/docker-backend.mjs:worker:0@3",
+    "prepare/lib/docker-backend.mjs:worker:0@4",
+    "prepare/lib/docker-backend.mjs:worker:0@5",
+    "prepare/lib/docker-backend.mjs:worker:0@6",
+    "prepare/lib/docker-backend.mjs:worker:0@7",
+    "prepare/lib/docker-backend.mjs:worker:0@8",
+    "prepare/lib/docker-backend.mjs:worker:0@9",
+    "prepare/lib/github-auth.mjs:refreshGitHubGeneration:0@0",
+    "prepare/lib/host-disk.mjs:createHostDisk:0@0",
+    "prepare/lib/host-disk.mjs:createHostDisk:0@1",
+    "prepare/lib/host-disk.mjs:createHostDisk:1@0",
+    "prepare/lib/host-disk.mjs:createHostDisk:1@1",
+    "prepare/lib/host-disk.mjs:existing:0@0",
+    "prepare/lib/host-disk.mjs:existing:0@1",
+    "prepare/lib/host-disk.mjs:tick:0@0",
+    "prepare/lib/sandbox-credentials.mjs:acquireCredentialPreparation:0@0",
+    "prepare/lib/sandbox-credentials.mjs:acquireCredentialPreparation:2@0",
+    "prepare/lib/sandbox-credentials.mjs:restrictCredentialScope:0@0",
+    "prepare/lib/sandbox-credentials.mjs:restrictCredentialScope:1@0",
+    "prepare/lib/sandbox-credentials.mjs:restrictCredentialScope:2@0",
+    "prepare/lib/sandbox-credentials.mjs:restrictCredentialScope:3@0",
+    "prepare/lib/sandbox-credentials.mjs:restrictCredentialScope:4@0",
+    "prepare/lib/sandbox-scratch.mjs:createSandboxScratch:0@0",
+    "prepare/lib/sandbox-scratch.mjs:createScratch:0@0",
+    "prepare/lib/sandbox-scratch.mjs:createScratch:11@0",
+    "prepare/lib/sandbox-scratch.mjs:createScratch:1@0",
+    "prepare/lib/sandbox-scratch.mjs:createScratch:2@0",
+    "prepare/lib/sandbox-scratch.mjs:createScratch:3@0",
+    "prepare/lib/sandbox-scratch.mjs:createScratch:4@0",
+    "prepare/lib/sandbox-scratch.mjs:createScratch:5@0",
+    "prepare/lib/sandbox-scratch.mjs:createScratch:6@0",
+    "prepare/lib/sandbox-scratch.mjs:createScratch:7@0",
+    "prepare/lib/sandbox-scratch.mjs:createScratch:8@0",
+    "prepare/lib/sandbox-scratch.mjs:journalDirectory:0@0",
+    "prepare/lib/sandbox-scratch.mjs:journalDirectory:1@0",
+    "prepare/lib/sandbox-scratch.mjs:syncDirectory:0@0",
+    "prepare/lib/sandbox-scratch.mjs:syncDirectory:1@0",
+    "prepare/lib/sandbox-scratch.mjs:syncDirectory:2@0",
+    "prepare/lib/sandbox-scratch.mjs:withSandboxScratchLock:0@0",
+    "prepare/lib/sandbox-scratch.mjs:withSandboxScratchLock:1@0",
+    "prepare/lib/sandbox-scratch.mjs:withSandboxScratchLock:2@0",
+    "prepare/lib/sandbox-storage.mjs:createStoragePool:10@0",
+    "prepare/lib/sandbox-storage.mjs:createStoragePool:11@0",
+    "prepare/lib/store-lock.mjs:acquire:0@0",
+    "prepare/lib/store-lock.mjs:acquire:1@0",
+    "start/lib/claude-accounts.mjs:claudeAccountCheckGeneration:0@0",
+    "start/lib/claude-accounts.mjs:claudeAccountCheckGeneration:1@0",
+    "start/lib/credential-generations.mjs:generationDirectory:0@0",
+    "start/lib/credential-generations.mjs:generationDirectory:0@1",
+    "start/lib/credential-generations.mjs:generationDirectory:0@2",
+    "start/lib/credential-generations.mjs:generationDirectory:1@0",
+    "start/lib/credential-generations.mjs:generationDirectory:1@1",
+    "start/lib/credential-generations.mjs:generationDirectory:1@2",
+    "start/lib/credential-generations.mjs:generationDirectory:2@0",
+    "start/lib/credential-generations.mjs:generationDirectory:2@1",
+    "start/lib/credential-generations.mjs:generationDirectory:2@2",
+    "start/lib/credential-generations.mjs:privateDirectory:0@0",
+    "start/lib/credential-generations.mjs:privateDirectory:0@1",
+    "start/lib/credential-generations.mjs:privateDirectory:0@2",
+    "start/lib/credential-generations.mjs:privateDirectory:0@3",
+    "start/lib/credential-generations.mjs:privateDirectory:0@4",
+    "start/lib/credential-generations.mjs:privateDirectory:0@5",
+    "start/lib/credential-generations.mjs:privateDirectory:0@6",
+    "start/lib/credential-generations.mjs:privateDirectory:0@7",
+    "start/lib/credential-generations.mjs:privateDirectory:0@8",
+    "start/lib/credential-generations.mjs:privateDirectory:0@9",
+    "start/lib/credential-generations.mjs:readClaudeAccount:0@0",
+    "start/lib/credential-generations.mjs:readClaudeAccount:1@0",
+    "start/lib/credential-generations.mjs:readClaudeAccount:2@0",
+    "start/lib/credential-generations.mjs:readClaudeAccountValue:0@0",
+    "start/lib/credential-generations.mjs:readClaudeAccountValue:0@1",
+    "start/lib/credential-generations.mjs:readClaudeAccountValue:1@0",
+    "start/lib/credential-generations.mjs:readClaudeAccountValue:1@1",
+    "start/lib/credential-generations.mjs:readPrivate:0@0",
+    "start/lib/credential-generations.mjs:readPrivate:0@1",
+    "start/lib/credential-generations.mjs:readPrivate:0@2",
+    "start/lib/credential-generations.mjs:readPrivate:0@3",
+    "start/lib/credential-generations.mjs:readPrivate:1@0",
+    "start/lib/credential-generations.mjs:readPrivate:1@1",
+    "start/lib/credential-generations.mjs:readPrivate:1@2",
+    "start/lib/credential-generations.mjs:readPrivate:1@3",
+    "start/lib/credential-generations.mjs:readPrivate:2@0",
+    "start/lib/credential-generations.mjs:readPrivate:2@1",
+    "start/lib/credential-generations.mjs:readPrivate:2@2",
+    "start/lib/credential-generations.mjs:readPrivate:2@3",
+    "start/lib/credential-generations.mjs:readPrivate:3@0",
+    "start/lib/credential-generations.mjs:readPrivate:3@1",
+    "start/lib/credential-generations.mjs:readPrivate:3@2",
+    "start/lib/credential-generations.mjs:readPrivate:3@3",
+    "start/lib/credential-generations.mjs:validClaudePointer:0@0",
+    "start/lib/credential-generations.mjs:validClaudePointer:1@0",
+    "start/lib/docker-backend.mjs:_dispatchProtected:0@0",
+    "start/lib/docker-backend.mjs:_dispatchProtected:0@1",
+    "start/lib/docker-backend.mjs:_dispatchProtected:0@2",
+    "start/lib/docker-backend.mjs:_dispatchProtected:0@3",
+    "start/lib/docker-backend.mjs:_dispatchProtected:0@4",
+    "start/lib/docker-backend.mjs:_dispatchProtected:0@5",
+    "start/lib/docker-backend.mjs:_installGuard:0@0",
+    "start/lib/docker-backend.mjs:_installGuard:1@0",
+    "start/lib/docker-backend.mjs:_installGuard:2@0",
+    "start/lib/docker-backend.mjs:_runJobCommand:0@0",
+    "start/lib/docker-backend.mjs:_runJobCommand:0@1",
+    "start/lib/docker-backend.mjs:_runJobCommand:0@2",
+    "start/lib/docker-backend.mjs:_runJobCommand:0@3",
+    "start/lib/docker-backend.mjs:_runJobCommand:0@4",
+    "start/lib/docker-backend.mjs:_runJobCommand:0@5",
+    "start/lib/docker-backend.mjs:_runJobCommand:0@6",
+    "start/lib/docker-backend.mjs:_runJobCommand:0@7",
+    "start/lib/docker-backend.mjs:_runJobCommand:0@8",
+    "start/lib/docker-backend.mjs:_runJobCommand:2@0",
+    "start/lib/docker-backend.mjs:_runJobCommand:2@1",
+    "start/lib/docker-backend.mjs:_runJobCommand:2@2",
+    "start/lib/docker-backend.mjs:_runJobCommand:2@3",
+    "start/lib/docker-backend.mjs:_runJobCommand:2@4",
+    "start/lib/docker-backend.mjs:_runJobCommand:2@5",
+    "start/lib/docker-backend.mjs:_runJobCommand:2@6",
+    "start/lib/docker-backend.mjs:_runJobCommand:2@7",
+    "start/lib/docker-backend.mjs:_runJobCommand:2@8",
+    "start/lib/docker-backend.mjs:_runJobCommand:4@0",
+    "start/lib/docker-backend.mjs:_runJobCommand:4@1",
+    "start/lib/docker-backend.mjs:_runJobCommand:4@2",
+    "start/lib/docker-backend.mjs:_runJobCommand:4@3",
+    "start/lib/docker-backend.mjs:_runJobCommand:4@4",
+    "start/lib/docker-backend.mjs:_runJobCommand:4@5",
+    "start/lib/docker-backend.mjs:_runJobCommand:4@6",
+    "start/lib/docker-backend.mjs:_runJobCommand:4@7",
+    "start/lib/docker-backend.mjs:_runJobCommand:4@8",
+    "start/lib/docker-backend.mjs:admitClaude:0@0",
+    "start/lib/docker-backend.mjs:admitClaude:1@0",
+    "start/lib/docker-backend.mjs:admitClaude:2@0",
+    "start/lib/docker-backend.mjs:admitClaude:3@0",
+    "start/lib/docker-backend.mjs:assertActive:0@0",
+    "start/lib/docker-backend.mjs:assertActive:0@1",
+    "start/lib/docker-backend.mjs:assertActive:0@10",
+    "start/lib/docker-backend.mjs:assertActive:0@11",
+    "start/lib/docker-backend.mjs:assertActive:0@12",
+    "start/lib/docker-backend.mjs:assertActive:0@13",
+    "start/lib/docker-backend.mjs:assertActive:0@14",
+    "start/lib/docker-backend.mjs:assertActive:0@15",
+    "start/lib/docker-backend.mjs:assertActive:0@16",
+    "start/lib/docker-backend.mjs:assertActive:0@17",
+    "start/lib/docker-backend.mjs:assertActive:0@18",
+    "start/lib/docker-backend.mjs:assertActive:0@19",
+    "start/lib/docker-backend.mjs:assertActive:0@2",
+    "start/lib/docker-backend.mjs:assertActive:0@20",
+    "start/lib/docker-backend.mjs:assertActive:0@21",
+    "start/lib/docker-backend.mjs:assertActive:0@22",
+    "start/lib/docker-backend.mjs:assertActive:0@23",
+    "start/lib/docker-backend.mjs:assertActive:0@3",
+    "start/lib/docker-backend.mjs:assertActive:0@4",
+    "start/lib/docker-backend.mjs:assertActive:0@5",
+    "start/lib/docker-backend.mjs:assertActive:0@6",
+    "start/lib/docker-backend.mjs:assertActive:0@7",
+    "start/lib/docker-backend.mjs:assertActive:0@8",
+    "start/lib/docker-backend.mjs:assertActive:0@9",
+    "start/lib/docker-backend.mjs:assertActive:1@0",
+    "start/lib/docker-backend.mjs:assertActive:1@1",
+    "start/lib/docker-backend.mjs:assertActive:1@10",
+    "start/lib/docker-backend.mjs:assertActive:1@11",
+    "start/lib/docker-backend.mjs:assertActive:1@2",
+    "start/lib/docker-backend.mjs:assertActive:1@3",
+    "start/lib/docker-backend.mjs:assertActive:1@4",
+    "start/lib/docker-backend.mjs:assertActive:1@5",
+    "start/lib/docker-backend.mjs:assertActive:1@6",
+    "start/lib/docker-backend.mjs:assertActive:1@7",
+    "start/lib/docker-backend.mjs:assertActive:1@8",
+    "start/lib/docker-backend.mjs:assertActive:1@9",
+    "start/lib/docker-backend.mjs:assertActive:2@0",
+    "start/lib/docker-backend.mjs:assertActive:2@1",
+    "start/lib/docker-backend.mjs:assertActive:2@10",
+    "start/lib/docker-backend.mjs:assertActive:2@11",
+    "start/lib/docker-backend.mjs:assertActive:2@2",
+    "start/lib/docker-backend.mjs:assertActive:2@3",
+    "start/lib/docker-backend.mjs:assertActive:2@4",
+    "start/lib/docker-backend.mjs:assertActive:2@5",
+    "start/lib/docker-backend.mjs:assertActive:2@6",
+    "start/lib/docker-backend.mjs:assertActive:2@7",
+    "start/lib/docker-backend.mjs:assertActive:2@8",
+    "start/lib/docker-backend.mjs:assertActive:2@9",
+    "start/lib/docker-backend.mjs:claudeAccountRuntime:1@0",
+    "start/lib/docker-backend.mjs:dispatchSbx:0@0",
+    "start/lib/docker-backend.mjs:dispatchSbx:0@1",
+    "start/lib/docker-backend.mjs:dispatchSbx:0@2",
+    "start/lib/docker-backend.mjs:dispatchSbx:0@3",
+    "start/lib/docker-backend.mjs:dispatchSbx:0@4",
+    "start/lib/docker-backend.mjs:dispatchSbx:0@5",
+    "start/lib/docker-backend.mjs:dispatchSbx:0@6",
+    "start/lib/docker-backend.mjs:dispatchSbx:0@7",
+    "start/lib/docker-backend.mjs:dispatchSbx:0@8",
+    "start/lib/docker-backend.mjs:ensureGuestRuntime:0@0",
+    "start/lib/docker-backend.mjs:ensureGuestRuntime:1@0",
+    "start/lib/docker-backend.mjs:runSbx:0@0",
+    "start/lib/docker-backend.mjs:runSbx:0@1",
+    "start/lib/docker-backend.mjs:runSbx:0@2",
+    "start/lib/docker-backend.mjs:runSbx:0@3",
+    "start/lib/docker-backend.mjs:runSbx:0@4",
+    "start/lib/docker-backend.mjs:runSbx:0@5",
+    "start/lib/docker-backend.mjs:runSbx:0@6",
+    "start/lib/docker-backend.mjs:runSbx:0@7",
+    "start/lib/docker-backend.mjs:runSbx:0@8",
+    "start/lib/docker-backend.mjs:runSbx:1@0",
+    "start/lib/docker-backend.mjs:runSbx:1@1",
+    "start/lib/docker-backend.mjs:runSbx:1@2",
+    "start/lib/docker-backend.mjs:runSbx:1@3",
+    "start/lib/docker-backend.mjs:runSbx:1@4",
+    "start/lib/docker-backend.mjs:runSbx:1@5",
+    "start/lib/docker-backend.mjs:runSbx:1@6",
+    "start/lib/docker-backend.mjs:runSbx:1@7",
+    "start/lib/docker-backend.mjs:runSbx:1@8",
+    "start/lib/docker-backend.mjs:runSbxStreaming:0@0",
+    "start/lib/docker-backend.mjs:start:0@0",
+    "start/lib/docker-backend.mjs:start:10@0",
+    "start/lib/docker-backend.mjs:start:11@0",
+    "start/lib/docker-backend.mjs:start:1@0",
+    "start/lib/docker-backend.mjs:start:3@0",
+    "start/lib/docker-backend.mjs:start:4@0",
+    "start/lib/docker-backend.mjs:start:5@0",
+    "start/lib/docker-backend.mjs:start:6@0",
+    "start/lib/docker-backend.mjs:start:7@0",
+    "start/lib/docker-backend.mjs:start:8@0",
+    "start/lib/docker-backend.mjs:start:9@0",
+    "start/lib/guest-runtime.mjs:guardRuntimeReadiness:0@0",
+    "start/lib/guest-runtime.mjs:installGuestRuntime:0@0",
+    "start/lib/guest-runtime.mjs:installGuestRuntime:1@0",
+    "start/lib/guest-runtime.mjs:installGuestRuntime:2@0",
+    "start/lib/guest-runtime.mjs:installGuestRuntime:3@0",
+    "start/lib/guest-runtime.mjs:installGuestRuntime:4@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:0@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:10@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:11@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:12@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:1@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:2@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:3@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:4@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:5@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:6@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:7@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:8@0",
+    "start/lib/guest-runtime.mjs:stageGuestRuntime:9@0",
+    "start/lib/guest-runtime.mjs:verifyRuntime:0@0",
+    "start/lib/guest-runtime.mjs:verifyRuntime:0@1",
+    "start/lib/guest-runtime.mjs:verifyRuntime:0@2",
+    "start/lib/guest-runtime.mjs:verifyRuntime:1@0",
+    "start/lib/guest-runtime.mjs:verifyRuntime:1@1",
+    "start/lib/guest-runtime.mjs:verifyRuntime:1@2",
+    "verify/lib/docker-backend.mjs:_dispatchProtected:0@0",
+    "verify/lib/docker-backend.mjs:_dispatchProtected:0@1",
+    "verify/lib/docker-backend.mjs:_runJobCommand:0@0",
+    "verify/lib/docker-backend.mjs:_runJobCommand:0@1",
+    "verify/lib/docker-backend.mjs:_runJobCommand:0@2",
+    "verify/lib/docker-backend.mjs:_runJobCommand:0@3",
+    "verify/lib/docker-backend.mjs:_runJobCommand:2@0",
+    "verify/lib/docker-backend.mjs:_runJobCommand:2@1",
+    "verify/lib/docker-backend.mjs:_runJobCommand:2@2",
+    "verify/lib/docker-backend.mjs:_runJobCommand:2@3",
+    "verify/lib/docker-backend.mjs:_runJobCommand:4@0",
+    "verify/lib/docker-backend.mjs:_runJobCommand:4@1",
+    "verify/lib/docker-backend.mjs:_runJobCommand:4@2",
+    "verify/lib/docker-backend.mjs:_runJobCommand:4@3",
+    "verify/lib/docker-backend.mjs:assertActive:0@0",
+    "verify/lib/docker-backend.mjs:assertActive:0@1",
+    "verify/lib/docker-backend.mjs:assertActive:0@2",
+    "verify/lib/docker-backend.mjs:assertActive:0@3",
+    "verify/lib/docker-backend.mjs:assertActive:0@4",
+    "verify/lib/docker-backend.mjs:assertActive:0@5",
+    "verify/lib/docker-backend.mjs:assertActive:0@6",
+    "verify/lib/docker-backend.mjs:assertActive:0@7",
+    "verify/lib/docker-backend.mjs:assertActive:0@8",
+    "verify/lib/docker-backend.mjs:assertActive:0@9",
+    "verify/lib/docker-backend.mjs:assertActive:1@0",
+    "verify/lib/docker-backend.mjs:assertActive:1@1",
+    "verify/lib/docker-backend.mjs:assertActive:1@2",
+    "verify/lib/docker-backend.mjs:assertActive:1@3",
+    "verify/lib/docker-backend.mjs:assertActive:2@0",
+    "verify/lib/docker-backend.mjs:assertActive:2@1",
+    "verify/lib/docker-backend.mjs:assertActive:2@2",
+    "verify/lib/docker-backend.mjs:assertActive:2@3",
+    "verify/lib/docker-backend.mjs:dispatchSbx:0@0",
+    "verify/lib/docker-backend.mjs:dispatchSbx:0@1",
+    "verify/lib/docker-backend.mjs:dispatchSbx:0@2",
+    "verify/lib/docker-backend.mjs:dispatchSbx:0@3",
+    "verify/lib/docker-backend.mjs:runSbx:0@0",
+    "verify/lib/docker-backend.mjs:runSbx:0@1",
+    "verify/lib/docker-backend.mjs:runSbx:0@2",
+    "verify/lib/docker-backend.mjs:runSbx:0@3",
+    "verify/lib/docker-backend.mjs:runSbx:1@0",
+    "verify/lib/docker-backend.mjs:runSbx:1@1",
+    "verify/lib/docker-backend.mjs:runSbx:1@2",
+    "verify/lib/docker-backend.mjs:runSbx:1@3",
+    "verify/lib/docker-backend.mjs:snapshotEgress:0@0",
+    "verify/lib/docker-backend.mjs:syncWorkspace:0@0",
+    "verify/lib/docker-backend.mjs:verificationFiles:0@0",
+    "verify/lib/docker-backend.mjs:verify:0@0"
+  ],
+  "subprocessSites": [
+    "lib/docker-backend.mjs:_admitDiskJob:call0",
+    "lib/docker-backend.mjs:_runJobCommand:call0",
+    "lib/docker-backend.mjs:_runJobCommand:call1",
+    "lib/docker-backend.mjs:claudeAccountRuntime:call0",
+    "lib/docker-backend.mjs:run:call0",
+    "lib/docker-backend.mjs:run:call1",
+    "lib/docker-backend.mjs:streamSbxOutput:call0"
+  ]
+}

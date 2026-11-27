@@ -1,0 +1,142 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "observations": [
+    {
+      "kind": "event:quota-window",
+      "data": {
+        "provider": "codex",
+        "windowId": "seven_day",
+        "windowKind": "seven_day",
+        "plan": "plus",
+        "lendingOn": true,
+        "ownerUsedPct": 60,
+        "lentPoints": 5,
+        "unusedPct": 30,
+        "shortfall": false,
+        "coverage": 0.9,
+        "contaminated": false,
+        "history": 5,
+        "slots": [
+          {
+            "o": 2,
+            "l": 0
+          },
+          {
+            "o": 2,
+            "l": 0
+          },
+          {
+            "o": 2,
+            "l": 0
+          },
+          {
+            "o": 2,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 2
+          },
+          {
+            "o": 5,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 5,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 2
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 5,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 5,
+            "l": 2
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": 5,
+            "l": 0
+          },
+          {
+            "o": 1,
+            "l": 0
+          },
+          {
+            "o": null,
+            "l": null
+          },
+          {
+            "o": null,
+            "l": null
+          },
+          {
+            "o": null,
+            "l": null
+          },
+          {
+            "o": null,
+            "l": null
+          },
+          {
+            "o": 0,
+            "l": 0
+          },
+          {
+            "o": 0,
+            "l": 0
+          },
+          {
+            "o": 0,
+            "l": 0
+          },
+          {
+            "o": 0,
+            "l": 0
+          }
+        ],
+        "charges": []
+      },
+      "atMs": 0
+    }
+  ]
+}

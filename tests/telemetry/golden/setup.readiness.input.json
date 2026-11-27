@@ -1,0 +1,39 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "health": {
+    "readiness": {
+      "checks": [
+        {
+          "name": "docker_login",
+          "ok": true
+        },
+        {
+          "name": "docker_runtime",
+          "ok": true
+        },
+        {
+          "name": "sbx_daemon",
+          "ok": true
+        },
+        {
+          "name": "kvm_access",
+          "ok": false
+        }
+      ]
+    },
+    "signedIn": {
+      "any": true
+    }
+  },
+  "observations": [
+    {
+      "kind": "event:readiness",
+      "data": {},
+      "atMs": 12000
+    }
+  ]
+}

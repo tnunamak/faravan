@@ -1,0 +1,143 @@
+[
+  {
+    "id": "recovered-0",
+    "account_week_id": "week-0",
+    "epoch": "codex:10080@1793893170000",
+    "job_id": "job-0",
+    "created_at": 1793443166966,
+    "wall_ms": 1200000,
+    "stop_ms": 35000,
+    "uncertainty_ms": 0,
+    "launch_state": "started",
+    "process_state": "ceased",
+    "cessation_proven": true,
+    "cleanup_proven": true,
+    "usage_unknown": "codex",
+    "late_ack_unresolved": false,
+    "opening": null,
+    "recoveries": [],
+    "resources": [
+      {
+        "id": "codex:10080",
+        "instance": "codex:10080@1793893170000",
+        "epoch": "codex:10080@1793893170000",
+        "kind": "weekly",
+        "anchor_at": 1793288370000,
+        "resets_at": 1793893170000,
+        "duration_ms": 604800000,
+        "baseline_used_micro": 62000000,
+        "kappa_micro": 135700,
+        "aggregate_observed_at": 1793443156346,
+        "aggregate_used_micro": 62000000,
+        "initial_micro": 271400,
+        "spent_micro": 0,
+        "settled_micro": 0,
+        "held_micro": 271400,
+        "released_micro": 0,
+        "unrepresented_micro": 0,
+        "burns": [],
+        "protection_source": "strategy"
+      }
+    ],
+    "owner_stop": {
+      "event_id": "recovered-0:owner-stop",
+      "requested_at": 1793443267177,
+      "durable_intent_recorded": true
+    },
+    "cleanup_proof_persisted_at": 1793443277385,
+    "hold_closed": false,
+    "account": "synthetic-account"
+  },
+  {
+    "id": "recovered-1",
+    "account_week_id": "week-1",
+    "epoch": "seven_day@1794034799000",
+    "job_id": "job-1",
+    "created_at": 1793449143480,
+    "wall_ms": 1200000,
+    "stop_ms": 35000,
+    "uncertainty_ms": 0,
+    "launch_state": "started",
+    "process_state": "ceased",
+    "cessation_proven": true,
+    "cleanup_proven": true,
+    "usage_unknown": null,
+    "late_ack_unresolved": false,
+    "opening": null,
+    "recoveries": [],
+    "resources": [
+      {
+        "id": "five_hour",
+        "instance": "five_hour@1793460599000",
+        "epoch": "seven_day@1794034799000",
+        "kind": "short",
+        "anchor_at": 1793442599000,
+        "resets_at": 1793460599000,
+        "duration_ms": 18000000,
+        "baseline_used_micro": 0,
+        "kappa_micro": 1583100,
+        "aggregate_observed_at": 1793449139453,
+        "aggregate_used_micro": 0,
+        "initial_micro": 3166200,
+        "spent_micro": 3166200,
+        "settled_micro": 0,
+        "held_micro": 0,
+        "released_micro": 0,
+        "unrepresented_micro": 0,
+        "burns": [
+          {
+            "id": "recovered-1:burn",
+            "amount_micro": 6518,
+            "at": 1793449191740,
+            "represented": true
+          },
+          {
+            "id": "recovered-1:reset:five_hour",
+            "amount_micro": 3159682,
+            "at": 1793460598999,
+            "represented": true
+          }
+        ],
+        "protection_source": "strategy"
+      },
+      {
+        "id": "seven_day",
+        "instance": "seven_day@1794034799000",
+        "epoch": "seven_day@1794034799000",
+        "kind": "weekly",
+        "anchor_at": 1793429999000,
+        "resets_at": 1794034799000,
+        "duration_ms": 604800000,
+        "baseline_used_micro": 0,
+        "kappa_micro": 534900,
+        "aggregate_observed_at": 1793449139453,
+        "aggregate_used_micro": 0,
+        "initial_micro": 1069800,
+        "spent_micro": 1069800,
+        "settled_micro": 0,
+        "held_micro": 0,
+        "released_micro": 0,
+        "unrepresented_micro": 1069800,
+        "burns": [
+          {
+            "id": "recovered-1:burn",
+            "amount_micro": 2203,
+            "at": 1793449191740,
+            "represented": false
+          },
+          {
+            "id": "recovered-1:reset:five_hour",
+            "amount_micro": 1067597,
+            "at": 1793460625682,
+            "represented": false
+          }
+        ],
+        "protection_source": "strategy"
+      }
+    ],
+    "owner_stop": null,
+    "cleanup_proof_persisted_at": 1793449191602,
+    "hold_closed": false,
+    "account": "synthetic-account"
+  }
+]

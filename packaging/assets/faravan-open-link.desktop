@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Faravan invitation
+Comment=Open a Faravan invitation link in the app
+Exec=faravan open-link %u
+Terminal=false
+NoDisplay=true
+MimeType=x-scheme-handler/faravan;x-scheme-handler/faravan;
+Categories=Network;

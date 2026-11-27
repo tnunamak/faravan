@@ -1,0 +1,195 @@
+name: Linux and unsigned macOS packages
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full source commit SHA to build (blank uses the dispatch commit)
+        required: false
+      version:
+        description: Preview version (numbers and dots only)
+        required: true
+        default: '0.1.0'
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - name: Require an immutable source commit
+        env:
+          SOURCE_COMMIT: ${{ inputs.commit || github.sha }}
+        run: |
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] || exit 2
+          test "$(git rev-parse HEAD)" = "$(printf '%s' "$SOURCE_COMMIT" | tr 'A-F' 'a-f')"
+        shell: bash
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: actions/setup-go@v5
+        with: { go-version-file: tray/go.mod, cache-dependency-path: tray/go.sum }
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libayatana-appindicator3-dev
+          npm ci
+      - name: Build Debian package and portable tarball
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+          PACKAGE_DEB_TOOL: dpkg-deb
+        run: npm run package
+      - name: Hash artifacts
+        run: |
+          cd packaging/dist
+          sha256sum *.deb *.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            packaging/dist/*.deb
+            packaging/dist/*.tar.gz
+            packaging/dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+  linux-guest-payload:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - name: Require an immutable source commit
+        env:
+          SOURCE_COMMIT: ${{ inputs.commit || github.sha }}
+        run: |
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] || exit 2
+          test "$(git rev-parse HEAD)" = "$(printf '%s' "$SOURCE_COMMIT" | tr 'A-F' 'a-f')"
+        shell: bash
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Build the pinned Linux guest payload
+        run: TMPDIR="$RUNNER_TEMP" bash scripts/build-pi-payload.sh --check "$RUNNER_TEMP/pi-payload.tgz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-pi-payload
+          path: ${{ runner.temp }}/pi-payload.tgz
+          if-no-files-found: error
+          retention-days: 7
+  native:
+    needs: linux-guest-payload
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - name: Require an immutable source commit
+        env:
+          SOURCE_COMMIT: ${{ inputs.commit || github.sha }}
+        run: |
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] || exit 2
+          test "$(git rev-parse HEAD)" = "$(printf '%s' "$SOURCE_COMMIT" | tr 'A-F' 'a-f')"
+        shell: bash
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: actions/setup-go@v5
+        with: { go-version-file: tray/go.mod, cache-dependency-path: tray/go.sum }
+      - name: Record toolchains and validate inputs
+        env:
+          VERSION: ${{ inputs.version || '0.1.0' }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 2
+          actual=$(uname -m)
+          test "$actual" = "$EXPECTED_ARCH" || { test "$actual" = x86_64 && test "$EXPECTED_ARCH" = x64; }
+          uname -m
+          sw_vers
+          node --version
+          go version
+          swiftc --version
+          test -z "${FARAVAN_NODE_BIN:-}"
+      - name: Packaging and lifecycle regression checks
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          node --test tests/macos-bundle.test.mjs tests/macos-launch.test.mjs tests/macos-cask.test.mjs tests/v1-autostart.test.mjs tests/packaging-signing.test.mjs
+      - name: Native tray checks
+        run: cd tray && go vet ./... && go test ./...
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-pi-payload
+          path: ${{ runner.temp }}/faravan-linux-guest
+      - name: Build pinned native app
+        env:
+          PACKAGE_VERSION: ${{ inputs.version || '0.1.0' }}
+          ARCH: ${{ matrix.arch }}
+          FARAVAN_RELEASE_BUILD: '1'
+          FARAVAN_PI_PAYLOAD: ${{ runner.temp }}/faravan-linux-guest/pi-payload.tgz
+        run: bash packaging/macos/build-app.sh native
+      - name: Preserve native recovery archive
+        run: ditto -c -k --keepParent native/Faravan.app native/Faravan-${{ matrix.arch }}.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.arch }}
+          path: native/*.zip
+          retention-days: 7
+  universal:
+    needs: native
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - name: Require an immutable source commit
+        env:
+          SOURCE_COMMIT: ${{ inputs.commit || github.sha }}
+        run: |
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] || exit 2
+          test "$(git rev-parse HEAD)" = "$(printf '%s' "$SOURCE_COMMIT" | tr 'A-F' 'a-f')"
+        shell: bash
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: artifacts
+      - name: Merge every Mach-O and verify bundle
+        run: |
+          ditto -x -k artifacts/native-arm64/Faravan-arm64.zip legs/arm64
+          ditto -x -k artifacts/native-x64/Faravan-x64.zip legs/x64
+          bash packaging/macos/build-universal.sh legs/arm64/Faravan.app legs/x64/Faravan.app universal/Faravan.app
+          bash packaging/macos/verify-app.sh universal/Faravan.app universal
+      - name: Ad-hoc integrity signatures for unsigned preview (no Developer ID)
+        env:
+          FARAVAN_MAC_UNSIGNED_PREVIEW: '1'
+        run: bash packaging/macos/sign-notarize.sh universal/Faravan.app universal
+      - name: Archive unsigned preview with checksum
+        env:
+          VERSION: ${{ inputs.version || '0.1.0' }}
+        run: |
+          cd universal
+          ditto -c -k --keepParent Faravan.app "Faravan-${VERSION}-universal-unsigned.zip"
+          shasum -a 256 "Faravan-${VERSION}-universal-unsigned.zip" > SHA256SUMS
+      - name: Verify extracted release bytes and installed launcher
+        env:
+          VERSION: ${{ inputs.version || '0.1.0' }}
+        run: |
+          ditto -x -k "universal/Faravan-${VERSION}-universal-unsigned.zip" extracted
+          codesign --verify --deep --strict --verbose=2 extracted/Faravan.app
+          node scripts/verify-macos-install.mjs extracted/Faravan.app --with-launcher
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-universal-preview
+          if-no-files-found: error
+          path: |
+            universal/Faravan-*-universal-unsigned.zip
+            universal/SHA256SUMS
+          retention-days: 14
+# Apple signing is intentionally disabled. See packaging/SIGNING.md for the
+# protected, ephemeral-keychain stage to insert AFTER merge and BEFORE hashing.
+# This workflow never publishes installers or changes a public tap.

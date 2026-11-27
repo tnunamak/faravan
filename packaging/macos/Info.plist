@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Faravan.app. build-app.sh fills @@VERSION@@ and @@MIN_MACOS@@; verify-app.sh rejects any left over. -->
+  <key>CFBundleIdentifier</key><string>@@BUNDLE_ID@@</string>
+  <key>CFBundleName</key><string>@@APP_NAME@@</string>
+  <key>CFBundleDisplayName</key><string>@@APP_NAME@@</string>
+  <key>CFBundleExecutable</key><string>faravan-launch</string>
+  <key>CFBundleIconFile</key><string>Faravan</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleShortVersionString</key><string>@@VERSION@@</string>
+  <key>CFBundleVersion</key><string>@@VERSION@@</string>
+  <key>LSMinimumSystemVersion</key><string>@@MIN_MACOS@@</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+  <!-- A menu bar app: no Dock icon. The browser is the main window. -->
+  <key>LSUIElement</key><true/>
+  <key>NSLocalNetworkUsageDescription</key><string>Faravan connects to circle hosts on your local network so you can join your circle and exchange jobs and results.</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSHumanReadableCopyright</key><string>Faravan</string>
+</dict>
+</plist>

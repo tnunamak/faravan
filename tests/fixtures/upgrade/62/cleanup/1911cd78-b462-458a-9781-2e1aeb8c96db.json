@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "_cleanupId": "1911cd78-b462-458a-9781-2e1aeb8c96db",
+  "owner_scope": "db3b9152afcc60dfe756be06b4b558de31930bed9b695805f8c0c8866c912fb1",
+  "sbx_home": "@ROOT@",
+  "job_id": "upgrade-fixture-job",
+  "sandbox_id": "wf-aa666da0f07adc47",
+  "scratch_dir": "@ROOT@/scratch/wf-job-wf-aa666da0f07adc47-fixture",
+  "create": "reserved",
+  "compute_created": false,
+  "create_settled": false,
+  "compute_stopped": false,
+  "data_cleanup": "owned",
+  "policy_cleanup": "owned"
+}

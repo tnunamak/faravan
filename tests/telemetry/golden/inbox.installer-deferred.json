@@ -1,0 +1,1 @@
+{"format":"faravan-telemetry-inbox","gen":3,"origin":"installer","record":{"attrs":{"method":"deb","outcome":"deferred"},"duration_ms":21000,"hour":"2026-10-21T19","kind":"span","name":"install.run","status":"error"},"schema_version":2}

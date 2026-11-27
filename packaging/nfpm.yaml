@@ -1,0 +1,60 @@
+name: faravan
+arch: amd64
+platform: linux
+# build.sh derives the Debian version once (deb-version.sh). "none" keeps nFPM from re-splitting it.
+# nFPM does not expand variables in epoch, so it is a literal here; tests/packaging-version.test.mjs
+# holds it equal to DEB_EPOCH. The epoch is permanent: preview 1 to 6 shipped with a hyphen, which
+# sorts above the tilde form.
+version: ${PACKAGE_DEB_VERSION}
+version_schema: none
+epoch: "1"
+release: "1"
+section: utils
+priority: optional
+maintainer: Alex Example <maintainers@example.invalid>
+description: Local Faravan app, browser UI, and native tray helper
+vendor: tnunamak
+homepage: https://github.com/tnunamak/faravan
+license: MIT
+
+# The build script makes this staging tree so package contents can be inspected
+# before nFPM creates the Debian archive.
+contents:
+  - src: ./stage/usr/lib/faravan
+    dst: /usr/lib/faravan
+    type: tree
+  - src: ./stage/usr/bin/faravan
+    dst: /usr/bin/faravan
+  - src: ./stage/usr/lib/systemd/user/faravan-app.service
+    dst: /usr/lib/systemd/user/faravan-app.service
+  - src: ./stage/usr/lib/systemd/user/faravan-tray.service
+    dst: /usr/lib/systemd/user/faravan-tray.service
+  - src: ./stage/usr/lib/systemd/user/faravan-coordinator.service
+    dst: /usr/lib/systemd/user/faravan-coordinator.service
+  - src: ./stage/etc/xdg/autostart/faravan-tray.desktop
+    dst: /etc/xdg/autostart/faravan-tray.desktop
+  # Registers the faravan:// scheme and legacy faravan:// alias so "I already have Faravan" on an invitation page opens the app.
+  - src: ./stage/usr/share/applications/faravan-open-link.desktop
+    dst: /usr/share/applications/faravan-open-link.desktop
+  - src: ./stage/usr/share/applications/faravan.desktop
+    dst: /usr/share/applications/faravan.desktop
+  - src: ./stage/usr/share/icons/hicolor/512x512/apps/faravan.png
+    dst: /usr/share/icons/hicolor/512x512/apps/faravan.png
+
+# Python is used by runtime verification; apt must install it before configuration/start.
+depends:
+  - python3
+
+# docker-sbx remains optional: doctor presents the actionable backend checks.
+# No dependency on a system Node.js: the package carries its own runtime in /usr/lib/faravan/runtime (D6).
+# nFPM 2.48.0 expands env vars in deb.fields, but not deb.breaks.
+# Keep the versioned Breaks field concrete in the resulting control archive.
+overrides:
+  deb:
+    suggests:
+      - docker-sbx
+scripts:
+  preinstall: ./scripts/preinstall.sh
+  postinstall: ./scripts/postinstall.sh
+  preremove: ./scripts/remove.sh
+  postremove: ./scripts/remove.sh

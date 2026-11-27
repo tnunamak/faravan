@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faravan.dev/protocol/v1/invite-publication.schema.json",
+  "title": "Faravan v1 invite publication",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "type": "string",
+      "pattern": "^[a-z2-7]{10}$",
+      "description": "Short invite code: 10 lowercase base32 characters, 50 random bits chosen by the owner device. Only the POST /invites request carries it."
+    },
+    "envelope": {
+      "$ref": "invite.schema.json"
+    },
+    "invite_binding": {
+      "$ref": "invite-binding.schema.json"
+    }
+  },
+  "required": [
+    "code",
+    "envelope",
+    "invite_binding"
+  ],
+  "description": "POST /invites body for a short invite, and its response. GET /v1/invites/{code} returns the same object without code."
+}

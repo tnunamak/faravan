@@ -1,0 +1,9 @@
+{
+  "name": "faravan-pi-payload",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The exact pi release that kits/wf-pi unpacks into a sandbox. The lock file pins every transitive package by integrity.",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.5.2"
+  }
+}

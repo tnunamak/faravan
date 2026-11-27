@@ -1,0 +1,13 @@
+node_modules/
+ui/node_modules/
+coordinator/node_modules/
+/packaging/dist/
+/packaging/stage/
+core.*
+/test-artifacts/e2e-v1/
+node_modules
+/test-artifacts/browser-verify/
+/test-artifacts/node-tests/
+
+# The pi payload is built by scripts/build-pi-payload.sh and pinned by its sha256 file.
+/kits/wf-pi/files/home/.faravan/pi-payload.tgz

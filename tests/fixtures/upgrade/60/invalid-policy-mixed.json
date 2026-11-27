@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "name": "Fixture computer",
+  "enabled": false,
+  "intent": "off",
+  "activeCircle": null,
+  "agents": {},
+  "modes": {},
+  "limits": {
+    "dailyJobs": 7,
+    "dailyMinutes": 91,
+    "maxWallSeconds": 1200,
+    "quotaReserve": 35,
+    "idleOnly": false,
+    "timeZone": "UTC",
+    "schedule": {
+      "days": [
+        1,
+        3,
+        5
+      ],
+      "from": "09:15",
+      "to": "16:45",
+      "weekends_all_day": false
+    },
+    "lendingPolicy": {
+      "strategy": "automatic",
+      "strategyParams": {
+        "perJobPct": 9
+      },
+      "protectionPosition": "share_more",
+      "warningPct": 150,
+      "effortMax": "high",
+      "allowFast": false,
+      "stopOnReturn": true,
+      "machineSlots": 3,
+      "accountSlots": 1,
+      "watchOnlyUntil": null,
+      "providerConsent": {
+        "claude": true,
+        "codex": false
+      },
+      "accountPlans": {
+        "claude": "max20",
+        "codex": "pro"
+      },
+      "probeMinutes": 30
+    }
+  },
+  "lendingAuth": {},
+  "notifications": {
+    "requests": {
+      "history": true,
+      "desktop": true
+    },
+    "job_ready": {
+      "history": true,
+      "desktop": true
+    },
+    "needs_attention": {
+      "history": true,
+      "desktop": true
+    },
+    "security": {
+      "history": true,
+      "desktop": true
+    },
+    "lending_attention": {
+      "history": true,
+      "desktop": true
+    },
+    "circle_activity": {
+      "history": true,
+      "desktop": false
+    }
+  },
+  "requesterLimits": [],
+  "standingRules": [],
+  "configVersion": 1,
+  "pause_until": null,
+  "desktop": {
+    "pinPromptShown": false
+  },
+  "paused": false,
+  "agentRun": {},
+  "dockerEverSignedIn": true,
+  "timeZoneChosen": true
+}

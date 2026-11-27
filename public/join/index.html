@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
+<link rel="manifest" href="/manifest.webmanifest">
+<title>Join a Faravan circle</title>
+<style>
+:root{color-scheme:light dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#17212b;background:#f7f9fa;font-size:16px;line-height:1.55}
+*{box-sizing:border-box}body{margin:0}main{max-width:42rem;width:calc(100% - 40px);margin:32px auto}
+.panel{border:1px solid #d9e0e5;background:#fff;border-radius:14px;padding:24px;min-width:0}
+.brand{font-weight:760;font-size:1.15rem;color:#17212b}.muted{color:#465b69;font-size:.9rem}
+h1{font-size:2rem;line-height:1.2;letter-spacing:-.03em;overflow-wrap:anywhere}h2{font-size:1.25rem;margin:0 0 12px}
+p{margin:10px 0 16px}section{margin-top:24px}ol{padding-left:22px}li+li{margin-top:8px}
+button,textarea{font:inherit}button,.button{min-height:44px;border:1px solid #19597e;border-radius:8px;padding:9px 15px;background:#19597e;color:#fff;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;text-align:center;max-width:100%;overflow-wrap:anywhere}
+button.secondary,.button.secondary{background:#fff;color:#19597e}button:disabled{cursor:not-allowed;background:#e1e7eb;color:#465663;border-color:#9caeb9}
+a,button,textarea{touch-action:manipulation}:focus-visible,section:focus{outline:3px solid #9e4500;outline-offset:3px}
+.actions{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}.note{border-left:4px solid #a66e12;background:#fff4dc;color:#654300;padding:14px;border-radius:4px;overflow-wrap:anywhere}
+.feedback{color:#465b69;font-size:.9rem;overflow-wrap:anywhere;min-height:1.55em}
+label{display:block;font-weight:650;margin-bottom:5px}textarea{width:100%;min-width:0;min-height:120px;border:1px solid #8d9fac;border-radius:8px;background:#fff;color:#17212b;padding:10px;resize:vertical}
+[hidden]{display:none!important}
+@media(max-width:650px){main{width:calc(100% - 24px);margin:20px auto}.panel{padding:18px}h1{font-size:1.7rem}.actions{flex-direction:column}.actions>*{width:100%}}
+@media(prefers-color-scheme:dark){:root{color:#edf2f5;background:#111a22}.panel{background:#17212b;border-color:#455864}.brand{color:#edf2f5}.muted,.feedback{color:#bdcbd5}button,.button{background:#9bd3f5;color:#102c3d;border-color:#9bd3f5}button.secondary,.button.secondary{background:#17212b;color:#9bd3f5}button:disabled{background:#293b48;color:#aebdc8;border-color:#647989}.note{background:#352a16;color:#ffe0a1;border-color:#e3b45f}textarea{background:#111a22;color:#edf2f5;border-color:#8d9fac}:focus-visible,section:focus{outline-color:#ffc078}}
+</style>
+</head>
+<body>
+<main class="panel">
+<p class="brand">Faravan <span class="muted">· Circle invitation</span></p>
+<h1 id="heading">You're invited to a Faravan circle</h1>
+<p id="role" hidden></p>
+<p>Ask friends' coding agents to do a task for you, or lend yours when you're not using it. Jobs run in a private sandbox on the lender's computer.</p>
+<p id="identity">Faravan checks this invitation when you open it in the app.</p>
+<p>Check with the person who invited you if you weren't expecting this invitation.</p>
+<p class="muted">Keep this invitation private.</p>
+<p id="lan-notice" class="note" hidden>This circle uses your local network without encryption; people on the same network could read uploaded code.</p>
+<p id="status" class="feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+<p id="device-note" class="note" hidden></p>
+<div class="actions">
+<a class="button" id="get" href="#install">How to join</a>
+<a class="button" id="email" hidden>Email me this link</a>
+<a class="button secondary" id="open" aria-controls="paste" aria-expanded="false">I already have Faravan</a>
+<button class="secondary" type="button" id="retry" hidden>Retry check</button>
+</div>
+<p id="download-note" class="muted" hidden>Installer coming soon</p>
+<section id="install" tabindex="-1" hidden>
+<h2>Join with Faravan</h2>
+<ol><li>Install Faravan on a Mac or supported Linux computer.</li><li>Open Faravan and choose “Join a circle”.</li><li>Copy this invitation, paste it into the “Invitation” field, then choose “Review invitation”.</li></ol>
+</section>
+<section id="paste" tabindex="-1" hidden>
+<h2>Open Faravan</h2>
+<p>If Faravan did not open, copy this invitation, open Faravan, choose “Join a circle” and paste it into “Invitation”. Joining does not turn lending on.</p>
+<button class="secondary" type="button" id="copy" disabled>Copy invitation</button>
+</section>
+<section id="manual" hidden>
+<label for="invitation">Copy this full invitation manually. Keep it private.</label>
+<textarea id="invitation" readonly spellcheck="false" autocomplete="off"></textarea>
+</section>
+<noscript>Enable JavaScript to read this invitation locally, or copy the full link from your address bar into Faravan.</noscript>
+</main>
+<script>
+'use strict';
+(() => {
+  const byId = id => document.getElementById(id);
+  const status = byId('status');
+  const fullLink = location.href;
+  const initialIdentity = byId('identity').textContent;
+  const ua = navigator.userAgent || '';
+  const platform = navigator.userAgentData?.platform || '';
+  // Mobile hints take priority over desktop-like platform strings (including iPadOS).
+  const phone = navigator.userAgentData?.mobile === true || /iPhone|iPad|iPod|Android/i.test(ua + ' ' + platform) ||
+    (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  const windows = !phone && (/Windows/i.test(platform) || (!platform && /Windows/i.test(ua)));
+  const desktop = !phone && !windows;
+  byId('get').hidden = !desktop;
+  byId('get').href = '#install';
+  byId('open').hidden = !desktop;
+  byId('install').hidden = !desktop;
+  byId('download-note').hidden = !desktop;
+  byId('device-note').hidden = desktop;
+  byId('device-note').textContent = phone
+    ? 'Faravan runs on a computer for now. Open this link on your Mac or Linux computer to join.'
+    : windows ? "Lending isn't available on Windows yet. Open this invitation on a Mac or supported Linux computer." : '';
+  const fragment = location.hash;
+  const shortCode = (/^\/i\/([a-z2-7]{10})$/.exec(location.pathname) || [])[1];
+  // Keep the secret in memory for an explicit copy, never in a query or storage.
+  try { history.replaceState(null, '', location.pathname); } catch {
+    status.textContent = 'Your browser could not clear the invitation from its history. Keep this link private.';
+  }
+  let valid = false, expiresAt = null, expiryTimer = null, resolution = 0;
+  const decode = value => {
+    if (typeof value !== 'string' || !/^[A-Za-z0-9_-]+$/.test(value) || value.length % 4 === 1) throw new Error('Invalid invitation');
+    const binary = atob(value.replace(/-/g, '+').replace(/_/g, '/'));
+    if (btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '') !== value) throw new Error('Invalid invitation');
+    return Uint8Array.from(binary, c => c.charCodeAt(0));
+  };
+  const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+  // Shape check shared by long and short links; it proves nothing about who made the invitation.
+  const checkInvite = invite => {
+    const payload = invite?.payload, signature = invite?.signature;
+    if (!object(invite) || !object(payload) || !object(signature) ||
+        payload.schema !== 'faravan.invite.v1' ||
+        (payload.role !== undefined && !['borrow', 'lend', 'both'].includes(payload.role)) ||
+        (payload.max_uses !== undefined && (!Number.isSafeInteger(payload.max_uses) || payload.max_uses < 1)) ||
+        signature.algorithm !== 'Ed25519' || decode(signature.value).length !== 64 ||
+        !/^sha256:[0-9a-f]{64}$/.test(signature.key_id) ||
+        !['circle', 'coordinator', 'root_fingerprint', 'root_public_key', 'invite_id', 'invite_public_key', 'created_at', 'expires_at'].every(key => typeof payload[key] === 'string' && payload[key].length > 0) ||
+        decode(payload.root_public_key).length !== 32 || decode(payload.invite_public_key).length !== 32 ||
+        (payload.display_name !== undefined && (typeof payload.display_name !== 'string' || !payload.display_name.trim() || [...payload.display_name].length > 256)) ||
+        (payload.owner_name !== undefined && (typeof payload.owner_name !== 'string' || !payload.owner_name.trim() || [...payload.owner_name].length > 64))) throw new Error('Invalid invitation');
+    return payload;
+  };
+  const showLink = deepLink => {
+    const open = byId('open');
+    open.href = deepLink && desktop ? 'faravan://join?link=' + encodeURIComponent(fullLink) : '#paste';
+    byId('copy').disabled = !deepLink;
+    const email = byId('email');
+    email.hidden = !phone || !deepLink;
+    if (!deepLink) email.removeAttribute('href');
+    if (phone && deepLink) {
+      email.href = 'mailto:?subject=' + encodeURIComponent('Join my Faravan circle') +
+        '&body=' + encodeURIComponent(fullLink + '\n\nKeep this link private; it lets someone join your circle.');
+    }
+  };
+
+  const invalidate = () => {
+    valid = false;
+    if (expiryTimer !== null && typeof clearTimeout === 'function') clearTimeout(expiryTimer);
+    expiryTimer = null;
+    showLink(false);
+    byId('manual').hidden = true;
+    byId('invitation').value = '';
+  };
+  const expire = () => {
+    invalidate();
+    byId('open').hidden = true;
+    byId('paste').hidden = true;
+    byId('get').hidden = true;
+    byId('install').hidden = true;
+    byId('download-note').hidden = true;
+    byId('open').setAttribute('aria-expanded', 'false');
+    status.textContent = 'This invitation has expired. Ask the person who invited you for a new link.';
+  };
+  const stillValid = () => {
+    if (!valid) return false;
+    if (expiresAt <= Date.now()) { expire(); return false; }
+    return true;
+  };
+  const scheduleExpiry = () => {
+    const remaining = expiresAt - Date.now();
+    if (remaining <= 0) { expire(); return; }
+    // Browser timer delays are signed 32-bit values. Recheck long-lived invites in bounded steps.
+    if (typeof setTimeout === 'function') expiryTimer = setTimeout(() => {
+      expiryTimer = null;
+      scheduleExpiry();
+    }, Math.min(remaining, 2147483647));
+  };
+  const enable = deadline => {
+    expiresAt = deadline;
+    if (expiresAt <= Date.now()) { expire(); return false; }
+    valid = true;
+    showLink(true);
+    scheduleExpiry();
+    return true;
+  };
+
+  // --- Short links: fetch the published invitation, then check it against the seed before showing anything ---
+  const subtle = globalThis.crypto && globalThis.crypto.subtle;
+  const ED25519 = { name: 'Ed25519' };
+  const encode = bytes => btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+  // RFC 8785 for the protocol's JSON subset: strings, safe integers, booleans, null, arrays and objects.
+  const canonical = value => {
+    if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
+    if (typeof value === 'number') { if (!Number.isSafeInteger(value)) throw new Error('Invalid invitation'); return JSON.stringify(value); }
+    if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
+    if (object(value)) return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}';
+    throw new Error('Invalid invitation');
+  };
+  const signingBytes = async (kind, value) => {
+    const enc = new TextEncoder(), prefix = enc.encode('faravan/' + kind + '/v1\0'), digest = new Uint8Array(await subtle.digest('SHA-256', enc.encode(canonical(value))));
+    const out = new Uint8Array(prefix.length + digest.length);
+    out.set(prefix); out.set(digest, prefix.length);
+    return out;
+  };
+  const verifies = async (publicKey, signature, bytes) =>
+    subtle.verify(ED25519, await subtle.importKey('raw', decode(publicKey), ED25519, false, ['verify']), decode(signature), bytes);
+  // Ed25519 in WebCrypto is recent. Detect it so an older browser says so instead of failing the invitation.
+  const edSupported = async () => {
+    try { await subtle.importKey('raw', Uint8Array.from('d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a'.match(/../g), h => parseInt(h, 16)), ED25519, false, ['verify']); return true; }
+    catch { return false; }
+  };
+  const PKCS8 = Uint8Array.from('302e020100300506032b657004220420'.match(/../g), h => parseInt(h, 16));
+  const publicKeyOf = async seed => {
+    const der = new Uint8Array(PKCS8.length + seed.length);
+    der.set(PKCS8); der.set(seed, PKCS8.length);
+    return (await subtle.exportKey('jwk', await subtle.importKey('pkcs8', der, ED25519, true, ['sign']))).x;
+  };
+  // Returns 'verified' or 'unavailable'; throws when the invitation is not what the link's seed vouches for.
+  const verifyPublication = async (publication, seed) => {
+    if (!object(publication) || !object(publication.invite_binding)) throw new Error('Invalid invitation');
+    const invite = publication.envelope, payload = checkInvite(invite), binding = publication.invite_binding;
+    if (binding.algorithm !== 'Ed25519' || decode(binding.value).length !== 64) throw new Error('Invalid invitation');
+    const expiresAt = Date.parse(payload.expires_at);
+    if (!Number.isFinite(expiresAt)) throw new Error('Invalid invitation');
+    if (!subtle || !(await edSupported())) return 'unavailable';
+    if (decode(seed).length !== 32 || payload.invite_public_key !== await publicKeyOf(decode(seed))) throw new Error('Invalid invitation');
+    const fingerprint = 'sha256:' + [...new Uint8Array(await subtle.digest('SHA-256', decode(payload.root_public_key)))].map(b => b.toString(16).padStart(2, '0')).join('');
+    if (binding.algorithm !== 'Ed25519' || !(await verifies(payload.invite_public_key, binding.value, await signingBytes('invite-binding', invite)))) throw new Error('Invalid invitation');
+    if (payload.root_fingerprint !== fingerprint || invite.signature.key_id !== fingerprint ||
+        !(await verifies(payload.root_public_key, invite.signature.value, await signingBytes('invite', payload)))) throw new Error('Invalid invitation');
+    if (payload.coordinator !== location.origin) throw new Error('Invalid invitation');
+    return 'verified';
+  };
+  const invitationHeading = payload => payload.owner_name
+    ? payload.owner_name + ' invited you to ' + (payload.display_name ? payload.display_name + '.' : 'their Faravan circle.')
+    : payload.display_name ? "You're invited to the Faravan circle " + payload.display_name : "You're invited to a Faravan circle";
+  const resolveShort = async () => {
+    const attempt = ++resolution, current = () => attempt === resolution;
+    const say = text => { status.textContent = text; };
+    invalidate();
+    if (attempt > 1) {
+      byId('heading').textContent = "You're invited to a Faravan circle";
+      byId('role').hidden = true;
+      byId('role').textContent = '';
+      byId('identity').textContent = initialIdentity;
+      byId('lan-notice').hidden = true;
+    }
+    byId('retry').hidden = true;
+    const seed = fragment.slice(1);
+    try { if (!/^[A-Za-z0-9_-]{43}$/.test(seed)) throw new Error('Invalid invitation'); decode(seed); }
+    catch { say('This invitation is malformed. Ask the person who invited you for a new link'); return; }
+    say('Checking this invitation…');
+    let publication, deadline = null;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    // Race the complete lookup (including the body), not just an abort signal. Some browsers
+    // lack AbortController, and a stalled transport can ignore it. The losing lookup never writes UI.
+    const timeout = new Promise((_, reject) => {
+      deadline = setTimeout(() => {
+        reject(new Error('Unavailable'));
+        controller?.abort();
+      }, 10000);
+    });
+    try {
+      const answer = await Promise.race([timeout, (async () => {
+        const response = await fetch('/v1/invites/' + shortCode, { credentials: 'omit', redirect: 'error', cache: 'no-store', referrerPolicy: 'no-referrer', headers: { accept: 'application/json' }, signal: controller?.signal });
+        if (response.status === 404 || response.status === 410) return { status: response.status };
+        const text = await response.text();
+        if (text.length > 16384) throw new Error('Invalid invitation');
+        if (response.status === 409 && JSON.parse(text).code === 'invite_used') return { status: 409 };
+        if (!response.ok) throw new Error('Unavailable');
+        return { publication: JSON.parse(text) };
+      })()]);
+      if (!current()) return;
+      if (answer.status === 404) { say('This invitation was not found. Check the link, or ask the person who invited you for a new one.'); return; }
+      if (answer.status === 410) { expire(); return; }
+      if (answer.status === 409) { say('This invitation was already used. Ask for a new one.'); return; }
+      publication = answer.publication;
+    } catch {
+      if (!current()) return;
+      byId('retry').hidden = false;
+      say('Could not reach this server to check the invitation. Retry. Open the original invitation link again if this keeps failing.');
+      return;
+    } finally { if (deadline !== null && typeof clearTimeout === 'function') clearTimeout(deadline); }
+    let result;
+    try { result = await verifyPublication(publication, seed); }
+    catch {
+      if (!current()) return;
+      byId('heading').textContent = 'This invitation can’t be verified.';
+      say('It does not match the link you were sent, so it can’t be trusted. Ask the person who invited you for a new link.');
+      return;
+    }
+    if (!current()) return;
+    const payload = publication.envelope.payload;
+    // Check expiry only after authenticity; an expired forgery must still fail verification.
+    if (!enable(Date.parse(payload.expires_at))) return;
+    // A name is shown only after the link's own key vouched for the invitation.
+    byId('heading').textContent = result === 'verified'
+      ? invitationHeading(payload)
+      : "You're invited to a Faravan circle";
+    byId('role').hidden = result !== 'verified';
+    byId('role').textContent = result === 'verified' ? payload.role ?? 'lend' : '';
+    byId('identity').textContent = result === 'verified'
+      ? 'Checked in this browser: this invitation matches the link you were sent.'
+      : 'This browser can’t check the invitation itself. Faravan checks it when you open it in the app.';
+    byId('lan-notice').hidden = result !== 'verified' || payload.lan_mode !== true;
+    status.textContent = '';
+  };
+
+  try {
+    if (shortCode) {
+      showLink(false);
+      globalThis.faravanJoinReady = resolveShort(); // awaited by tests
+    } else if (!fragment || fragment === '#') {
+      status.textContent = 'This invitation is missing. Ask the person who invited you for a new link';
+      showLink(false);
+    } else {
+      if (fragment.length > 32768 || !/^#invite=[A-Za-z0-9_-]+$/.test(fragment)) throw new Error('Invalid invitation');
+      const bundle = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(decode(fragment.slice(8))));
+      if (!object(bundle) || decode(bundle.invite_private_seed).length !== 32) throw new Error('Invalid invitation');
+      const payload = checkInvite(bundle.invite);
+      const expiresAt = Date.parse(payload.expires_at);
+      if (!Number.isFinite(expiresAt)) throw new Error('Invalid invitation');
+      if (enable(expiresAt)) {
+        if (payload.display_name) byId('heading').textContent = "You're invited to the Faravan circle " + payload.display_name + ' (unverified).';
+        byId('role').hidden = false;
+        byId('role').textContent = (payload.role ?? 'lend') + ' (unverified).';
+        byId('lan-notice').hidden = payload.lan_mode !== true;
+      }
+    }
+  } catch {
+    status.textContent = 'This invitation is malformed. Ask the person who invited you for a new link';
+    showLink(false);
+  }
+  byId('retry').addEventListener('click', () => {
+    if (shortCode && fragment) globalThis.faravanJoinReady = resolveShort();
+  });
+  byId('get').addEventListener('click', event => {
+    event.preventDefault();
+    byId('install').hidden = false;
+    byId('install').focus();
+  });
+  // The link hands the invitation to the Faravan app. Browsers give no signal when nothing handles it,
+  // so the paste steps appear at the same time.
+  byId('open').addEventListener('click', event => {
+    const active = stillValid();
+    if (!active) { event?.preventDefault(); return; }
+    byId('paste').hidden = false;
+    byId('open').setAttribute('aria-expanded', 'true');
+    if (active) status.textContent = 'Opening Faravan. If nothing happens, copy the invitation and paste it in the app.';
+    else byId('paste').focus();
+  });
+  byId('email').addEventListener('click', event => {
+    if (!stillValid()) event.preventDefault();
+  });
+  byId('copy').addEventListener('click', async () => {
+    if (!stillValid()) return;
+    const attempt = resolution;
+    try {
+      await navigator.clipboard.writeText(fullLink);
+      if (attempt !== resolution || !stillValid()) return;
+      status.textContent = 'Invitation copied. Open Faravan and paste it into “Invitation”.';
+    } catch {
+      if (attempt !== resolution || !stillValid()) return;
+      byId('manual').hidden = false;
+      byId('invitation').value = fullLink;
+      byId('invitation').focus();
+      byId('invitation').select();
+      status.textContent = 'Automatic copying is unavailable. Copy the selected invitation, then paste it into Faravan.';
+    }
+  });
+})();
+</script>
+</body>
+</html>

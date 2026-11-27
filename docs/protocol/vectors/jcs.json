@@ -1,0 +1,50 @@
+[
+  {
+    "label": "UTF16 key order and no Unicode normalization",
+    "input": {
+      "1": "One",
+      "€": "Euro Sign",
+      "\r": "Carriage Return",
+      "דּ": "Hebrew Letter Dalet With Dagesh",
+      "😀": "Emoji: Grinning Face",
+      "": "Control",
+      "ö": "Latin Small Letter O With Diaeresis"
+    },
+    "expected": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}"
+  },
+  {
+    "label": "RFC8785 binary64 example (not protocol-valid integers)",
+    "input": {
+      "numbers": [
+        333333333.3333333,
+        1e+30,
+        4.5,
+        0.002,
+        1e-27
+      ]
+    },
+    "expected": "{\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27]}"
+  },
+  {
+    "label": "Escapes and literal Unicode",
+    "input": {
+      "s": "€$\u000f\nA'B\"\\\\\"/"
+    },
+    "expected": "{\"s\":\"€$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\"}"
+  },
+  {
+    "label": "Canonical nested integer payload",
+    "input": {
+      "z": [
+        true,
+        null,
+        -12
+      ],
+      "a": {
+        "b": 2,
+        "a": 1
+      }
+    },
+    "expected": "{\"a\":{\"a\":1,\"b\":2},\"z\":[true,null,-12]}"
+  }
+]

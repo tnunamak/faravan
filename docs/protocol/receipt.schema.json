@@ -1,0 +1,485 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faravan.dev/protocol/v1/receipt.schema.json",
+  "title": "Faravan v1 receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "check": {
+      "description": "One requested command and its result (verify_v1). Current lenders run it in a fresh sandbox from the returned source after removing the agent sandbox; older lenders used the agent sandbox. The returned tests and configuration remain agent controlled, so this is not independent proof. It travels in result.payload.checks beside this receipt. Verified local receipt and changes metadata adds check_context with this limitation; raw signed checks are unchanged.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cmd": {
+          "$ref": "job.schema.json#/properties/payload/properties/verify/properties/cmd"
+        },
+        "exit": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 255
+        },
+        "timed_out": {
+          "type": "boolean"
+        },
+        "duration_ms": {
+          "description": "Observed monotonic duration of this check, in milliseconds. Omitted when not measured.",
+          "type": "integer", "minimum": 0, "maximum": 9007199254740991
+        },
+        "timeout_ms": {
+          "description": "Actual enforced time limit for this check, in milliseconds. Omitted when not known; never inferred from the whole job budget.",
+          "type": "integer", "minimum": 0, "maximum": 9007199254740991
+        },
+        "parser": {
+          "enum": [
+            "npm",
+            "vitest",
+            "jest",
+            "pytest",
+            null
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "skipped": {
+          "type": "string", "minLength": 1, "maxLength": 160,
+          "enum": ["The fresh check workspace could not start.", "The returned source could not be prepared for the check.", "No check time was left."]
+        },
+        "observed_by": {
+          "const": "sandbox"
+        },
+        "changed_test_files": {
+          "type": "array",
+          "maxItems": 20000,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        }
+      },
+      "required": [
+        "cmd",
+        "exit",
+        "timed_out",
+        "parser",
+        "summary",
+        "observed_by",
+        "changed_test_files"
+      ]
+    }
+  },
+  "properties": {
+    "verified_commit": {
+      "description": "Exact Git HEAD verified inside the sandbox; must equal source.commit for Git jobs.",
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "kit_hosts": {
+      "description": "Hosts the agent's own sandbox kit allows for its sandbox, as sbx reported them when the sandbox was made. They are part of what the agent can reach, beside the provider hosts and the named registries.",
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$",
+        "maxLength": 253
+      }
+    },
+    "kit_wider_hosts": {
+      "description": "Inherited allowances wider than a kit host (for example **.github.com became github.com), which cannot be denied without blocking the kit. They stay open; the lender names them here.",
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "pattern": "^(?:\\*\\*?\\.)?[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$",
+        "maxLength": 253
+      }
+    },
+    "network_scope": {
+      "description": "Git jobs only. clone_only: GitHub was reachable while the sandbox fetched the code and was denied again before the agent started. whole_run: GitHub stayed reachable for the whole run, because the agent's own provider hosts include it. Absent: the lender did not report it (an older lender, which keeps GitHub reachable for the whole run).",
+      "enum": [
+        "clone_only",
+        "whole_run"
+      ]
+    },
+    "egress_evidence": {
+      "type": "object",
+      "maxProperties": 32,
+      "additionalProperties": {
+        "enum": [
+          "allowed",
+          "denied",
+          "unknown"
+        ]
+      }
+    },
+    "enforced_limits": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "cpu",
+          "memory",
+          "wall",
+          "output",
+          "storage",
+          "processes",
+          "network_bytes"
+        ]
+      },
+      "maxItems": 7,
+      "uniqueItems": true
+    },
+    "unenforced": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "cpu",
+          "memory",
+          "wall",
+          "output",
+          "storage",
+          "processes",
+          "network_bytes"
+        ]
+      },
+      "maxItems": 7,
+      "uniqueItems": true
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "output_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "total_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "total_tokens"
+      ]
+    },
+    "schema": {
+      "const": "faravan.receipt.v1"
+    },
+    "self_reported": {
+      "const": true
+    },
+    "harness": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "harness_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "model": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 4096
+    },
+    "backend": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "limits_applied": {
+      "$ref": "job.schema.json#/$defs/limits"
+    },
+    "egress_applied": {
+      "enum": [
+        "provider-only",
+        "internet"
+      ]
+    },
+    "capabilities_applied": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "maxItems": 128,
+      "uniqueItems": true
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "source": {
+      "$ref": "job.schema.json#/$defs/source"
+    },
+    "candidate_format": {
+      "description": "Shape of the candidate artifact: a unified diff against the base (text/x-diff) or a tree archive (application/gzip) when no diff could be produced.",
+      "enum": [
+        "diff",
+        "tree"
+      ]
+    },
+    "diffstat": {
+      "description": "Totals computed from the diff candidate. Present only when candidate_format is diff.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "insertions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "deletions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "files",
+        "insertions",
+        "deletions"
+      ]
+    },
+    "base_tree": {
+      "description": "Git tree object ID of the snapshot the lender committed as the diff base for an archive source. Borrowers match it against their own history.",
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "diff_unavailable": {
+      "description": "Why a tree candidate was returned instead of a diff.",
+      "enum": [
+        "git_unavailable",
+        "git_failed",
+        "archive_has_git"
+      ]
+    },
+    "auto_run_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The pair the lender chose for an auto_run_v1 job. The effort is the one passed to the agent, not an effort the provider reported.",
+      "properties": {
+        "intent": {
+          "enum": [
+            "cheapest",
+            "strongest"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "effort": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        "rule_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "capped": {
+          "type": "boolean"
+        },
+        "pricing_revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "intent",
+        "model",
+        "effort",
+        "rule_version",
+        "reason",
+        "capped",
+        "pricing_revision"
+      ]
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The account, model and effort the lender resolved for a run_request_v1 job. The effort is the one passed to the agent. No upstream subject id appears here.",
+      "properties": {
+        "providerId": {"type": "string", "minLength": 1, "maxLength": 256},
+        "accountId": {"type": "string", "minLength": 1, "maxLength": 256},
+        "modelId": {"type": "string", "minLength": 1, "maxLength": 256},
+        "effortId": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1, "maxLength": 256}]}
+      },
+      "required": ["providerId", "accountId", "modelId", "effortId"]
+    },
+    "budget_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cache_read": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "cache_write_5m": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "cache_write_1h": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "output": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "reasoning": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "fresh_input": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "fresh_input",
+            "cache_read",
+            "cache_write_5m",
+            "cache_write_1h",
+            "output",
+            "reasoning"
+          ]
+        },
+        "list_usd_micros": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "catalog_rev": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "effort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        "stop_reason": {
+          "enum": [
+            "done",
+            "budget",
+            "time",
+            "owner",
+            "provider_limit",
+            "error"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 80
+        }
+      },
+      "required": [
+        "tokens",
+        "list_usd_micros",
+        "catalog_rev",
+        "effort",
+        "stop_reason"
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "self_reported",
+    "harness",
+    "harness_version",
+    "model",
+    "backend",
+    "limits_applied",
+    "egress_applied",
+    "capabilities_applied",
+    "started_at",
+    "finished_at",
+    "duration_ms",
+    "source"
+  ]
+}

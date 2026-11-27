@@ -1,0 +1,1991 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "repo": "research",
+    "baseSha": "b8a389f586336d861590e391a6e0568780b66a16",
+    "module": "capacity-pooling/lending-paper-2026-10-23/continuous.mjs"
+  },
+  "status": "synthetic-conformance-only; production adapter and settlement not verified",
+  "tolerances": {
+    "scalarAbsolute": 1e-9,
+    "scalarRelative": 1e-9,
+    "nestedAbsolute": 1e-7,
+    "discrete": "exact",
+    "admissionBoundary": "no comparison tolerance may increase spend"
+  },
+  "cases": [
+    {
+      "id": "day-one-no-history",
+      "kind": "continuous-function",
+      "function": "posterior",
+      "args": [
+        {
+          "alpha": 2,
+          "b": 10,
+          "exposure": 0,
+          "usage": 0,
+          "observation": "exact_latent"
+        }
+      ],
+      "expected": {
+        "alpha": 2,
+        "b": 10
+      }
+    },
+    {
+      "id": "day-one-economic",
+      "kind": "continuous-function",
+      "function": "action",
+      "args": [
+        {
+          "R": 100,
+          "lambda": 10,
+          "law": {
+            "alpha": 2,
+            "b": 10,
+            "k": 1
+          },
+          "eta": null
+        }
+      ],
+      "expected": {
+        "loan": 78.3772233983162,
+        "loss": 2.25318675107747,
+        "J": 55.8453558875415,
+        "economicReserve": 21.62277660168379,
+        "band": 0,
+        "predictiveFeasible": true,
+        "label": "declared-model research only"
+      }
+    },
+    {
+      "id": "light-weekly-economic",
+      "kind": "continuous-function",
+      "function": "scenarioAction",
+      "args": [
+        "light",
+        10
+      ],
+      "expected": {
+        "reserve": 21.622776601683793,
+        "loan": 78.3772233983162,
+        "loss": 2.25318675107747,
+        "gain": 76.12403664723874,
+        "J": 55.8453558875415,
+        "exceedance": 0.09999999999999996,
+        "predictiveFeasible": true
+      }
+    },
+    {
+      "id": "heavy-weekly-hold",
+      "kind": "continuous-function",
+      "function": "scenarioAction",
+      "args": [
+        "heavy",
+        10
+      ],
+      "expected": {
+        "reserve": 194.6049894151541,
+        "loan": 0,
+        "loss": 0,
+        "gain": 0,
+        "J": 0,
+        "exceedance": 0.22437673130193903,
+        "predictiveFeasible": true
+      }
+    },
+    {
+      "id": "light-joint-one-shot",
+      "kind": "continuous-function",
+      "function": "scenarioNestedAction",
+      "args": [
+        "light",
+        10,
+        0.05
+      ],
+      "expected": {
+        "loan": 32.117512734836716,
+        "shortDebit": 95.74654739819248,
+        "loss": 0.5221665484869791,
+        "gain": 31.595346186349737,
+        "J": 26.895847249966927,
+        "risk": 0.04999999999999982,
+        "baselineExceedance": 0.008818555659507621,
+        "predictiveFeasible": true
+      }
+    },
+    {
+      "id": "heavy-joint-hold",
+      "kind": "continuous-function",
+      "function": "scenarioNestedAction",
+      "args": [
+        "heavy",
+        10,
+        0.05
+      ],
+      "expected": {
+        "loan": 0,
+        "shortDebit": 0,
+        "loss": 0,
+        "gain": 0,
+        "J": 0,
+        "risk": 0.22937734756354056,
+        "baselineExceedance": 0.22937734756354056,
+        "predictiveFeasible": false
+      }
+    },
+    {
+      "id": "history-exact-once",
+      "kind": "continuous-function",
+      "function": "posterior",
+      "args": [
+        {
+          "alpha": 2,
+          "b": 10,
+          "exposure": 4,
+          "usage": 40,
+          "observation": "exact_latent"
+        }
+      ],
+      "expected": {
+        "alpha": 6,
+        "b": 50
+      }
+    },
+    {
+      "id": "history-model-action",
+      "kind": "continuous-function",
+      "function": "action",
+      "args": [
+        {
+          "R": 100,
+          "lambda": 10,
+          "law": {
+            "alpha": 6,
+            "b": 50,
+            "k": 1
+          },
+          "eta": null
+        }
+      ],
+      "expected": {
+        "loan": 76.61003661889652,
+        "loss": 1.4266470042475863,
+        "J": 62.343566576420656,
+        "economicReserve": 23.389963381103478,
+        "band": 0,
+        "predictiveFeasible": true,
+        "label": "declared-model research only"
+      }
+    },
+    {
+      "id": "light-ten-percent-through-reset",
+      "kind": "synthetic-replay",
+      "inputs": {
+        "prior": {
+          "alpha": 2,
+          "b": 10,
+          "exposure": 0,
+          "usage": 0,
+          "observation": "exact_latent"
+        },
+        "lambda": 10,
+        "rates": {
+          "short": 1.58,
+          "week": 0.53
+        },
+        "hours": [
+          0,
+          5,
+          10,
+          15,
+          20,
+          25,
+          30,
+          35,
+          40,
+          45,
+          50,
+          55,
+          60,
+          65,
+          70,
+          75,
+          80,
+          85,
+          90,
+          95,
+          100,
+          105,
+          110,
+          115,
+          120,
+          125,
+          130,
+          135,
+          140,
+          145,
+          150,
+          155,
+          160,
+          165,
+          167
+        ],
+        "ownerUsageRule": "10*t/167 through hour 167; no subsequent attempt before reset",
+        "friendQueueRule": "cumulative independently useful demand = 90*t/167 weekly-equivalent units",
+        "weeklyCapacity": 100,
+        "shortCapacity": 100,
+        "shortPeriodHours": 5,
+        "completion": "idealized immediate divisible useful work before each reset",
+        "riskAllocation": "none; repeated one-shot economic decisions, NO anytime coverage claim"
+      },
+      "expected": {
+        "events": [
+          {
+            "hour": 0,
+            "ownerUsage": 0,
+            "shortIdentity": 0,
+            "posterior": {
+              "alpha": 2,
+              "b": 10
+            },
+            "action": {
+              "loan": 78.3772233983162,
+              "loss": 2.25318675107747,
+              "J": 55.8453558875415,
+              "economicReserve": 21.62277660168379,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.32988944596751174,
+                "rate": 1.58
+              },
+              {
+                "remaining": 100,
+                "reserve": 21.62277660168379,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.082348451919295,
+            "requestedGrossUsd": 0,
+            "consumedGrossUsd": 0,
+            "borrowerWeeklyDebit": 0,
+            "cumulativeBorrowerWeeklyDebit": 0,
+            "weeklyRemainingAfter": 100,
+            "shortRemainingAfter": 100
+          },
+          {
+            "hour": 5,
+            "ownerUsage": 0.2994011976047904,
+            "shortIdentity": 1,
+            "posterior": {
+              "alpha": 2.0297619047619047,
+              "b": 10.29940119760479
+            },
+            "action": {
+              "loan": 78.5701395682143,
+              "loss": 2.205633802672936,
+              "J": 56.513801541484945,
+              "economicReserve": 21.130459234180904,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3333927953209434,
+                "rate": 1.58
+              },
+              {
+                "remaining": 99.7005988023952,
+                "reserve": 21.130459234180904,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.08013114220193,
+            "requestedGrossUsd": 5.084171280081347,
+            "consumedGrossUsd": 5.084171280081347,
+            "borrowerWeeklyDebit": 2.694610778443114,
+            "cumulativeBorrowerWeeklyDebit": 2.694610778443114,
+            "weeklyRemainingAfter": 97.00598802395209,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 10,
+            "ownerUsage": 0.5988023952095808,
+            "shortIdentity": 2,
+            "posterior": {
+              "alpha": 2.0595238095238093,
+              "b": 10.598802395209582
+            },
+            "action": {
+              "loan": 76.07896701843644,
+              "loss": 2.1375172501477095,
+              "J": 54.70379451695935,
+              "economicReserve": 20.627619807910865,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.336763932696589,
+                "rate": 1.58
+              },
+              {
+                "remaining": 96.7065868263473,
+                "reserve": 20.627619807910865,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.077997510951526,
+            "requestedGrossUsd": 5.084171280081347,
+            "consumedGrossUsd": 5.084171280081347,
+            "borrowerWeeklyDebit": 2.694610778443114,
+            "cumulativeBorrowerWeeklyDebit": 5.389221556886228,
+            "weeklyRemainingAfter": 94.0119760479042,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 15,
+            "ownerUsage": 0.8982035928143712,
+            "shortIdentity": 3,
+            "posterior": {
+              "alpha": 2.0892857142857144,
+              "b": 10.89820359281437
+            },
+            "action": {
+              "loan": 73.59760839820326,
+              "loss": 2.0705458129136733,
+              "J": 52.89215026906653,
+              "economicReserve": 20.114966452096137,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3400100876316369,
+                "rate": 1.58
+              },
+              {
+                "remaining": 93.7125748502994,
+                "reserve": 20.114966452096137,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.07594298251162,
+            "requestedGrossUsd": 5.084171280081348,
+            "consumedGrossUsd": 5.084171280081348,
+            "borrowerWeeklyDebit": 2.6946107784431144,
+            "cumulativeBorrowerWeeklyDebit": 8.083832335329342,
+            "weeklyRemainingAfter": 91.01796407185628,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 20,
+            "ownerUsage": 1.1976047904191616,
+            "shortIdentity": 4,
+            "posterior": {
+              "alpha": 2.119047619047619,
+              "b": 11.197604790419161
+            },
+            "action": {
+              "loan": 71.1254650206065,
+              "loss": 2.0046857922832375,
+              "J": 51.078607097774125,
+              "economicReserve": 19.593097853644988,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3431379791086557,
+                "rate": 1.58
+              },
+              {
+                "remaining": 90.71856287425149,
+                "reserve": 19.593097853644988,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.073963304361605,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 10.778443113772456,
+            "weeklyRemainingAfter": 88.02395209580838,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 25,
+            "ownerUsage": 1.4970059880239521,
+            "shortIdentity": 5,
+            "posterior": {
+              "alpha": 2.1488095238095237,
+              "b": 11.497005988023952
+            },
+            "action": {
+              "loan": 68.66203876830187,
+              "loss": 1.9398986697140481,
+              "J": 49.26305207116139,
+              "economicReserve": 19.062512129901716,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.34615385931604237,
+                "rate": 1.58
+              },
+              {
+                "remaining": 87.72455089820359,
+                "reserve": 19.062512129901716,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.07205451942022,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 13.47305389221557,
+            "weeklyRemainingAfter": 85.02994011976047,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 30,
+            "ownerUsage": 1.7964071856287425,
+            "shortIdentity": 6,
+            "posterior": {
+              "alpha": 2.1785714285714284,
+              "b": 11.796407185628743
+            },
+            "action": {
+              "loan": 66.20692488029016,
+              "loss": 1.876141525517241,
+              "J": 47.44550962511775,
+              "economicReserve": 18.52361404186552,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3490635530292223,
+                "rate": 1.58
+              },
+              {
+                "remaining": 84.73053892215569,
+                "reserve": 18.52361404186552,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.070212941120744,
+            "requestedGrossUsd": 5.08417128008135,
+            "consumedGrossUsd": 5.08417128008135,
+            "borrowerWeeklyDebit": 2.6946107784431153,
+            "cumulativeBorrowerWeeklyDebit": 16.167664670658684,
+            "weeklyRemainingAfter": 82.03592814371258,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 35,
+            "ownerUsage": 2.095808383233533,
+            "shortIdentity": 7,
+            "posterior": {
+              "alpha": 2.2083333333333335,
+              "b": 12.095808383233532
+            },
+            "action": {
+              "loan": 63.75980626945848,
+              "loss": 1.8133673230318852,
+              "J": 45.62613303913963,
+              "economicReserve": 17.97672067664931,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3518724931107809,
+                "rate": 1.58
+              },
+              {
+                "remaining": 81.73652694610779,
+                "reserve": 17.97672067664931,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.06843513094255,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 18.862275449101798,
+            "weeklyRemainingAfter": 79.04191616766467,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 40,
+            "ownerUsage": 2.395209580838323,
+            "shortIdentity": 8,
+            "posterior": {
+              "alpha": 2.238095238095238,
+              "b": 12.395209580838323
+            },
+            "action": {
+              "loan": 61.32044928370428,
+              "loss": 1.7515250681601238,
+              "J": 43.80519860210304,
+              "economicReserve": 17.42206568635559,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.35458575256484404,
+                "rate": 1.58
+              },
+              {
+                "remaining": 78.74251497005987,
+                "reserve": 17.42206568635559,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.06671787812351,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 21.55688622754491,
+            "weeklyRemainingAfter": 76.04790419161677,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 45,
+            "ownerUsage": 2.694610778443114,
+            "shortIdentity": 9,
+            "posterior": {
+              "alpha": 2.267857142857143,
+              "b": 12.694610778443113
+            },
+            "action": {
+              "loan": 58.88870086413576,
+              "loss": 1.6905598496934253,
+              "J": 41.983102367201504,
+              "economicReserve": 16.85980212987621,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.35720807352602335,
+                "rate": 1.58
+              },
+              {
+                "remaining": 75.74850299401197,
+                "reserve": 16.85980212987621,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.06505818131264,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 24.251497005988025,
+            "weeklyRemainingAfter": 73.05389221556885,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 50,
+            "ownerUsage": 2.9940119760479043,
+            "shortIdentity": 10,
+            "posterior": {
+              "alpha": 2.2976190476190474,
+              "b": 12.994011976047904
+            },
+            "action": {
+              "loan": 56.46448709548386,
+              "loss": 1.6304127615539619,
+              "J": 40.16035947994424,
+              "economicReserve": 16.290003922480206,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3597438935174314,
+                "rate": 1.58
+              },
+              {
+                "remaining": 72.75449101796407,
+                "reserve": 16.290003922480206,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.06345323195099,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 26.94610778443114,
+            "weeklyRemainingAfter": 70.05988023952096,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 55,
+            "ownerUsage": 3.2934131736526946,
+            "shortIdentity": 11,
+            "posterior": {
+              "alpha": 2.3273809523809526,
+              "b": 13.293413173652695
+            },
+            "action": {
+              "loan": 54.04781318860202,
+              "loss": 1.5710207036695438,
+              "J": 38.337606151906584,
+              "economicReserve": 15.712665853314153,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.36219736926973806,
+                "rate": 1.58
+              },
+              {
+                "remaining": 69.76047904191617,
+                "reserve": 15.712665853314153,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.06190039919637,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 29.64071856287425,
+            "weeklyRemainingAfter": 67.06586826347305,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 60,
+            "ownerUsage": 3.592814371257485,
+            "shortIdentity": 12,
+            "posterior": {
+              "alpha": 2.357142857142857,
+              "b": 13.592814371257486
+            },
+            "action": {
+              "loan": 51.63876498528673,
+              "loss": 1.5123160534264048,
+              "J": 36.51560445102268,
+              "economicReserve": 15.12770208058153,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3645723983605167,
+                "rate": 1.58
+              },
+              {
+                "remaining": 66.76646706586826,
+                "reserve": 15.12770208058153,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.060397216227514,
+            "requestedGrossUsd": 5.084171280081352,
+            "consumedGrossUsd": 5.084171280081352,
+            "borrowerWeeklyDebit": 2.694610778443117,
+            "cumulativeBorrowerWeeklyDebit": 32.33532934131737,
+            "weeklyRemainingAfter": 64.07185628742513,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 65,
+            "ownerUsage": 3.8922155688622753,
+            "shortIdentity": 13,
+            "posterior": {
+              "alpha": 2.386904761904762,
+              "b": 13.892215568862275
+            },
+            "action": {
+              "loan": 49.23751213474766,
+              "loss": 1.4542261941701007,
+              "J": 34.695250193046654,
+              "economicReserve": 14.534942955072703,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.36687263890006844,
+                "rate": 1.58
+              },
+              {
+                "remaining": 63.77245508982036,
+                "reserve": 14.534942955072703,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.05894136778477,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 35.02994011976048,
+            "weeklyRemainingAfter": 61.07784431137725,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 70,
+            "ownerUsage": 4.191616766467066,
+            "shortIdentity": 14,
+            "posterior": {
+              "alpha": 2.4166666666666665,
+              "b": 14.191616766467066
+            },
+            "action": {
+              "loan": 46.844313162876986,
+              "loss": 1.3966728806340099,
+              "J": 32.877584356536886,
+              "economicReserve": 13.934129950895468,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3691015274660807,
+                "rate": 1.58
+              },
+              {
+                "remaining": 60.778443113772454,
+                "reserve": 13.934129950895468,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.05753067881893,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 37.724550898203596,
+            "weeklyRemainingAfter": 58.08383233532934,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 75,
+            "ownerUsage": 4.491017964071856,
+            "shortIdentity": 15,
+            "posterior": {
+              "alpha": 2.4464285714285716,
+              "b": 14.491017964071856
+            },
+            "action": {
+              "loan": 44.45952274521707,
+              "loss": 1.3395714128956642,
+              "J": 31.06380861626043,
+              "economicReserve": 13.324908392507478,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3712622954631945,
+                "rate": 1.58
+              },
+              {
+                "remaining": 57.784431137724546,
+                "reserve": 13.324908392507478,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.05616310413721,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 40.41916167664671,
+            "weeklyRemainingAfter": 55.08982035928143,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 80,
+            "ownerUsage": 4.790419161676646,
+            "shortIdentity": 16,
+            "posterior": {
+              "alpha": 2.4761904761904763,
+              "b": 14.790419161676645
+            },
+            "action": {
+              "loan": 42.083601609007914,
+              "loss": 1.2828295796679794,
+              "J": 29.25530581232812,
+              "economicReserve": 12.706817552668724,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.37335798406728776,
+                "rate": 1.58
+              },
+              {
+                "remaining": 54.79041916167664,
+                "reserve": 12.706817552668724,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.054836718944756,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 43.11377245508982,
+            "weeklyRemainingAfter": 52.095808383233525,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 85,
+            "ownerUsage": 5.089820359281437,
+            "shortIdentity": 17,
+            "posterior": {
+              "alpha": 2.505952380952381,
+              "b": 15.089820359281436
+            },
+            "action": {
+              "loan": 39.71712963777576,
+              "loss": 1.2263463171926667,
+              "J": 27.453666465849096,
+              "economicReserve": 12.079277547852982,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3753914578923785,
+                "rate": 1.58
+              },
+              {
+                "remaining": 51.796407185628745,
+                "reserve": 12.079277547852982,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.053549710194694,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 45.808383233532936,
+            "weeklyRemainingAfter": 49.10179640718563,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 90,
+            "ownerUsage": 5.389221556886228,
+            "shortIdentity": 18,
+            "posterior": {
+              "alpha": 2.5357142857142856,
+              "b": 15.389221556886227
+            },
+            "action": {
+              "loan": 37.3608229447468,
+              "loss": 1.1700100097687591,
+              "J": 25.66072284705921,
+              "economicReserve": 11.441572264834033,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3773654175057005,
+                "rate": 1.58
+              },
+              {
+                "remaining": 48.80239520958084,
+                "reserve": 11.441572264834033,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.052300368667275,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 48.50299401197605,
+            "weeklyRemainingAfter": 46.10778443113772,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 95,
+            "ownerUsage": 5.688622754491018,
+            "shortIdentity": 19,
+            "posterior": {
+              "alpha": 2.5654761904761907,
+              "b": 15.688622754491018
+            },
+            "action": {
+              "loan": 35.01555593194074,
+              "loss": 1.1136963288283668,
+              "J": 23.878592643657072,
+              "economicReserve": 10.792827301592187,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.37928241090205084,
+                "rate": 1.58
+              },
+              {
+                "remaining": 45.80838323353293,
+                "reserve": 10.792827301592187,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 63.05108708170756,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 51.19760479041916,
+            "weeklyRemainingAfter": 43.113772455089816,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 100,
+            "ownerUsage": 5.9880239520958085,
+            "shortIdentity": 20,
+            "posterior": {
+              "alpha": 2.5952380952380953,
+              "b": 15.988023952095809
+            },
+            "action": {
+              "loan": 32.68238967228708,
+              "loss": 1.057265463953664,
+              "J": 22.10973503275044,
+              "economicReserve": 10.131981585197956,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.38114484403525584,
+                "rate": 1.58
+              },
+              {
+                "remaining": 42.814371257485035,
+                "reserve": 10.131981585197956,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 61.664886174126565,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 53.89221556886228,
+            "weeklyRemainingAfter": 40.11976047904192,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 105,
+            "ownerUsage": 6.287425149700598,
+            "shortIdentity": 21,
+            "posterior": {
+              "alpha": 2.625,
+              "b": 16.2874251497006
+            },
+            "action": {
+              "loan": 30.362608345084713,
+              "loss": 1.0005585313064165,
+              "J": 20.35702303202055,
+              "economicReserve": 9.457750936352415,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3829549904967711,
+                "rate": 1.58
+              },
+              {
+                "remaining": 39.82035928143713,
+                "reserve": 9.457750936352415,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 57.28794027374474,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 56.58682634730539,
+            "weeklyRemainingAfter": 37.125748502994014,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 110,
+            "ownerUsage": 6.586826347305389,
+            "shortIdentity": 22,
+            "posterior": {
+              "alpha": 2.6547619047619047,
+              "b": 16.58682634730539
+            },
+            "action": {
+              "loan": 28.057765888064644,
+              "loss": 0.9433928333896069,
+              "J": 18.623837554168574,
+              "economicReserve": 8.768581417324578,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.38471500041862683,
+                "rate": 1.58
+              },
+              {
+                "remaining": 36.82634730538922,
+                "reserve": 8.768581417324578,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 52.93918092087669,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 59.2814371257485,
+            "weeklyRemainingAfter": 34.131736526946106,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 115,
+            "ownerUsage": 6.88622754491018,
+            "shortIdentity": 23,
+            "posterior": {
+              "alpha": 2.6845238095238093,
+              "b": 16.88622754491018
+            },
+            "action": {
+              "loan": 25.76974536391552,
+              "loss": 0.8855554496706419,
+              "J": 16.9141908672091,
+              "economicReserve": 8.062589965425795,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3864269086733807,
+                "rate": 1.58
+              },
+              {
+                "remaining": 33.83233532934131,
+                "reserve": 8.062589965425795,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 48.62216106399154,
+            "requestedGrossUsd": 5.084171280081346,
+            "consumedGrossUsd": 5.084171280081346,
+            "borrowerWeeklyDebit": 2.6946107784431135,
+            "cumulativeBorrowerWeeklyDebit": 61.97604790419162,
+            "weeklyRemainingAfter": 31.1377245508982,
+            "shortRemainingAfter": 91.96700937747147
+          },
+          {
+            "hour": 120,
+            "ownerUsage": 7.18562874251497,
+            "shortIdentity": 24,
+            "posterior": {
+              "alpha": 2.7142857142857144,
+              "b": 17.18562874251497
+            },
+            "action": {
+              "loan": 23.500833334606064,
+              "loss": 0.826794275155232,
+              "J": 15.232890583053745,
+              "economicReserve": 7.337490018687356,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.38809264243369057,
+                "rate": 1.58
+              },
+              {
+                "remaining": 30.83832335329342,
+                "reserve": 7.337490018687356,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 44.34119497095484,
+            "requestedGrossUsd": 5.084171280081359,
+            "consumedGrossUsd": 5.084171280081359,
+            "borrowerWeeklyDebit": 2.6946107784431206,
+            "cumulativeBorrowerWeeklyDebit": 64.67065868263474,
+            "weeklyRemainingAfter": 28.143712574850298,
+            "shortRemainingAfter": 91.96700937747146
+          },
+          {
+            "hour": 125,
+            "ownerUsage": 7.485029940119761,
+            "shortIdentity": 25,
+            "posterior": {
+              "alpha": 2.744047619047619,
+              "b": 17.48502994011976
+            },
+            "action": {
+              "loan": 21.253809488731093,
+              "loss": 0.7668048953613007,
+              "J": 13.585760535118087,
+              "economicReserve": 6.590501888514412,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.38971402814868383,
+                "rate": 1.58
+              },
+              {
+                "remaining": 27.844311377245504,
+                "reserve": 6.590501888514412,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 40.101527337228475,
+            "requestedGrossUsd": 5.084171280081333,
+            "consumedGrossUsd": 5.084171280081333,
+            "borrowerWeeklyDebit": 2.6946107784431064,
+            "cumulativeBorrowerWeeklyDebit": 67.36526946107784,
+            "weeklyRemainingAfter": 25.149700598802397,
+            "shortRemainingAfter": 91.9670093774715
+          },
+          {
+            "hour": 130,
+            "ownerUsage": 7.7844311377245505,
+            "shortIdentity": 26,
+            "posterior": {
+              "alpha": 2.7738095238095237,
+              "b": 17.78443113772455
+            },
+            "action": {
+              "loan": 19.03204403208855,
+              "loss": 0.7052100957483762,
+              "J": 11.979943074604787,
+              "economicReserve": 5.818255369109055,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3912927979888899,
+                "rate": 1.58
+              },
+              {
+                "remaining": 24.850299401197603,
+                "reserve": 5.818255369109055,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 35.90951704167651,
+            "requestedGrossUsd": 5.084171280081359,
+            "consumedGrossUsd": 5.084171280081359,
+            "borrowerWeeklyDebit": 2.6946107784431206,
+            "cumulativeBorrowerWeeklyDebit": 70.05988023952096,
+            "weeklyRemainingAfter": 22.155688622754482,
+            "shortRemainingAfter": 91.96700937747146
+          },
+          {
+            "hour": 135,
+            "ownerUsage": 8.083832335329342,
+            "shortIdentity": 27,
+            "posterior": {
+              "alpha": 2.803571428571429,
+              "b": 18.08383233532934
+            },
+            "action": {
+              "loan": 16.839570219335027,
+              "loss": 0.6415250087685194,
+              "J": 10.424320131649832,
+              "economicReserve": 5.01671720581466,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3928305958063643,
+                "rate": 1.58
+              },
+              {
+                "remaining": 21.856287425149688,
+                "reserve": 5.01671720581466,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 31.772773998745333,
+            "requestedGrossUsd": 5.084171280081333,
+            "consumedGrossUsd": 5.084171280081333,
+            "borrowerWeeklyDebit": 2.6946107784431064,
+            "cumulativeBorrowerWeeklyDebit": 72.75449101796407,
+            "weeklyRemainingAfter": 19.16167664670658,
+            "shortRemainingAfter": 91.9670093774715
+          },
+          {
+            "hour": 140,
+            "ownerUsage": 8.383233532934131,
+            "shortIdentity": 28,
+            "posterior": {
+              "alpha": 2.8333333333333335,
+              "b": 18.38323353293413
+            },
+            "action": {
+              "loan": 14.681018876119946,
+              "loss": 0.5750909184731008,
+              "J": 8.930109691388939,
+              "economicReserve": 4.181256572981854,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3943289826509893,
+                "rate": 1.58
+              },
+              {
+                "remaining": 18.8622754491018,
+                "reserve": 4.181256572981854,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 27.70003561532065,
+            "requestedGrossUsd": 5.084171280081359,
+            "consumedGrossUsd": 5.084171280081359,
+            "borrowerWeeklyDebit": 2.6946107784431206,
+            "cumulativeBorrowerWeeklyDebit": 75.44910179640719,
+            "weeklyRemainingAfter": 16.16766467065868,
+            "shortRemainingAfter": 91.96700937747146
+          },
+          {
+            "hour": 145,
+            "ownerUsage": 8.682634730538922,
+            "shortIdentity": 29,
+            "posterior": {
+              "alpha": 2.863095238095238,
+              "b": 18.682634730538922
+            },
+            "action": {
+              "loan": 12.561030643302297,
+              "loss": 0.5049314293145857,
+              "J": 7.511716350156441,
+              "economicReserve": 3.3072328297515887,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3957894418814005,
+                "rate": 1.58
+              },
+              {
+                "remaining": 15.868263473053887,
+                "reserve": 3.3072328297515887,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 23.700057817551503,
+            "requestedGrossUsd": 5.084171280081333,
+            "consumedGrossUsd": 5.084171280081333,
+            "borrowerWeeklyDebit": 2.6946107784431064,
+            "cumulativeBorrowerWeeklyDebit": 78.1437125748503,
+            "weeklyRemainingAfter": 13.17365269461078,
+            "shortRemainingAfter": 91.9670093774715
+          },
+          {
+            "hour": 150,
+            "ownerUsage": 8.982035928143713,
+            "shortIdentity": 30,
+            "posterior": {
+              "alpha": 2.892857142857143,
+              "b": 18.982035928143713
+            },
+            "action": {
+              "loan": 10.481754469114811,
+              "loss": 0.42938685290172357,
+              "J": 6.187885940097575,
+              "economicReserve": 2.3924970278911752,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.39721338390420974,
+                "rate": 1.58
+              },
+              {
+                "remaining": 12.874251497005986,
+                "reserve": 2.3924970278911752,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 19.776895224744926,
+            "requestedGrossUsd": 5.084171280081359,
+            "consumedGrossUsd": 5.084171280081359,
+            "borrowerWeeklyDebit": 2.6946107784431206,
+            "cumulativeBorrowerWeeklyDebit": 80.83832335329342,
+            "weeklyRemainingAfter": 10.179640718562865,
+            "shortRemainingAfter": 91.96700937747146
+          },
+          {
+            "hour": 155,
+            "ownerUsage": 9.281437125748504,
+            "shortIdentity": 31,
+            "posterior": {
+              "alpha": 2.9226190476190474,
+              "b": 19.281437125748504
+            },
+            "action": {
+              "loan": 8.432698451703732,
+              "loss": 0.34500249484929,
+              "J": 4.982673503210832,
+              "economicReserve": 1.4475410692543387,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.3986021505732787,
+                "rate": 1.58
+              },
+              {
+                "remaining": 9.880239520958071,
+                "reserve": 1.4475410692543387,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 15.91075179566742,
+            "requestedGrossUsd": 5.084171280081333,
+            "consumedGrossUsd": 5.084171280081333,
+            "borrowerWeeklyDebit": 2.6946107784431064,
+            "cumulativeBorrowerWeeklyDebit": 83.53293413173652,
+            "weeklyRemainingAfter": 7.1856287425149645,
+            "shortRemainingAfter": 91.9670093774715
+          },
+          {
+            "hour": 160,
+            "ownerUsage": 9.580838323353293,
+            "shortIdentity": 32,
+            "posterior": {
+              "alpha": 2.9523809523809526,
+              "b": 19.58083832335329
+            },
+            "action": {
+              "loan": 6.344551797154394,
+              "loss": 0.2424436687856834,
+              "J": 3.92011510929756,
+              "economicReserve": 0.5416757477557905,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.39995701927592636,
+                "rate": 1.58
+              },
+              {
+                "remaining": 6.886227544910184,
+                "reserve": 0.5416757477557905,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 11.97085244746112,
+            "requestedGrossUsd": 5.084171280081359,
+            "consumedGrossUsd": 5.084171280081359,
+            "borrowerWeeklyDebit": 2.6946107784431206,
+            "cumulativeBorrowerWeeklyDebit": 86.22754491017965,
+            "weeklyRemainingAfter": 4.191616766467064,
+            "shortRemainingAfter": 91.96700937747146
+          },
+          {
+            "hour": 165,
+            "ownerUsage": 9.880239520958083,
+            "shortIdentity": 33,
+            "posterior": {
+              "alpha": 2.982142857142857,
+              "b": 19.880239520958085
+            },
+            "action": {
+              "loan": 3.879821424739685,
+              "loss": 0.0945698676314973,
+              "J": 2.934122748424712,
+              "economicReserve": 0.012394144122584716,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 100,
+                "reserve": 0.03694858059185632,
+                "rate": 1.58
+              },
+              {
+                "remaining": 3.8922155688622695,
+                "reserve": 0.012394144122584716,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 7.3204177825277075,
+            "requestedGrossUsd": 5.084171280081333,
+            "consumedGrossUsd": 5.084171280081333,
+            "borrowerWeeklyDebit": 2.6946107784431064,
+            "cumulativeBorrowerWeeklyDebit": 88.92215568862275,
+            "weeklyRemainingAfter": 1.1976047904191631,
+            "shortRemainingAfter": 91.9670093774715
+          },
+          {
+            "hour": 167,
+            "ownerUsage": 10,
+            "shortIdentity": 33,
+            "posterior": {
+              "alpha": 2.994047619047619,
+              "b": 20
+            },
+            "action": {
+              "loan": 1.0778442191284459,
+              "loss": 0.015931313495725165,
+              "J": 0.9185310841711942,
+              "economicReserve": 9.224880243860014e-8,
+              "band": 0,
+              "predictiveFeasible": true,
+              "label": "declared-model research only"
+            },
+            "resources": [
+              {
+                "remaining": 91.60998757202579,
+                "reserve": 2.7500586387356265e-7,
+                "rate": 1.58
+              },
+              {
+                "remaining": 1.0778443113772482,
+                "reserve": 9.224880243860014e-8,
+                "rate": 0.53
+              }
+            ],
+            "grossEnvelopeUsd": 2.0336683379781997,
+            "requestedGrossUsd": 2.033668512032544,
+            "consumedGrossUsd": 2.0336683379781997,
+            "borrowerWeeklyDebit": 1.0778442191284459,
+            "cumulativeBorrowerWeeklyDebit": 89.9999999077512,
+            "weeklyRemainingAfter": 9.224879704561317e-8,
+            "shortRemainingAfter": 88.39679159802023
+          }
+        ],
+        "settlement": {
+          "ownerAttempted": 10,
+          "ownerServed": 10,
+          "borrowerConsumed": 89.9999999077512,
+          "unusedAtReset": 9.224879704561317e-8,
+          "lendableOnThisPath": 90,
+          "consumedFractionOfPathSpare": 0.9999999989750133
+        }
+      }
+    },
+    {
+      "id": "heavy-above-mean-bounded-owner-served",
+      "kind": "synthetic-settlement",
+      "inputs": {
+        "capacity": 100,
+        "scenario": "heavy",
+        "lambda": 10,
+        "ownerDemand": 95
+      },
+      "expected": {
+        "forecastMean": 90,
+        "realizedOwnerDemand": 95,
+        "lent": 0,
+        "ownerServed": 95,
+        "ownerUnserved": 0,
+        "baselineOwnerServed": 95,
+        "incrementalOwnerLoss": 0
+      }
+    },
+    {
+      "id": "no-universal-never-short",
+      "kind": "counterexample",
+      "expected": {
+        "R": 100,
+        "loan": 78.3772233983162,
+        "ownerDemand": 100,
+        "baselineServed": 100,
+        "withLendingServed": 21.622776601683796,
+        "incrementalLoss": 78.3772233983162
+      }
+    },
+    {
+      "id": "owner-burn-rise-stops-next-chunk",
+      "kind": "synthetic-admission-sequence",
+      "inputs": {
+        "prior": {
+          "alpha": 2,
+          "b": 10,
+          "exposure": 0,
+          "usage": 0,
+          "observation": "exact_latent"
+        },
+        "firstGrossUsd": 1,
+        "ownerUsageJump": 30,
+        "exposureAfter": 0.001
+      },
+      "expected": {
+        "beforePosterior": {
+          "alpha": 2,
+          "b": 10
+        },
+        "beforeResources": [
+          {
+            "remaining": 100,
+            "reserve": 7.096234948130098,
+            "rate": 1.58
+          },
+          {
+            "remaining": 100,
+            "reserve": 53.24555320336758,
+            "rate": 0.53
+          }
+        ],
+        "beforeGrossLimit": 58.79985129865183,
+        "afterPosterior": {
+          "alpha": 2.001,
+          "b": 40
+        },
+        "afterResources": [
+          {
+            "remaining": 8.986037735849065,
+            "reserve": 27.111907864366074,
+            "rate": 1.58
+          },
+          {
+            "remaining": 69.47,
+            "reserve": 212.5738012768143,
+            "rate": 0.53
+          }
+        ],
+        "afterGrossLimit": 0,
+        "nextChunkAdmitted": false,
+        "alreadyConsumedWeekly": 0.53
+      }
+    },
+    {
+      "id": "haiku-fit",
+      "kind": "synthetic-native-guard",
+      "inputs": {
+        "model": "Haiku",
+        "worstCallUsd": 1.32,
+        "jobRequiredNativeUsd": 1,
+        "resources": [
+          {
+            "remaining": 26.36277660168379,
+            "reserve": 21.62277660168379,
+            "rate": 1.58
+          },
+          {
+            "remaining": 23.21277660168379,
+            "reserve": 21.62277660168379,
+            "rate": 0.53
+          }
+        ]
+      },
+      "expected": {
+        "grossEnvelopeUsd": 2.9999999999999996,
+        "maxBudgetUsd": 1.67,
+        "admitted": true,
+        "reason": "spare-covers-gross-job",
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "model"
+      }
+    },
+    {
+      "id": "haiku-insufficient",
+      "kind": "synthetic-native-guard",
+      "inputs": {
+        "model": "Haiku",
+        "worstCallUsd": 1.32,
+        "jobRequiredNativeUsd": 1,
+        "resources": [
+          {
+            "remaining": 25.272576601683788,
+            "reserve": 21.62277660168379,
+            "rate": 1.58
+          },
+          {
+            "remaining": 22.84707660168379,
+            "reserve": 21.62277660168379,
+            "rate": 0.53
+          }
+        ]
+      },
+      "expected": {
+        "grossEnvelopeUsd": 2.3099999999999987,
+        "maxBudgetUsd": 0.98,
+        "admitted": false,
+        "reason": "insufficient-spare",
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "model"
+      }
+    },
+    {
+      "id": "haiku-no-positive-guard",
+      "kind": "synthetic-native-guard",
+      "inputs": {
+        "model": "Haiku",
+        "worstCallUsd": 1.32,
+        "jobRequiredNativeUsd": 1,
+        "resources": [
+          {
+            "remaining": 23.70837660168379,
+            "reserve": 21.62277660168379,
+            "rate": 1.58
+          },
+          {
+            "remaining": 22.32237660168379,
+            "reserve": 21.62277660168379,
+            "rate": 0.53
+          }
+        ]
+      },
+      "expected": {
+        "grossEnvelopeUsd": 1.3199999999999996,
+        "maxBudgetUsd": 0,
+        "admitted": false,
+        "reason": "no-positive-native-guard",
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "model"
+      }
+    },
+    {
+      "id": "sonnet-fit",
+      "kind": "synthetic-native-guard",
+      "inputs": {
+        "model": "Sonnet",
+        "worstCallUsd": 5.28,
+        "jobRequiredNativeUsd": 5,
+        "resources": [
+          {
+            "remaining": 40.58277660168379,
+            "reserve": 21.62277660168379,
+            "rate": 1.58
+          },
+          {
+            "remaining": 27.98277660168379,
+            "reserve": 21.62277660168379,
+            "rate": 0.53
+          }
+        ]
+      },
+      "expected": {
+        "grossEnvelopeUsd": 11.999999999999998,
+        "maxBudgetUsd": 6.71,
+        "admitted": true,
+        "reason": "spare-covers-gross-job",
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "model"
+      }
+    },
+    {
+      "id": "sonnet-insufficient",
+      "kind": "synthetic-native-guard",
+      "inputs": {
+        "model": "Sonnet",
+        "worstCallUsd": 5.28,
+        "jobRequiredNativeUsd": 5,
+        "resources": [
+          {
+            "remaining": 37.84937660168379,
+            "reserve": 21.62277660168379,
+            "rate": 1.58
+          },
+          {
+            "remaining": 27.06587660168379,
+            "reserve": 21.62277660168379,
+            "rate": 0.53
+          }
+        ]
+      },
+      "expected": {
+        "grossEnvelopeUsd": 10.269999999999998,
+        "maxBudgetUsd": 4.98,
+        "admitted": false,
+        "reason": "insufficient-spare",
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "model"
+      }
+    },
+    {
+      "id": "sonnet-no-positive-guard",
+      "kind": "synthetic-native-guard",
+      "inputs": {
+        "model": "Sonnet",
+        "worstCallUsd": 5.28,
+        "jobRequiredNativeUsd": 5,
+        "resources": [
+          {
+            "remaining": 29.96517660168379,
+            "reserve": 21.62277660168379,
+            "rate": 1.58
+          },
+          {
+            "remaining": 24.42117660168379,
+            "reserve": 21.62277660168379,
+            "rate": 0.53
+          }
+        ]
+      },
+      "expected": {
+        "grossEnvelopeUsd": 5.28,
+        "maxBudgetUsd": 0,
+        "admitted": false,
+        "reason": "no-positive-native-guard",
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "model"
+      }
+    },
+    {
+      "id": "opus-fit",
+      "kind": "synthetic-native-guard",
+      "inputs": {
+        "model": "Opus",
+        "worstCallUsd": 10.56,
+        "jobRequiredNativeUsd": 10,
+        "resources": [
+          {
+            "remaining": 59.54277660168379,
+            "reserve": 21.62277660168379,
+            "rate": 1.58
+          },
+          {
+            "remaining": 34.34277660168379,
+            "reserve": 21.62277660168379,
+            "rate": 0.53
+          }
+        ]
+      },
+      "expected": {
+        "grossEnvelopeUsd": 23.999999999999996,
+        "maxBudgetUsd": 13.43,
+        "admitted": true,
+        "reason": "spare-covers-gross-job",
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "model"
+      }
+    },
+    {
+      "id": "opus-insufficient",
+      "kind": "synthetic-native-guard",
+      "inputs": {
+        "model": "Opus",
+        "worstCallUsd": 10.56,
+        "jobRequiredNativeUsd": 10,
+        "resources": [
+          {
+            "remaining": 54.09177660168379,
+            "reserve": 21.62277660168379,
+            "rate": 1.58
+          },
+          {
+            "remaining": 32.51427660168379,
+            "reserve": 21.62277660168379,
+            "rate": 0.53
+          }
+        ]
+      },
+      "expected": {
+        "grossEnvelopeUsd": 20.55,
+        "maxBudgetUsd": 9.99,
+        "admitted": false,
+        "reason": "insufficient-spare",
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "model"
+      }
+    },
+    {
+      "id": "opus-no-positive-guard",
+      "kind": "synthetic-native-guard",
+      "inputs": {
+        "model": "Opus",
+        "worstCallUsd": 10.56,
+        "jobRequiredNativeUsd": 10,
+        "resources": [
+          {
+            "remaining": 38.30757660168379,
+            "reserve": 21.62277660168379,
+            "rate": 1.58
+          },
+          {
+            "remaining": 27.21957660168379,
+            "reserve": 21.62277660168379,
+            "rate": 0.53
+          }
+        ]
+      },
+      "expected": {
+        "grossEnvelopeUsd": 10.56,
+        "maxBudgetUsd": 0,
+        "admitted": false,
+        "reason": "no-positive-native-guard",
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "model"
+      }
+    },
+    {
+      "id": "history-explanation",
+      "kind": "proposed-adapter-contract",
+      "inputs": {
+        "posterior": {
+          "alpha": 6,
+          "b": 50
+        },
+        "historySemantics": "four compatible exact latent exposure units, fixed beta; not empirical calibration"
+      },
+      "expected": {
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "history",
+        "reason": "spare-covers-gross-job",
+        "protectionClaim": "declared-model research only"
+      }
+    },
+    {
+      "id": "day-one-explanation",
+      "kind": "proposed-adapter-contract",
+      "expected": {
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "model",
+        "protectionClaim": "declared-model research only",
+        "reason": "spare-covers-gross-job",
+        "decision": "admit-if-physical-constraints-pass"
+      }
+    },
+    {
+      "id": "heavy-explanation",
+      "kind": "proposed-adapter-contract",
+      "expected": {
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "model",
+        "protectionClaim": "declared-model research only",
+        "reason": "owner-reserve-exceeds-capacity",
+        "decision": "hold"
+      }
+    },
+    {
+      "id": "burn-rise-explanation",
+      "kind": "proposed-adapter-contract",
+      "expected": {
+        "strategyId": "continuous-gamma-lambda-10-v1",
+        "protectionSource": "model",
+        "protectionClaim": "declared-model research only",
+        "reason": "owner-demand-reserve-increased",
+        "decision": "hold-next-chunk"
+      }
+    },
+    {
+      "id": "rounded-observation",
+      "kind": "continuous-error",
+      "function": "posterior",
+      "args": [
+        {
+          "alpha": 2,
+          "b": 10,
+          "exposure": 0,
+          "usage": 0,
+          "observation": "rounded"
+        }
+      ],
+      "expectedError": "TypeError"
+    },
+    {
+      "id": "missing-usage",
+      "kind": "continuous-error",
+      "function": "posterior",
+      "args": [
+        {
+          "alpha": 2,
+          "b": 10,
+          "exposure": 0,
+          "observation": "exact_latent"
+        }
+      ],
+      "expectedError": "TypeError"
+    },
+    {
+      "id": "zero-at-positive-exposure",
+      "kind": "continuous-error",
+      "function": "posterior",
+      "args": [
+        {
+          "alpha": 2,
+          "b": 10,
+          "exposure": 1,
+          "usage": 0,
+          "observation": "exact_latent"
+        }
+      ],
+      "expectedError": "TypeError"
+    }
+  ]
+}

@@ -1,0 +1,122 @@
+/* The Lending page (U3). From the <style> block of docs/design/experience/mockups/src/lend.html. */
+.lending-page .hero{padding:var(--s-4);display:grid;gap:var(--s-4)}
+.lstate{display:flex;align-items:center;gap:var(--s-4)}
+.orb{width:56px;height:56px;border-radius:18px;display:grid;place-items:center;flex:none;background:var(--on-soft);color:var(--on-text)}
+.orb.off{background:var(--surface-2);color:var(--text-2)}.orb.need{background:var(--need-soft);color:var(--need-text)}
+.orb.run{background:var(--run-soft);color:var(--run-text)}.orb.bad{background:var(--bad-soft);color:var(--bad-text)}
+.headline{font-size:var(--text-lending-headline);line-height:1.2;font-weight:600;letter-spacing:-.018em}
+.meters{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-4)}
+.meter{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-top:var(--s-2)}
+.meter i{display:block;height:100%;background:var(--text-2)}
+.n{font-size:var(--text-title2);font-weight:600}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--s-6);align-items:start}
+.agents .lagent:first-child{border-top:0}
+.lagent{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:var(--s-half) var(--s-4);align-items:center;padding:var(--s-4) var(--s-5)}
+.lagent+.lagent{border-top:1px solid var(--line)}
+.lagent .logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font:700 var(--text-xs) var(--font-sans);grid-row:span 2;background:var(--surface-2);color:var(--text-2)}
+.lagent .sub{grid-column:2/4;font-size:var(--text-xs);color:var(--text-2)}
+.lagent .sub.warn{color:var(--need-text);font-weight:600}
+.lagent .more{grid-column:2/4;display:grid;gap:var(--s-2);margin-top:var(--s-2)}
+.lagent .more:empty{display:none}
+.lagent details{font-size:var(--text-sm)}
+.lagent summary{cursor:pointer;min-height:32px;display:flex;align-items:center;color:var(--text-2)}
+.limits p{font-size:var(--text-body);line-height:1.55}
+.limits b{font-weight:600;border-bottom:1.5px dashed var(--line-strong)}
+.linkish{background:none;border:0;padding:0 var(--s-1);min-height:44px;font:inherit;font-size:var(--text-sm);color:var(--text-2);cursor:pointer;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px}
+.back-link{display:inline-flex;align-items:center;gap:var(--s-half);color:var(--text-2);text-decoration:none;font-weight:550;font-size:var(--text-sm);min-height:44px}
+.card>.row:first-child{border-top:0}
+@media(max-width:899px){
+  .cols{grid-template-columns:minmax(0,1fr)}
+  .hero{padding:var(--s-5)}.headline{font-size:var(--text-title2)}.lstate{align-items:flex-start}
+  .orb{width:44px;height:44px;border-radius:14px}
+  .switch.xl{width:52px;height:32px}.switch.xl::after{width:26px;height:26px}.switch.xl[aria-checked=true]::after{transform:translateX(20px)}
+}
+.section-h .action{display:inline-flex;align-items:center}
+.section-h .feedback:empty{display:none}
+
+/* Lending limits (U16). From mockups/src/limits.html. */
+.form{display:grid;gap:var(--s-6);max-width:720px}
+.line{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-4) var(--s-5);font-size:var(--text-sm)}
+.line+.line{border-top:1px solid var(--line)}
+.line .lbl{flex:1;min-width:0}.line .lbl b{display:block;font-size:var(--text-body)}
+.line .lbl{color:var(--text-2)}.line .lbl b{color:var(--text)}
+.line-error{display:block;color:var(--bad-text);font-weight:600;margin-top:var(--s-half)}
+.num{width:96px}.hours{width:auto;min-width:130px}
+.owner-limit-control{display:grid;gap:var(--s-2);min-width:0;padding:var(--s-4) var(--s-5)}
+.owner-limit-label{font-size:var(--text-body);font-weight:600;line-height:var(--lh-body)}
+.owner-limit-hint{max-width:68ch;margin:0;color:var(--text-2);font-size:var(--text-sm);line-height:var(--lh-body)}
+.owner-limit-entry{display:grid;grid-template-columns:auto minmax(8rem,11rem) auto;justify-content:start;align-items:center;gap:var(--s-3);min-width:0}
+.owner-limit-input{width:100%;min-width:0}
+/* Keep foreground/background contrast intact when quota evidence enables Save. */
+.owner-limit-save{white-space:nowrap;transition:transform var(--dur-1) var(--ease-out)}
+.dial-assumption{margin-top:var(--s-3);font-size:var(--text-sm)}
+.dial-assumption>summary{min-height:var(--touch);display:flex;align-items:center;cursor:pointer;color:var(--text-2);text-decoration:underline;text-underline-offset:3px}
+.dial-assumption>p{max-width:68ch;line-height:var(--lh-body)}
+.days{display:flex;gap:var(--s-2)}
+.day{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:600 var(--text-xs) var(--font-sans);border:1px solid var(--line-strong);background:var(--surface);color:var(--text);cursor:pointer}
+.day.on{background:var(--ink-btn);color:var(--ink-btn-text);border-color:transparent}
+.preview{padding:var(--s-5);font-size:var(--text-body);line-height:1.55;background:var(--surface-2);border-radius:var(--r-lg)}
+.preview b{font-weight:600}
+.save-pair{max-width:360px;margin-left:auto}
+.save-pair .action{display:contents}
+@media(max-width:899px){.line{flex-wrap:wrap}.line .lbl{flex:1 1 100%}.days{flex-wrap:wrap}}
+@media(max-width:420px){.owner-limit-control{padding:var(--s-4)}.owner-limit-entry{grid-template-columns:auto minmax(0,1fr) auto;gap:var(--s-2)}}
+.exec{display:flex;gap:var(--s-3);align-items:center;padding:var(--s-3) var(--s-4);border-radius:12px;background:var(--run-soft);color:var(--run-text);font-size:var(--text-sm);flex-wrap:wrap}
+.needlist .row{min-height:56px}
+.lending-circle-row{display:flex;gap:var(--s-3);align-items:center;padding:var(--s-4) var(--s-5);min-height:var(--touch);cursor:pointer}
+.lending-circles{overflow:hidden}
+.lending-circle-row+.lending-circle-row{border-top:1px solid var(--line)}
+.lending-circle-row:has(input:checked){background:var(--surface-2)}
+.lending-circle-row:has(input:disabled){cursor:default}
+.lending-circle-row .grow{min-width:0}
+.lending-circle-row .row-title,.lending-circle-row .row-meta{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lending-circle-row input{width:22px;height:22px;margin:0;flex:none}
+.lending-circle-row input:focus-visible{box-shadow:none}
+.lending-circles>.card-pad{border-top:1px solid var(--line)}
+
+
+.more-agents>button{width:100%;border-radius:0;border-top:1px solid var(--line);justify-content:flex-start;padding:var(--s-3) var(--s-5);font-size:var(--text-sm);color:var(--text-2)}
+
+/* Summary owns the first action. Agent rows stay compact and secondary. */
+.lagent .sub{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap}
+.lagent .more{margin-top:0}.lagent .more>p{margin:var(--s-1) 0}
+.lagent .tech summary{font-size:var(--text-xs);min-height:var(--s-8)}
+.lagent .tech[open]{padding-top:var(--s-2)}
+.hero-actions .legacy p:empty{display:none}
+.hero-actions .legacy .actions{margin:0}
+.limit-rows{display:grid;gap:var(--s-4);font-size:var(--text-sm)}
+.limit-rows>div{display:flex;justify-content:space-between;gap:var(--s-4)}
+.limit-rows dt{color:var(--text-2)}.limit-rows dd{margin:0;text-align:right;font-weight:550;max-width:58%}
+.checks-summary{display:flex;align-items:center;gap:var(--s-2);padding:var(--s-3) var(--s-5);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);font-size:var(--text-sm)}
+.checks-summary .linkish{margin-left:auto;flex:none}
+.checks-summary>span{min-width:0}
+.blockers .row{padding-block:var(--s-3)}.blockers .row-title{font-size:var(--text-sm)}
+@media(max-width:899px){.lstate .grow{min-width:0}.lstate .orb{display:none}.hero{gap:var(--s-4)}.checks-summary{padding:var(--s-2) var(--s-3)}.meters{gap:var(--s-3)}}
+
+
+/* The hero fits its content, including the actual action rather than its wrapper. */
+.hero{align-content:start}
+.hero-actions .action{margin:0}
+.meters>:only-child{grid-column:1/-1}
+.hero-actions{display:flex;align-items:center;gap:var(--s-2)}
+.agent-control h3{font-size:var(--text-sm);font-weight:650;margin:0 0 var(--s-2)}
+.agent-control input,.agent-control select{min-height:var(--touch)}
+.agent-check-note{margin:var(--s-3) var(--s-1) 0}
+
+.lending-page .agent-check-note,.lending-page .limits p.t-xs{font-size:var(--text-xs);line-height:var(--lh-xs);color:var(--text-2)}
+.agent-signin{grid-column:2/4}
+.agent-signin .actions{display:flex;gap:var(--s-2)}
+.agent-signin button:hover{background:var(--surface-2)}
+
+.check-control{display:inline-flex;align-items:center;flex-wrap:wrap;gap:var(--s-2)}
+
+/* The provider's sign-in is a row action, not a second full-width card. */
+.agent-signin .signin-inline{align-items:flex-start}
+.agent-signin .pair{justify-content:flex-start;width:auto}
+.agent-signin .btn{width:auto;flex:none}
+@media(max-width:899px){
+ .lending-page .exec{display:grid;grid-template-columns:16px minmax(0,1fr);align-items:start}
+ .lending-page .exec>.grow{min-width:0}
+ .lending-page .exec>.btn{grid-column:2;justify-self:start;max-width:100%}
+ .lending-page .exec>a{grid-column:2;justify-self:start;max-width:100%}
+}

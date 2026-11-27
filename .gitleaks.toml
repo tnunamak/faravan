@@ -1,0 +1,236 @@
+# Preserve default detectors. Rule-level exceptions require both exact path and exact line.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+# Public PostHog ingestion project identifier, embedded in the shipped client; not an administrative key.
+[[rules.allowlists]]
+description = "Public PostHog ingestion project identifier, embedded in the shipped client; not an administrative key."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)lib/v1/telemetry/contract\\.mjs$"]
+regexes = [
+  "^\n?export const POSTHOG_TOKEN = 'phc_nFhRBipngqr9ptSzJnSuCJTD4xAvrCHQiLbvmZPEBUY6';$",
+]
+
+# Synthetic planted credentials and canary strings used to test rejection, redaction, or isolation; never authenticate.
+[[rules.allowlists]]
+description = "Synthetic planted credentials and canary strings used to test rejection, redaction, or isolation; never authenticate."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)tests/credential-probe\\.test\\.mjs$"]
+regexes = [
+  "^\n?    \\['\\.docker/config\\.json', '\\{\"auths\":\\{\"https://index\\.docker\\.io/v1/\":\\{\"auth\":\"dXNlcjpBYmNkMTIzNDU2Nzg5MDEyMw==\"\\}\\}\\}'\\],$",
+  "^\n?  assert\\.ok\\(kinds\\('\\{\"auths\":\\{\"https://index\\.docker\\.io/v1/\":\\{\"auth\":\"dXNlcjpBYmNkMTIzNDU2Nzg5MDEyMw==\"\\}\\}\\}'\\)\\.includes\\('real'\\), 'docker config'\\);$",
+  "^\n?  await writeFile\\(file, JSON\\.stringify\\(\\{ tokens: \\{ access_token: FAKE_JWT, refresh_token: 'Rq8Xw2Lp5Vb9Nk3Ys7Hd1Mc4Fj6Ga0Tz', plain: 'short' \\} \\}\\)\\);$",
+  "^\n?  const hostSecret = 'Rq8Xw2Lp5Vb9Nk3Ys7Hd1Mc4Fj6Ga0TzUe2Io';$",
+  "^\n?  for \\(const leak of \\[FAKE_ANTHROPIC, FAKE_JWT, FAKE_GITHUB, 'accessToken: \"Qx9Lm4Zp7Rk2Vc5Bn8Ty3Wd6\"'\\]\\) \\{$",
+]
+
+# Synthetic planted credentials and canary strings used to test rejection, redaction, or isolation; never authenticate.
+[[rules.allowlists]]
+description = "Synthetic planted credentials and canary strings used to test rejection, redaction, or isolation; never authenticate."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)tests/docker-login-create-evidence\\.test\\.mjs$"]
+regexes = [
+  "^\n?  const secret = 'dckr_pat_SYNTHETICSECRET123';$",
+]
+
+# Synthetic source-code scanner inventory: credential variable names in source snippets, no credentials.
+[[rules.allowlists]]
+description = "Synthetic source-code scanner inventory: credential variable names in source snippets, no credentials."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)tests/fixtures/non-sbx-process-sites\\.json$"]
+regexes = [
+  "^\n?    \"key\": \"027cb844ad904cb89be99fc9fe6fe4030bcfded5ee6d2c697b8a7c92d0235dec\",$",
+  "^\n?    \"key\": \"0729d511fd7ea6bce61dfaed3a48034cb3377c761d6eb54983e12b75fc860997\",$",
+  "^\n?    \"key\": \"12132fe3d6cd419357e365114cb10d50af91604b27b12eec29b4bf4b8975212e\",$",
+  "^\n?    \"key\": \"151f19f0cf10996e870fa37d247ee7a83a87f95008740ba651fd20a48bbf8b08\",$",
+  "^\n?    \"key\": \"18aa8c015601283b5102fe9f970a321dba1a7216eab28af58cd10af2242c8fe0\",$",
+  "^\n?    \"key\": \"1a5bcccfa6b2b878ad235d5f93febb93218714e3c19c39b40f3e91e8e969eaf8\",$",
+  "^\n?    \"key\": \"1ac8e0a9cbf9d9c2c9f9a2db9f6280e41c35b9aa76c1ac752f999e289eebfc48\",$",
+  "^\n?    \"key\": \"1be0ffbd6320a19130234c3d13af3f39eaeb3ab56458d6dd59f1240eb8b88c65\",$",
+  "^\n?    \"key\": \"1c49e03088c1fe71829c408057a0a9cef115e479400d10d2d95ad54356590e2d\",$",
+  "^\n?    \"key\": \"2311a6cfc3d9f40912627c7308d1bcd98c512ee15a00a295c3deba0f6df7b873\",$",
+  "^\n?    \"key\": \"28b7153501f95abe42240a41251926d30fa0c532c58fafd5aacd25994eda06ed\",$",
+  "^\n?    \"key\": \"2906f86ac40ea7006bdd30de20868fb21b25956f6f7a5170178bc91c4eddd7c9\",$",
+  "^\n?    \"key\": \"2bf0936d2ebab063258bd2efd3aea28d797b5d85cd5f6a4388ecc471c4c4ca17\",$",
+  "^\n?    \"key\": \"2c733375a76370f423381bedaa17f1808926850221fc26894a7950f7281473a9\",$",
+  "^\n?    \"key\": \"2cd38e08156b7cecddb9c694b6e94a7f3e72fa919ac30dd5d7b1307d61eb5375\",$",
+  "^\n?    \"key\": \"2cea0f6d6ec2f54b1050e03ac210bb43362fcb67b8b9ad86b814641549b41d2f\",$",
+  "^\n?    \"key\": \"31714222c6a6ef0309796867d6bd0a65a9f6b5fb7131d587b03233b89fdb8b7b\",$",
+  "^\n?    \"key\": \"338ec22bb48bed20a55dd7f1d1ad044fe7de19bcec936aedb1e0f5e224dbea3e\",$",
+  "^\n?    \"key\": \"37c074b21344a5da4f65aa701abc1d08cec59287cd52f4fd97c0ecb3a99e8294\",$",
+  "^\n?    \"key\": \"438ad73eda57a273d290e6502118143f13795a8bef6255b9fd2261ff4b8095a2\",$",
+  "^\n?    \"key\": \"43ce3c165382aa7f7bac7766e8eaa16e8be6629799beba7fee737619dc6cca6e\",$",
+  "^\n?    \"key\": \"460f0c92e73acec43142c42058eee1a46166f47d5e24fb7b4426ef6dcd399f3d\",$",
+  "^\n?    \"key\": \"472634a47304675390f64d5dcc81ac654c3db8f96466f2751254b21c7c9330e4\",$",
+  "^\n?    \"key\": \"4bc84062c6a4cb757dbc373327d292c1d4e809e74fe01f02132e0a5688bff649\",$",
+  "^\n?    \"key\": \"4f632e78554e58d3d401fcf7af367287f43eac3e8d697da31503735d08dbbd54\",$",
+  "^\n?    \"key\": \"51ba703f8b7dc722bfa5d8a66a06aab3c3419148f16f7852d5b3a3c36429cbdb\",$",
+  "^\n?    \"key\": \"53c6d5e9259d20ac9bc6802d643dd8292cc2536ade7c8d6a081d93cd19caedf1\",$",
+  "^\n?    \"key\": \"570c057d195879380925939f7f6f98bf63803318858359b5bf42e355c22fbff4\",$",
+  "^\n?    \"key\": \"5aeb9847ded87149f2471dc6c8136d48dc0c0d03ef7da55b2e16ab246f6aa34f\",$",
+  "^\n?    \"key\": \"626e45fa5334e3b6b166a6aabc60219591f2805e90593e58b1b93f4db9f6ffb2\",$",
+  "^\n?    \"key\": \"6484318a7859e91985b64b4c8fb1f624e2a42a492f7abb77a9db5ded12ffa163\",$",
+  "^\n?    \"key\": \"6ba1a7c3726cf03045a2d6e41919d3b7b8767d00a946b75527a93046000c98a9\",$",
+  "^\n?    \"key\": \"6de782fcdf326db987576524d218dd643262b4975d7ca08bd4a8d243c2d4965e\",$",
+  "^\n?    \"key\": \"72efca16f6fd1df27bacc1f2c9b3b190d1d41b208f89704ece7d52c5b4756309\",$",
+  "^\n?    \"key\": \"753ab6d58f84dcd707415f2e0179b488ceb76a3cf2ca980ce987b9982a230e01\",$",
+  "^\n?    \"key\": \"78ca625337fb5073d5021b827703f6230c5cd6d3e80aee28bc214f23425e4fda\",$",
+  "^\n?    \"key\": \"7e2ad65d7dcac493432900fb9e135adc9354c8d98b24ebd7978c29fb176e69d0\",$",
+  "^\n?    \"key\": \"7f6df9e1e2d294b5ee91a02d2ccef0affaf4b8ad468a923300efe9745caaf5c4\",$",
+  "^\n?    \"key\": \"7f9ba59d4f3c21480ef01c0b1d647a8e21f3eb232cf06f717a6846db779629e0\",$",
+  "^\n?    \"key\": \"80234ae102b0d017262e91e164e4d279a34c19c405c13f4543ed925c42271573\",$",
+  "^\n?    \"key\": \"82e536b444dbbc44995af6755eae1f70694095d233ae2aa5d787fe4f72d2c0dd\",$",
+  "^\n?    \"key\": \"83100caccfb951ebc4b5b67b8dcb7cc2fcbdc4a92d0b7af5b7fea5885644dd30\",$",
+  "^\n?    \"key\": \"83791510afe3c9bc5f46df8d4271e85478874d2ec02d9e47a769770cd7d944e7\",$",
+  "^\n?    \"key\": \"844a06fe045fa1fcb416bd9a6969ec1a2a848eba5e4385bb2715206db757f060\",$",
+  "^\n?    \"key\": \"85a76ac69f56146ca7da5e28266270008d9687d9742ec15ccb7a33847a8b2019\",$",
+  "^\n?    \"key\": \"8787c8a1c5b222b71d02735685b636b2c46e353a6966ce27a4d46502d875e634\",$",
+  "^\n?    \"key\": \"89ad3a2da47ccd45afbf3be1c2542d818b1fe52d34183532f366d5b2443a9f0b\",$",
+  "^\n?    \"key\": \"9284f19b59568fb27b378eb424e8343819a6344ef1d537f47b34dfe870010161\",$",
+  "^\n?    \"key\": \"933f99cd5e9ddd7bfd83cdfb3769cb42a86c665ab1b4790daadd678b97061c66\",$",
+  "^\n?    \"key\": \"958a8c6aefec46d16c760d09765863f191a4599a1ca0371876601f01b8744637\",$",
+  "^\n?    \"key\": \"967b3766594cd671b004f7d4f20231f9a9eaed0af845d4043a060eb5f98647d2\",$",
+  "^\n?    \"key\": \"976dd21a670b7ec8138b8045b5054d33bc1b7d5cc24982e3db55fd6645fdacae\",$",
+  "^\n?    \"key\": \"9a4b2354ef5ab09279b166248389ba3048a74a6a1c43fb1da5d645fa98d8afe3\",$",
+  "^\n?    \"key\": \"9e04d4c8bba85ce5f79f422d339dd2bf7c0b49d582668e930f65dec9d95043c9\",$",
+  "^\n?    \"key\": \"9f74eff47df443322bd60fc459adc8462a6b11d1f86d920334070941d7fa4c3a\",$",
+  "^\n?    \"key\": \"a14850fcdc44deef86e3cea497204d4594a7a9c3ce5b721ccae81dc8d01876ee\",$",
+  "^\n?    \"key\": \"a2a6cdbddb06ca957ee0958c779ad8b6057cf42ceb5b5633e186089e5a980baa\",$",
+  "^\n?    \"key\": \"a68da7a8a43e13c893c51cde0daab12e07d0bdc6714dd6272a59a202c5a020c7\",$",
+  "^\n?    \"key\": \"a73dd8127847834e7f6cfcc4492f1cc8740ba6e9943af7b0b78795f70b3e53c5\",$",
+  "^\n?    \"key\": \"a784c72af338d0151d7aca9fbcf91b505d13c0c3d58005513e2ee752d785a222\",$",
+  "^\n?    \"key\": \"a82d318f9d304835170e87d5335a375005e17cab1c98922f9d918f28f1486c06\",$",
+  "^\n?    \"key\": \"a9ead03358777494efdeb84da0bae3f3abe56f18cedc5a33b3458a5c276f27c3\",$",
+  "^\n?    \"key\": \"aa19f3ef048aa58d4036a040059667833751ffeffb487b0b98edcb1fff61a2c8\",$",
+  "^\n?    \"key\": \"ac1343ade784421f3c49fc3e9171d72fff749129c64130d322c9d4d2f9a9b16e\",$",
+  "^\n?    \"key\": \"ade02877e01966c17429522c31b4c5a5b1caa925439e8d3d5fc3fe5b0e254015\",$",
+  "^\n?    \"key\": \"af7cbc95ca6da31e86614be788892caf58770d61e5cb49666f456c9bcf9c3549\",$",
+  "^\n?    \"key\": \"b04aab1c27f6fc739b9f0323e75e9406b37abbef6b9f7881926c64e11ba29dea\",$",
+  "^\n?    \"key\": \"b2785b15bd5047039862a5d5d40a1c26163a0f91f9bcc27eaecdeae638551877\",$",
+  "^\n?    \"key\": \"b854f406b1efa46775f6bb916a9866ec6b4d565cb550ed38678204b311766ec5\",$",
+  "^\n?    \"key\": \"ba1faff079f1b07f933bf3264eb56fab8af9569a6b70e5cdc7bc019fbec704ba\",$",
+  "^\n?    \"key\": \"bac5d8327c4607f9c8b88e0b29bf65ee729080e1cae61044d900fe4153aca205\",$",
+  "^\n?    \"key\": \"c6572b7dae69c41fd55af144d4e94979f23b5ee8058af811ee6b155a8abbeb2f\",$",
+  "^\n?    \"key\": \"cb47c1d0dbf46922be456ef20038baa76292c0a7fd5e169defb442bdefbad044\",$",
+  "^\n?    \"key\": \"ccc46a34265d7c4835ccb75f158cedc69ec41921996511285af8a495dcdbbe4f\",$",
+  "^\n?    \"key\": \"cccddb15044d60782c66e83e92388b08dc93ab94d418d3f03719233fafc4ba20\",$",
+  "^\n?    \"key\": \"cd6ae2a0c7827cbdeb0445fecaa6fbf64f739a5606e3c25e4ec1edfe50e0a25e\",$",
+  "^\n?    \"key\": \"cdece11c3ffb2bccf366e3a053e52f702aac5bea63e772e3c3118c16546b5166\",$",
+  "^\n?    \"key\": \"cef611142d04f12956d83ce7bb51dc17dbac7a59479f5094d84b186e4bb589e9\",$",
+  "^\n?    \"key\": \"cfc344c34016f2bae59a0c2f816d651e706c995b10fd42d6cfcba77f456ee77d\",$",
+  "^\n?    \"key\": \"d4939da1f35332b0ac7b9cf309a7cf62c35e4eaa2dacddf3394e730f942f1e66\",$",
+  "^\n?    \"key\": \"d7c4fbf8104eab8fa43151ed5d2e088ce3bcc40c3a3d61da6023c50861349b06\",$",
+  "^\n?    \"key\": \"d7d19f53990ce0ec6fbb27e3e96faf9962c754cd4ca61a66e0b91b08cfb4cc15\",$",
+  "^\n?    \"key\": \"ddfc092eab7154ae07a455ac87341897e2d5878ed8d0d5a9ea9dbd1a96b744cd\",$",
+  "^\n?    \"key\": \"de3378c82942ba5317428a6c3aac1614e5e870f82f947e446889bbf711359a91\",$",
+  "^\n?    \"key\": \"df0241b15d37ce56b0cee0c33b3d751ff00789851c070c6e663373fdceb0ff5c\",$",
+  "^\n?    \"key\": \"e40d4237526ddf118cd8dcce57c1c24b97573db10692a1a4ee1c721e57905762\",$",
+  "^\n?    \"key\": \"e4f815db262558a65cee6d3fcba2af5d13aa23306b6d898fc2cb6834e4f2112c\",$",
+  "^\n?    \"key\": \"e7e2a8dabc3042a64cbfefb1923898192fc59dd927778fa8472793586e61ac20\",$",
+  "^\n?    \"key\": \"eb6c04086c73b85e14d66fe7dc8fdabd0a87a00f4dd5d3d7985a9e4a496908a9\",$",
+  "^\n?    \"key\": \"efae251e9e0c425507ddc986df88b2bbe0aab374af7f11bf40c5311bcfc13e85\",$",
+  "^\n?    \"key\": \"f0120ff36c4233de9f3543417f1ef6e7bcc6d5067b2ad6f88bea3d11265c91c9\",$",
+  "^\n?    \"key\": \"f5a63db45e104dab12d177a79ecf43d1475ad852d222cb9a2a233ce65c5a9e1d\",$",
+  "^\n?    \"key\": \"fd04e6482e2ee93359bb8956c3fb16f714c01fa6066b519551093bc96aff40b6\",$",
+]
+
+# Synthetic planted credentials and canary strings used to test rejection, redaction, or isolation; never authenticate.
+[[rules.allowlists]]
+description = "Synthetic planted credentials and canary strings used to test rejection, redaction, or isolation; never authenticate."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)tests/owner-isolation\\.test\\.mjs$"]
+regexes = [
+  "^\n?    await writeFile\\(f\\.file,JSON\\.stringify\\(\\{\\.\\.\\.f\\.value,github_token:'ghp_Ab9Cd8Ef7Gh6Ij5Kl4Mn3Op2Qr1St0Uv'\\}\\)\\);$",
+]
+
+# Synthetic planted credentials and canary strings used to test rejection, redaction, or isolation; never authenticate.
+[[rules.allowlists]]
+description = "Synthetic planted credentials and canary strings used to test rejection, redaction, or isolation; never authenticate."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)tests/v1-diagnostics\\.test\\.mjs$"]
+regexes = [
+  "^\n?const CANARIES = \\['PLANTED_SECRET_4c86', 'PLANTED_PROMPT_4c86', 'PLANTED_TRANSCRIPT_4c86', 'private-host-4c86\\.internal',$",
+]
+
+# Synthetic test identifiers for model lookup, lease idempotency, or resource generations; no service credentials.
+[[rules.allowlists]]
+description = "Synthetic test identifiers for model lookup, lease idempotency, or resource generations; no service credentials."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)tests/v1-lender-pace50-cleanup-journal\\.test\\.mjs$"]
+regexes = [
+  "^\n?    leaseSeconds: 120, idempotencyKey: 'r4-orphaned-accepted-claim', acceptedAt: f\\.clock\\.now\\(\\)\\};$",
+]
+
+# Synthetic test identifiers for model lookup, lease idempotency, or resource generations; no service credentials.
+[[rules.allowlists]]
+description = "Synthetic test identifiers for model lookup, lease idempotency, or resource generations; no service credentials."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)tests/v1-lender\\.test\\.mjs$"]
+regexes = [
+  "^\n?  const held=\\{attempt:a1,observedAt:new Date\\(f\\.clock\\.now\\(\\)\\)\\.toISOString\\(\\)\\.replace\\('\\.000Z','Z'\\),idempotencyKey:'a1-observation'\\};$",
+  "^\n?  const stale=observed\\.find\\(entry=>entry\\.key==='a1-observation'\\);$",
+]
+
+# Synthetic test identifiers for model lookup, lease idempotency, or resource generations; no service credentials.
+[[rules.allowlists]]
+description = "Synthetic test identifiers for model lookup, lease idempotency, or resource generations; no service credentials."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)tests/v1-lending-meter\\.test\\.mjs$"]
+regexes = [
+  "^\n?  assert\\.equal\\(priceListUsd\\('claude-haiku-4-5-20251001', \\{ \\.\\.\\.emptyTokens\\(\\), output: 1e6 \\}\\)\\.model_key, 'claude-haiku-4-5-20251001'\\);$",
+]
+
+# Synthetic test identifiers for model lookup, lease idempotency, or resource generations; no service credentials.
+[[rules.allowlists]]
+description = "Synthetic test identifiers for model lookup, lease idempotency, or resource generations; no service credentials."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)ui/v1/src/mounted-use-resource\\.test\\.mjs$"]
+regexes = [
+  "^\n?  generationState=useResource\\(api,'jobs/generation',0\\);$",
+]
+
+# Public PostHog ingestion project identifier, embedded in the shipped client; not an administrative key.
+[[rules.allowlists]]
+description = "Public PostHog ingestion project identifier, embedded in the shipped client; not an administrative key."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)ui/v1/src/posthog\\.mjs$"]
+regexes = [
+  "^\n?export const PROJECT_TOKEN = 'phc_nFhRBipngqr9ptSzJnSuCJTD4xAvrCHQiLbvmZPEBUY6';$",
+]
+
+[[rules]]
+id = "github-pat"
+
+# Synthetic planted credentials and canary strings used to test rejection, redaction, or isolation; never authenticate.
+[[rules.allowlists]]
+description = "Synthetic planted credentials and canary strings used to test rejection, redaction, or isolation; never authenticate."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)tests/telemetry-no-free-text\\.test\\.mjs$"]
+regexes = [
+  "^\n?  'sk-ant-api03-Zq9XyW8vU7tS6rQ5pO4nM3lK2jI1hG0fEdCbAaZ', 'ghp_aB3dE5gH7jK9mN1pQ3sT5vX7zB9dF1hJ3kL5', 'AKIAIOSFODNN7EXAMPLE', 'Bearer eyJhbGciOiJIUzI1NiJ9\\.eyJzdWIiOiJhbGljZSJ9\\.sig',$",
+]
+
+# Synthetic planted credentials and canary strings used to test rejection, redaction, or isolation; never authenticate.
+[[rules.allowlists]]
+description = "Synthetic planted credentials and canary strings used to test rejection, redaction, or isolation; never authenticate."
+condition = "AND"
+regexTarget = "line"
+paths = ["(^|/)tests/telemetry-tripwire\\.test\\.mjs$"]
+regexes = [
+  "^\n?const PLANTED = \\['/home/alice/\\.ssh/id_rsa', 'alice@example\\.com', 'git@github\\.com:alice/private\\.git', 'sk-ant-api03-Zq9XyW8vU7tS6rQ5pO4nM3lK2jI1hG0fEdCbAaZ', 'ghp_aB3dE5gH7jK9mN1pQ3sT5vX7zB9dF1hJ3kL5', 'C:\\\\\\\\Users\\\\\\\\Alice\\\\\\\\x'\\];$",
+]

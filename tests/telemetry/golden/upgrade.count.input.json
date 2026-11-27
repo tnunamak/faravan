@@ -1,0 +1,39 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "observations": [
+    {
+      "kind": "event:update",
+      "data": {
+        "state": "checking",
+        "owner": "faravan",
+        "currentVersion": "0.1.0-preview.20261019.6",
+        "candidate": "0.1.0-preview.20261020.7"
+      },
+      "atMs": 0
+    },
+    {
+      "kind": "event:update",
+      "data": {
+        "state": "available",
+        "owner": "faravan",
+        "currentVersion": "0.1.0-preview.20261019.6",
+        "candidate": "0.1.0-preview.20261020.7"
+      },
+      "atMs": 900
+    },
+    {
+      "kind": "event:update",
+      "data": {
+        "state": "rolled_back",
+        "owner": "faravan",
+        "currentVersion": "0.1.0-preview.20261019.6",
+        "candidate": "0.1.0-preview.20261020.7"
+      },
+      "atMs": 95000
+    }
+  ]
+}

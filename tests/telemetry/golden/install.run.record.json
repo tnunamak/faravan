@@ -1,0 +1,1 @@
+{"attrs":{"method":"deb","outcome":"restart_failed"},"duration_ms":21000,"hour":"2026-10-21T19","kind":"span","name":"install.run","status":"error"}

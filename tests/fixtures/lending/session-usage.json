@@ -1,0 +1,17 @@
+{
+  "fixture_only": true,
+  "weekly_usage": [
+    {
+      "resource": "seven_day",
+      "epoch": 1790000000000,
+      "owner_usage_pct": 42.5,
+      "complete": true,
+      "censoring": {
+        "complete": true,
+        "limit_reached": false,
+        "owner_refused": false,
+        "owner_deferred": false
+      }
+    }
+  ]
+}

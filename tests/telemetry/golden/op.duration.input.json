@@ -1,0 +1,75 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "observations": [
+    {
+      "kind": "response",
+      "data": {
+        "status": 200,
+        "opId": "jobs.list",
+        "surface": "mcp",
+        "writer": "ops",
+        "durationMs": 30
+      },
+      "atMs": 0
+    },
+    {
+      "kind": "response",
+      "data": {
+        "status": 200,
+        "opId": "jobs.list",
+        "surface": "mcp",
+        "writer": "ops",
+        "durationMs": 30
+      },
+      "atMs": 0
+    },
+    {
+      "kind": "response",
+      "data": {
+        "status": 200,
+        "opId": "jobs.list",
+        "surface": "mcp",
+        "writer": "ops",
+        "durationMs": 30
+      },
+      "atMs": 0
+    },
+    {
+      "kind": "response",
+      "data": {
+        "status": 200,
+        "opId": "jobs.list",
+        "surface": "mcp",
+        "writer": "ops",
+        "durationMs": 30
+      },
+      "atMs": 0
+    },
+    {
+      "kind": "response",
+      "data": {
+        "status": 200,
+        "opId": "jobs.list",
+        "surface": "mcp",
+        "writer": "ops",
+        "durationMs": 30
+      },
+      "atMs": 0
+    },
+    {
+      "kind": "response",
+      "data": {
+        "status": 200,
+        "opId": "jobs.list",
+        "surface": "mcp",
+        "writer": "ops",
+        "durationMs": 3000
+      },
+      "atMs": 0
+    }
+  ]
+}

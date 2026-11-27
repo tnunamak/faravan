@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faravan.dev/protocol/v1/result.schema.json",
+  "title": "Faravan v1 result",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "faravan.result.v1"
+        },
+        "circle": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "job_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "attempt_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "executor": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "roster_epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "submitted_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "candidate": {
+          "$ref": "job.schema.json#/$defs/artifact"
+        },
+        "transcript": {
+          "$ref": "job.schema.json#/$defs/artifact"
+        },
+        "checks": {
+          "description": "Optional verify_v1 sandbox observations; old results omit this field.",
+          "type": "array", "maxItems": 1,
+          "items": {"$ref": "receipt.schema.json#/$defs/check"}
+        },
+        "receipt": {
+          "$ref": "receipt.schema.json"
+        },
+        "output": {
+          "description": "Present exactly when the job has result, with the same kind. message: the primary text is the agent's final message in the signed transcript. The candidate is the faravan-output/ tree in both kinds.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {"enum": ["message", "files"]}
+          },
+          "required": ["kind"]
+        }
+      },
+      "required": [
+        "schema",
+        "circle",
+        "job_digest",
+        "attempt_id",
+        "generation",
+        "executor",
+        "roster_epoch",
+        "submitted_at",
+        "candidate",
+        "transcript",
+        "receipt"
+      ]
+    },
+    "signature": {
+      "$ref": "job.schema.json#/$defs/signature"
+    }
+  },
+  "required": [
+    "payload",
+    "signature"
+  ]
+}

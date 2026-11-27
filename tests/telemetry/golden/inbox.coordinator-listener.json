@@ -1,0 +1,1 @@
+{"format":"faravan-telemetry-inbox","gen":3,"origin":"coordinator","record":{"attrs":{"component":"coordinator","error.type":"internal_error","outcome":"requeue","phase":"none","problem.registry":"failure","surface":"background"},"name":"problem.count","period":"2026-10-21T19","value":1},"schema_version":1}

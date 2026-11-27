@@ -1,0 +1,16 @@
+name: tap checks
+on: [push, pull_request]
+jobs:
+  cask:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Homebrew/actions/setup-homebrew@master
+      - name: Tap the checked-out revision
+        run: |
+          brew tap --custom-remote tnunamak/faravan "$GITHUB_WORKSPACE"
+          brew trust --tap tnunamak/faravan
+      - run: brew style Casks/faravan.rb
+      - run: brew audit --cask --online tnunamak/faravan/faravan
+      # Native launch and cleanup are release acceptance checks, not an install
+      # hook: the cask never strips quarantine, enables login, or starts lending.

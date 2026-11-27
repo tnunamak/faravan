@@ -1,0 +1,92 @@
+[
+  {
+    "version": 2,
+    "_cleanupId": "00000000-0000-4000-8000-000000000000",
+    "job_id": "synthetic-listing-0",
+    "owner_scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sbx_home": "/synthetic/sbx-home",
+    "sandbox_id": "wf-0000000000000000",
+    "scratch_dir": "/synthetic/scratch/wf-job-wf-0000000000000000-fixture",
+    "create": "dispatched",
+    "compute_created": false,
+    "create_settled": false,
+    "compute_stopped": false,
+    "data_cleanup": "pending",
+    "policy_cleanup": "pending",
+    "absent_since": 1000,
+    "deadline_at": 2000,
+    "deadline_clock": {
+      "version": 1,
+      "boot_at": 2000,
+      "boot_id": "synthetic-boot"
+    },
+    "deadline_enforcer": {
+      "binary": "/synthetic/sbx",
+      "kind": "systemd",
+      "unit": "synthetic-unit"
+    },
+    "unknown": "creation_unproven"
+  },
+  {
+    "version": 2,
+    "_cleanupId": "00000000-0000-4000-8000-000000000001",
+    "job_id": "synthetic-listing-1",
+    "owner_scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sbx_home": "/synthetic/sbx-home",
+    "sandbox_id": "wf-0000000000000001",
+    "scratch_dir": "/synthetic/scratch/wf-job-wf-0000000000000001-fixture",
+    "create": "dispatched",
+    "compute_created": false,
+    "create_settled": false,
+    "compute_stopped": false,
+    "data_cleanup": "pending",
+    "policy_cleanup": "pending",
+    "absent_since": 1000,
+    "deadline_at": 2000,
+    "deadline_clock": {
+      "version": 1,
+      "boot_at": 2000,
+      "boot_id": "synthetic-boot"
+    },
+    "deadline_enforcer": {
+      "binary": "/synthetic/sbx",
+      "kind": "systemd",
+      "unit": "synthetic-unit"
+    },
+    "unknown": "creation_unproven"
+  },
+  {
+    "version": 2,
+    "_cleanupId": "00000000-0000-4000-8000-000000000002",
+    "job_id": "synthetic-listing-2",
+    "owner_scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sbx_home": "/synthetic/sbx-home",
+    "sandbox_id": "wf-0000000000000002",
+    "scratch_dir": "/synthetic/scratch/wf-job-wf-0000000000000002-fixture",
+    "create": "dispatched",
+    "compute_created": false,
+    "create_settled": false,
+    "compute_stopped": false,
+    "data_cleanup": "pending",
+    "policy_cleanup": "pending",
+    "absent_since": 1000,
+    "unknown": "creation_unproven"
+  },
+  {
+    "version": 2,
+    "_cleanupId": "00000000-0000-4000-8000-000000000003",
+    "job_id": "synthetic-listing-3",
+    "owner_scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sbx_home": "/synthetic/sbx-home",
+    "sandbox_id": "wf-0000000000000003",
+    "scratch_dir": "/synthetic/scratch/wf-job-wf-0000000000000003-fixture",
+    "create": "dispatched",
+    "compute_created": false,
+    "create_settled": false,
+    "compute_stopped": false,
+    "data_cleanup": "pending",
+    "policy_cleanup": "pending",
+    "absent_since": 1000,
+    "unknown": "creation_unproven"
+  }
+]

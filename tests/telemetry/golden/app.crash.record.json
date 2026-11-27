@@ -1,0 +1,1 @@
+{"attrs":{"crash.kind":"uncaught_exception","crash_loop":false,"errno":"none","frames":[{"file":"lib/v1/app.mjs","line":1203}],"js.error_class":"TypeError","uptime":"5"},"epoch":"e-AAAAAAAAAAAAAAAAAAAZ","hour":"2026-10-21T19","kind":"event","name":"app.crash","origin":"crash","rid":"r-AAAAAAAAAAAAAAAAAAA2","seq":2,"session":"s-AAAAAAAAAAAAAAAAAAAZ"}

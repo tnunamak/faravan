@@ -1,0 +1,52 @@
+{
+  "payload": {
+    "author": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
+    "circle": "11111111-1111-4111-8111-111111111111",
+    "created_at": "2026-10-09T12:00:00Z",
+    "expires_at": "2026-10-09T13:00:00Z",
+    "input_protection": "none",
+    "intent_id": "22222222-2222-4222-8222-222222222222",
+    "max_attempts": 3,
+    "prompt": {
+      "bytes": 80,
+      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "media_type": "text/plain"
+    },
+    "requirements": {
+      "capabilities": [
+        "patch-output"
+      ],
+      "egress": "provider-only",
+      "harness": [
+        "codex"
+      ],
+      "limits": {
+        "cpu": 2,
+        "disk_bytes": 4294967296,
+        "memory_bytes": 2147483648,
+        "output_bytes": 10485760,
+        "wall_seconds": 600
+      },
+      "model": {
+        "any_of": [
+          "example-model"
+        ]
+      }
+    },
+    "roster_epoch": 7,
+    "schema": "faravan.job.v1",
+    "source": {
+      "artifact": {
+        "bytes": 1000,
+        "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "media_type": "application/gzip"
+      },
+      "kind": "archive"
+    }
+  },
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
+    "value": "1Ijfou4bzz35o0nCKfbFywAi3a5BT4XP1mt1sxXA25WAuCjkNy2OXwY3dPZpIT5EImSRWFX3fm88d-xbp_w_Cg"
+  }
+}

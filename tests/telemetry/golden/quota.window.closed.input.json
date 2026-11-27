@@ -1,0 +1,27 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "observations": [
+    {
+      "kind": "event:quota-window",
+      "data": {
+        "provider": "claude",
+        "windowId": "five_hour",
+        "windowKind": "five_hour",
+        "plan": "max5",
+        "lendingOn": true,
+        "ownerUsedPct": 90,
+        "lentPoints": 5,
+        "unusedPct": 0,
+        "shortfall": true,
+        "coverage": 1,
+        "contaminated": true,
+        "history": 5
+      },
+      "atMs": 0
+    }
+  ]
+}

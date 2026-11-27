@@ -1,0 +1,301 @@
+#!/usr/bin/env node
+/*
+ * Owner-hosted Faravan v1 coordinator process. "The owner runs a coordinator
+ * he hosts" is literally this: a single foreground HTTP server, started
+ * with one command, kept running under systemd/tmux/whatever the operator
+ * already uses for long-lived processes (this script does not daemonize
+ * itself).
+ *
+ * Raw operation is env-only to keep it trivially scriptable. The managed host
+ * flow invokes `--host-config <host.json>`, which supplies those same values
+ * from a private, generated state directory and may start a Gozar exposure:
+ *   FARAVAN_COORDINATOR_PORT        default 8787
+ *   FARAVAN_COORDINATOR_HOST        default 127.0.0.1
+ *   FARAVAN_COORDINATOR_HOME         coordinator home (default <app home>/coordinator, see coordinatorHome)
+ *   FARAVAN_COORDINATOR_HOME        legacy alias for coordinator home
+ *   FARAVAN_COORDINATOR_V1_ORIGIN   required canonical HTTPS or loopback HTTP origin
+ *                                  v1 reopens <coordinator home>/v1/coordinator.sqlite
+ *                                  (preprovisioned out of band with --v1-provision) and uses v1/blobs
+ *
+ * This executable serves v1 only. A v0 host.json (no `protocol_version: 1`) or
+ * v0 FARAVAN_COLLECTIVE_TOKEN / FARAVAN_COORDINATOR_ROSTER_FILE settings are
+ * rejected, never reinterpreted: keep the v0 state untouched and host v1 from a
+ * separate FARAVAN_COORDINATOR_HOME (the existing Faravan host setting).
+ */
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+const { compatEnv } = require('../lib/compat/env.mjs');
+const {saveJsonFile}=require('../lib/local-state.mjs');
+
+// A restart refused because the owner stopped hosting. The supervisor then sees the new stop and does not retry.
+const HOST_NOT_WANTED_EXIT = 3;
+
+function fail(message) {
+  process.stderr.write(`faravan-coordinator: ${message}\n`);
+  process.exit(1);
+}
+
+async function main() {
+  const { startCoordinator } = await import('../lib/coordinator.mjs');
+
+  const hostConfigFlag = process.argv.slice(2);
+  // --v1-provision-circle adds one more circle to this coordinator (R1); --v1-provision sets up the single default circle.
+  const addCircle = hostConfigFlag.includes('--v1-provision-circle');
+  const provisionIndex = hostConfigFlag.indexOf(addCircle ? '--v1-provision-circle' : '--v1-provision');
+  const provisionFile = provisionIndex === -1 ? null : hostConfigFlag[provisionIndex + 1];
+  const usage = 'usage: faravan-coordinator [--host-config <host.json>] [--v1-provision <provision.json> | --v1-provision-circle <provision.json>]';
+  if (provisionIndex !== -1) {
+    if (!provisionFile || provisionFile.startsWith('--')) fail(usage);
+    hostConfigFlag.splice(provisionIndex, 2);
+    if (hostConfigFlag.includes('--v1-provision') || hostConfigFlag.includes('--v1-provision-circle')) fail(usage);
+  }
+  const hostConfigIndex = hostConfigFlag.indexOf('--host-config');
+  const hostConfigFile = hostConfigIndex === -1 ? null : hostConfigFlag[hostConfigIndex + 1];
+  if (hostConfigIndex !== -1 && (!hostConfigFile || hostConfigFlag.length !== 2)) {
+    fail(usage);
+  }
+  if (provisionFile && hostConfigIndex === -1 && hostConfigFlag.length) fail(usage);
+  let hostConfig = null;
+  if (hostConfigFile) {
+    try { hostConfig = JSON.parse(fs.readFileSync(hostConfigFile, 'utf8')); } catch (error) {
+      fail(`could not read host configuration ${hostConfigFile}: ${error.message}`);
+    }
+  }
+
+  if (provisionFile) {
+    // Explicit, local-only trust bootstrap. Never listen or fetch a roster.
+    const { coordinatorHome } = await import('../lib/host.mjs');
+    const { provisionV1Store } = await import('../lib/v1/store.mjs');
+    const { strictParse } = await import('../lib/protocol/index.mjs');
+    const home = hostConfigFile ? path.dirname(path.resolve(hostConfigFile)) : coordinatorHome();
+    // This local JSON file is human-readable/device-generated, not wire JCS.
+    // Strict duplicate-key/profile checks and roster signature checks still apply.
+    const provisioning = strictParse(fs.readFileSync(provisionFile, 'utf8'), { canonical: false });
+    const dbPath = addCircle
+      ? path.join(home, 'v1', 'circles', String(provisioning.circle_id), 'coordinator.sqlite')
+      : path.join(home, 'v1', 'coordinator.sqlite');
+    if (addCircle && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(String(provisioning.circle_id))) fail('circle_id must be a UUID');
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true, mode: 0o700 });
+    const provisioned = provisionV1Store({ path: dbPath, provisioning });
+    process.stdout.write(JSON.stringify({ status: 'provisioned', ...provisioned }) + '\n');
+    return;
+  }
+
+  const V0_GUIDANCE = 'this coordinator serves v1 only and never reinterprets v0 state; keep the v0 directory as it is and host v1 from a separate FARAVAN_COORDINATOR_HOME (FARAVAN_COORDINATOR_HOME remains supported) (the existing Faravan host setting) (see docs/protocol/hosting.md)';
+  if (hostConfig && hostConfig.protocol_version !== 1) {
+    fail(`host configuration ${hostConfigFile} is not a v1 host (protocol_version ${hostConfig.protocol_version ?? 'missing'}); ${V0_GUIDANCE}`);
+  }
+  if (process.env.FARAVAN_COLLECTIVE_TOKEN || process.env.FARAVAN_COORDINATOR_ROSTER_FILE) {
+    fail(`FARAVAN_COLLECTIVE_TOKEN and FARAVAN_COORDINATOR_ROSTER_FILE are v0 settings; ${V0_GUIDANCE}`);
+  }
+  const managed = hostConfig !== null;
+  const { coordinatorHome } = await import('../lib/host.mjs');
+  const home = hostConfigFile ? path.dirname(path.resolve(hostConfigFile)) : coordinatorHome();
+  const { acquireCoordinatorProcessLockWait } = await import('../lib/v1/lock.mjs');
+  // Bounded admission wait before any bind, tunnel or status write.
+  // Keep ownership until process exit; a crash is recovered by process identity.
+  const releaseCoordinator = await acquireCoordinatorProcessLockWait(home);
+  process.once('exit', releaseCoordinator);
+  if (hostConfigFile) {
+    const { assertCoordinatorLaunchGeneration } = await import('../lib/v1/host.mjs');
+    assertCoordinatorLaunchGeneration(hostConfigFile);
+  }
+
+  const port = Number(hostConfig?.port ?? compatEnv('COORDINATOR_PORT') ?? 8787);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) fail('FARAVAN_COORDINATOR_PORT must be a valid port number');
+  const { coordinatorBindHost, legacyLoopbackOrigin } = await import('../lib/host.mjs');
+  const managedExposure = hostConfig?.reachability?.kind === 'gozar';
+  const loopback = hostConfig && legacyLoopbackOrigin(hostConfig);
+  const host = managedExposure || loopback ? '127.0.0.1' : coordinatorBindHost({reachability:hostConfig?.reachability, envHost:compatEnv('COORDINATOR_HOST')});
+  const dataDir = hostConfig?.data_dir || compatEnv('COORDINATOR_DATA_DIR')
+    || path.join(coordinatorHome(), 'tasks');
+  let status = {
+    status: 'starting', host, port, data_dir: dataDir, roster_size: 0,
+    protocol_version: 1, pid: process.pid,
+    ...(hostConfig?.collective_name ? { collective_name: hostConfig.collective_name } : {}),
+  };
+  if(hostConfigFile) {
+    const {captureCoordinatorOwner}=await import('../lib/v1/coordinator-owner.mjs');
+    status.owner=captureCoordinatorOwner(process.pid,hostConfigFile);
+  }
+  const statusFile = hostConfig?.status_path;
+  if (hostConfig?.reachability?.kind === 'lan') status.public_url = hostConfig.reachability.publicUrl;
+  if (loopback) status.public_url = loopback;
+  let resuming = false;
+  if (hostConfigFile) {
+    // A crash restart must not undo an owner's stop that ran after the supervisor chose to restart (host.mjs).
+    const { fenceCoordinatorRestart } = await import('../lib/v1/host.mjs');
+    try { resuming = await fenceCoordinatorRestart({configFile:hostConfigFile, writeStarting:() => writeStatus(statusFile,status)}); }
+    catch (error) {
+      if (error.code !== 'host_not_wanted') fail('this restart could not check that hosting is still wanted: ' + error.message);
+      process.stdout.write(JSON.stringify({ type: 'host_error', code: error.code, message: error.message }) + '\n');
+      process.exit(HOST_NOT_WANTED_EXIT);
+    }
+  }
+
+  if (managed && hostConfig.reachability && !managedExposure && !loopback && hostConfig.reachability.kind !== 'lan') {
+    fail('The legacy exposure record requires review before hosting can start.');
+  }
+  const origin = managed ? hostConfig.v1_origin || status.public_url : compatEnv('COORDINATOR_V1_ORIGIN');
+  if (!origin && !managedExposure) fail('FARAVAN_COORDINATOR_V1_ORIGIN is required');
+  const v1 = { dbPath: path.join(home, 'v1', 'coordinator.sqlite'),
+    blobDir: path.join(home, 'v1', 'blobs'), origin, deferOrigin:managedExposure,
+    // Circles added with --v1-provision-circle live under v1/circles/<id>/; the default circle still works beside them.
+    circlesDir: path.join(home, 'v1', 'circles') };
+  let server;
+  try {
+    server = await startCoordinator({ port, host, v1 });
+  } catch (error) {
+    await recordEdge({ name: 'problem.count', period: hourNow(), value: 1, attrs: { component: 'coordinator', 'error.type': 'internal_error',
+      outcome: 'requeue', phase: 'none', 'problem.registry': 'failure', surface: 'background' } });
+    throw error;
+  }
+  const address = server.address();
+  const routeWatch = new AbortController();
+  const {coordinatorHosting,publishedOrigin} = await import('../lib/coordinator-hosting.mjs');
+  const exposure = managedExposure ? coordinatorHosting(home) : null;
+  const target = '127.0.0.1:'+address.port;
+  let route, pinned = origin;
+  function updateRoute(view) {
+    const published = publishedOrigin(view,target);
+    const usable = published && (!pinned || pinned === published);
+    if (usable) {pinned = published;server.configureOrigin(published,view.verification.validUntil.value);}
+    else server.withdrawOrigin();
+    status = {...status,status:usable?'public_listening':'local_listening',public_url:usable ? published : null,
+      route: {state:view?.routeState ?? 'unknown', binding:view?.binding ?? null, verification:view?.verification ?? null}};
+    writeStatus(statusFile,status);
+  }
+  status = {...status,status:exposure?'local_listening':'listening',
+    host:address.address,port:address.port,circles_router:true};
+  try {
+    if (exposure) {
+      writeStatus(statusFile,status);
+      if (exposure.read()?.spec.target !== target)
+        throw Object.assign(new Error('Review an exposure offer for the coordinator’s actual listener.'), {code:'consent_required'});
+      route = await exposure.start(undefined,{explicit:!resuming});
+      updateRoute(route);
+      if (!status.public_url) throw Object.assign(new Error(pinned && route.origin && route.origin !== pinned
+        ? 'The signed circle origin cannot change. Restore the original address.'
+        : 'Gozar has not proved the coordinator address.'), {code:'verification_failed'});
+    }
+  } catch (error) {
+    await recordTunnel(error.code === 'consent_required' || error.code === 'setup_required' ? 'requirements_unsupported' : 'network_error');
+    status = {...status,status:'exposure_blocked',public_url:null,code:error.code ?? 'exposure_unavailable',
+      ...(error.route?.binding && {route:{state:error.route.routeState,binding:error.route.binding,verification:error.route.verification}})};
+    writeStatus(statusFile,status);
+    process.stdout.write(JSON.stringify({type:'host_error',code:status.code,message:error.message})+'\n');
+    server.close();
+    throw error;
+  }
+  writeStatus(statusFile, status);
+  process.stdout.write(JSON.stringify(status) + '\n');
+  if (route) void (async () => {
+    try {for await (const view of exposure.watch(route,routeWatch.signal)) {
+      if (routeWatch.signal.aborted) return;
+      updateRoute(view);
+    }} catch {if (!routeWatch.signal.aborted) updateRoute(null);}
+  })();
+
+  let awake = null, awakeTimer = null, shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    clearInterval(awakeTimer);
+    routeWatch.abort();
+    server.withdrawOrigin?.();
+    let exitCode = 0;
+    // Seal admission in this turn, but a synchronous stop failure must not
+    // prevent the independent tunnel cleanup from starting.
+    let awakeStop;
+    try { awakeStop = awake?.stop(); } catch (error) { awakeStop = Promise.reject(error); }
+    const cleanup = await Promise.allSettled([awakeStop, Promise.resolve().then(() => exposure?.shutdown({origin:pinned}))]);
+    for (const result of cleanup) if (result.status === 'rejected') {
+      process.stderr.write(String(result.reason?.message || result.reason) + '\n'); exitCode = 1;
+    }
+    // Cleanup failure is not confirmed helper death or a public listener.
+    let view = status.keep_awake;
+    try { if (awake) view = awake.state(); } catch (error) {
+      process.stderr.write(String(error?.message || error) + '\n'); exitCode = 1;
+    }
+    const reasons = new Set(['on', 'starting', 'stopping', 'stopped', 'stop_failed',
+      'unsupported', 'off_by_choice', 'on_battery', 'power_unknown']);
+    const keepAwake = view ? {enabled:view.enabled === true, active:view.active === true,
+      reason:reasons.has(view.reason) ? view.reason : 'stop_failed'} : null;
+    try {
+      writeStatus(statusFile, {status:exitCode ? 'stop_failed' : 'stopped',
+        ...(exitCode ? {reason:'cleanup_failed'} : {}), port:address.port,
+        ...(hostConfig?.collective_name ? {collective_name:hostConfig.collective_name} : {}),
+        ...(keepAwake ? {keep_awake:keepAwake} : {})});
+    } catch (error) {
+      process.stderr.write(String(error?.message || error) + '\n'); exitCode = 1;
+    } finally {
+      server.close(() => process.exit(exitCode));
+    }
+  };
+  // Listen for stop signals before the keep-awake helper starts: a stop during startup must still stop its whole tree.
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+  process.on('SIGHUP', shutdown);
+  // H2: keep this computer awake while it hosts and is on power; the host config's keep_awake is the person's switch (default on).
+  // The status file carries what happened (active, why not, and the last time the computer was found to have slept).
+  const { createKeepAwake } = await import('../lib/v1/keep-awake.mjs');
+  if (shuttingDown) return; // stopped while loading: never start an inhibitor after shutdown began
+  const readSwitch = () => { try { return JSON.parse(fs.readFileSync(hostConfigFile, 'utf8')).keep_awake !== false; } catch { return true; } };
+  awake = hostConfig ? createKeepAwake({ enabled: readSwitch }) : null;
+  if (awake) {
+    let published = '';
+    const publish = () => {
+      awake.tick();
+      const view = awake.state(), text = JSON.stringify(view);
+      if (text === published) return;
+      published = text;
+      status = { ...status, keep_awake: { enabled: view.enabled, active: view.active, reason: view.reason },
+        ...(view.last_wake ? { last_wake: view.last_wake } : {}) };
+      writeStatus(statusFile, status);
+    };
+    publish();
+    awakeTimer = setInterval(publish, awake.tickMs); awakeTimer.unref();
+    process.on('exit', () => {
+      // Only immediate EOF/signalling is possible here, never awaited death.
+      try { Promise.resolve(awake.stop()).catch(() => {}); } catch {}
+    });
+  }
+}
+
+// Edge records for the app's inbox (docs/design/TELEMETRY.md §2.2, §3.4). They go to the app's home, where the app reads
+// them, and carry only enums and counts: never a circle, member or job. Telemetry never changes how the coordinator fails.
+async function recordEdge(record) {
+  try {
+    const { configHome } = await import('../lib/local-state.mjs');
+    const { writeInboxRecord } = await import('../lib/v1/telemetry/crash.mjs');
+    writeInboxRecord({ dir: path.join(configHome(), 'v1', 'telemetry'), origin: 'coordinator', record });
+  } catch { /* the coordinator reports its own failure, and nothing else */ }
+}
+const hourNow = () => new Date().toISOString().slice(0, 13);
+// A tunnel that did not start is one occurrence, and the coordinator owns it: the problem count and the tunnel's health
+// state. The app counts neither (its health snapshot has no tunnel, and its hosting ops count only usage), so nothing
+// counts the same failure twice. A start error is a network failure that clears on retry (requeue); a missing agent
+// will not clear by itself (failed).
+const tunnelOutcome = { network_error: 'requeue', requirements_unsupported: 'failed' };
+const recordTunnel = async reason => {
+  await recordEdge({ name: 'problem.count', period: hourNow(), value: 1, attrs: { component: 'coordinator', 'error.type': reason,
+    outcome: tunnelOutcome[reason], phase: 'none', 'problem.registry': 'failure', surface: 'background' } });
+  await recordEdge({ name: 'health.state', period: hourNow(), value: 1, attrs: { check: 'coordinator_tunnel', reason, state: 'blocked' } });
+};
+
+function writeStatus(file, status) {
+  if (!file) return;
+  // The status path is operator-chosen; its own directory is the durable base, as before.
+  const dir = path.dirname(file);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  saveJsonFile(file, status, { base: dir });
+}
+
+main().catch((error) => {
+  if (['coordinator_already_running', 'coordinator_stale_lock', 'host_not_wanted'].includes(error.code))
+    process.stdout.write(JSON.stringify({type:'host_error', code:error.code, message:error.message}) + '\n');
+  if (error.code === 'host_not_wanted') process.exit(HOST_NOT_WANTED_EXIT);
+  fail(error && error.message ? error.message : String(error));
+});

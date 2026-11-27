@@ -1,0 +1,81 @@
+/* The request page: review content and the decision card remain in normal document flow. */
+.rq{display:grid;gap:var(--s-6)}
+.rq-head{display:grid;gap:var(--s-2)}
+.rq-head .back{justify-self:start;margin-left:calc(var(--s-1) * -1);min-height:32px}
+.rq-head h1{margin:0;text-wrap:balance}
+.rq-sub{margin:0;font-size:var(--text-sm);color:var(--text-2)}
+.rq-notice{display:flex;gap:var(--s-2);align-items:center;margin:0;padding:var(--s-3) var(--s-4);border-radius:var(--r-md);background:var(--need-soft);color:var(--need-text);font-size:var(--text-sm)}
+.rq-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:var(--s-8);align-items:start}
+.rq-main{display:grid;gap:var(--s-8);min-width:0}
+
+.rq-ask{display:grid;gap:var(--s-3)}
+.rq-who{display:flex;align-items:center;gap:var(--s-2);font-size:var(--text-sm)}
+.rq-who-name{font-weight:600}
+.rq-quote{margin:0;padding:var(--s-4) var(--s-5);border-left:3px solid var(--line-strong);border-radius:0 var(--r-md) var(--r-md) 0;background:var(--surface-2);
+  font-size:var(--text-title3);line-height:var(--lh-title3);color:var(--text);overflow-wrap:break-word;hyphens:auto}
+.rq-history{margin:0;font-size:var(--text-xs);color:var(--text-3)}
+
+.rq-section{display:grid;gap:var(--s-3)}
+.rq-h2{margin:0;font:600 var(--text-xs)/var(--lh-xs) var(--font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
+.rq-list{list-style:none;margin:0;padding:0 var(--s-4);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg)}
+.rq-list li{display:flex;gap:var(--s-3);align-items:flex-start;padding:var(--s-3) 0;font-size:var(--text-sm);line-height:1.45}
+.rq-list li+li{border-top:1px solid var(--line)}
+.rq-list li>.i{color:var(--text-3);margin-top:var(--s-half);flex:none}
+.rq-list li>div{display:flex;flex-wrap:wrap;column-gap:var(--s-3);row-gap:var(--s-half);min-width:0}
+.rq-k{font-weight:600;min-width:96px}
+.rq-v{color:var(--text-2);min-width:0;overflow-wrap:break-word}
+.rq-v code{font:var(--text-mono)/var(--lh-mono) var(--font-mono);padding:0 var(--s-1);border-radius:var(--r-xs);background:var(--surface-2);color:var(--text)}
+.rq-facts{padding:var(--s-1) var(--s-4);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg)}
+
+/* Disclosures (ds/disclosure.jsx) sit in a ruled stack. */
+.rq-more{display:grid;border-top:1px solid var(--line)}
+.rq-caption{margin:0;font-size:var(--text-xs);color:var(--text-3)}
+
+/* Decision card */
+.rq-decide{position:sticky;top:var(--s-8);min-width:0}
+.rq-card{display:grid;gap:var(--s-4);padding:var(--s-5);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-2)}
+.rq-clock{display:flex;align-items:center;gap:var(--s-2);margin:0;font-size:var(--text-sm);font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+.rq-clock>.i{color:var(--text-3)}
+.rq-clock.urgent,.rq-clock.urgent>.i{color:var(--need-text)}
+.rq-exact{margin-left:auto;font-weight:400;color:var(--text-3)}
+.rq-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2)}
+.rq-actions .action{display:grid}
+.rq-actions .action>.btn{width:100%}
+.rq-actions .action>.feedback:empty{display:none}
+.rq-actions .btn-primary{background:var(--ink-btn);color:var(--ink-btn-text);border-color:var(--ink-btn);box-shadow:none}
+.rq-actions .btn-primary:hover:not(:disabled){background:var(--ink-btn-hover)}
+.rq-hint{margin:0;font-size:var(--text-xs);line-height:var(--lh-xs);color:var(--text-3)}
+.rq-disclosure{font-size:var(--text-xs);line-height:var(--lh-body);color:var(--text-2)}
+.rq-card.is-done{gap:var(--s-4)}
+.rq-state{display:flex;gap:var(--s-3);align-items:flex-start;margin:0;font-size:var(--text-sm);line-height:1.45;text-wrap:pretty}
+.rq-state>.i,.rq-state>.spinner{margin-top:var(--s-half);color:var(--text-2)}
+.rq-card.is-done .btn{justify-self:stretch}
+.rq-card.is-done .btn-primary{background:var(--ink-btn);color:var(--ink-btn-text);border-color:var(--ink-btn);box-shadow:none}
+
+@media(max-width:899px){
+  .rq{gap:var(--s-5)}
+  .rq-grid{grid-template-columns:minmax(0,1fr);gap:var(--s-6)}
+  .rq-main{gap:var(--s-6)}
+  .rq-quote{font-size:var(--text-body);line-height:var(--lh-body);padding:var(--s-3) var(--s-4)}
+  .rq-k{min-width:0}
+  .rq-decide{position:static;min-width:0}
+  .rq-card,.rq-card.is-done{padding:0;background:none;border:0;box-shadow:none;gap:var(--s-3)}
+  .rq-help{display:none}
+}
+
+/* The new instruction is the quote; earlier material is a separate, explicitly untrusted disclosure. */
+.rq-parent{margin:0;font-size:var(--text-sm);line-height:var(--lh-body);overflow-wrap:break-word}
+.rq-context{border-block:1px solid var(--line)}
+.rq-context-note{margin:0;color:var(--text-2);font-size:var(--text-sm);line-height:var(--lh-body)}
+.rq-context-fields{display:grid;gap:var(--s-4);margin:0}
+.rq-context-fields>div{display:grid;gap:var(--s-1);min-width:0}
+.rq-context-fields dt{font-size:var(--text-sm);font-weight:600}
+.rq-context-fields dd{margin:0;font-size:var(--text-sm);line-height:var(--lh-body);overflow-wrap:break-word;hyphens:auto}
+.rq-context-fields ul{display:grid;gap:var(--s-2);list-style:none;margin:0;padding:0}
+.rq-context-fields li{display:grid;gap:var(--s-1)}
+.rq-context-fields li span{color:var(--text-2)}
+.rq-context-fields code{white-space:pre-wrap;overflow-wrap:anywhere;font-variant-ligatures:none}
+.rq-answer-error{margin:0;color:var(--need-text);font-size:var(--text-sm);line-height:var(--lh-body)}
+.rq-actions .btn-primary:disabled,.rq-actions .btn-primary[aria-disabled=true]{background:var(--surface-2);color:var(--text-3);border-color:var(--line);box-shadow:none;cursor:not-allowed}
+
+.rq-run-action{display:grid}

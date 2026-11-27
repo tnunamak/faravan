@@ -1,0 +1,301 @@
+@import './result-workspace.css';
+@import './result-actions.css';
+@import './settings.css';
+/* The Jobs list and the jump palette (U14). From the <style> block of mockups/src/jobs.html. */
+.filters{display:flex;gap:var(--s-2);flex-wrap:wrap;align-items:center}
+button.chip{font:inherit;font-size:var(--text-sm);font-weight:550;cursor:pointer;min-height:var(--touch);height:auto}
+.grp{font-size:var(--text-xs);font-weight:600;color:var(--text-3);padding:var(--s-4) var(--s-4) var(--s-2)}
+.jobs-list{min-width:0}.jobs-filter-wrap{position:relative;margin-bottom:var(--s-4)}
+.job-count{font-variant-numeric:tabular-nums;color:var(--text-2);margin-left:var(--s-1)}
+.chip.on .job-count{color:inherit}
+.jobs-tools{display:flex;align-items:flex-start;flex-direction:column;gap:var(--s-2);margin-bottom:var(--s-4)}
+.jobs-search{display:flex;align-items:center;gap:var(--s-2);width:100%;max-width:calc(var(--s-18) * 5)}
+.jobs-search .input{width:100%;min-width:0}
+.jobs-columns,.jlist .row{display:grid;grid-template-columns:minmax(0,1fr) 12rem minmax(8rem,9rem) 5rem var(--s-4);gap:var(--s-3)}
+.jobs-columns{padding-inline:var(--s-4)}
+.jlist .row{cursor:pointer;min-height:calc(var(--touch) + var(--s-4))}.jlist .row:hover{background:var(--surface-2)}
+.job-row-title{display:flex;align-items:center;gap:var(--s-3);min-width:0}.job-title-text{min-width:0;flex:1}
+.jlist .row-title{display:block;white-space:normal;overflow-wrap:anywhere}
+.jlist .jcol{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jlist .job-status{overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:break-word}.job-batch-title{flex:1;min-width:0}
+.jlist .row-meta{display:none}.job-kind{display:flex;align-items:center;justify-content:center;width:var(--s-6);height:var(--s-6);flex:none;color:var(--text-2)}
+.jlist .row:focus-visible,.jobs-batch>summary:focus-visible{outline-offset:-2px}
+.jobs-batch>summary{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);padding:var(--s-4);min-height:calc(var(--touch) + var(--s-4));cursor:pointer;font-size:var(--text-sm);list-style:none}
+.jobs-batch>summary::-webkit-details-marker{display:none}.jobs-batch>summary:hover{background:var(--surface-2)}.jobs-batch[open]>summary>.i{transform:rotate(90deg)}
+.jobs-skeleton{display:grid;grid-template-columns:minmax(0,1fr) var(--s-18) var(--s-18);gap:var(--s-4);align-items:center;padding:var(--s-4);min-height:calc(var(--touch) + var(--s-4))}
+@media(max-width:899px){
+  .jobs-columns{display:none}.jlist .row{grid-template-columns:minmax(0,1fr) var(--s-4)}
+  .jlist .jcol{display:none}.jlist .row-meta{display:flex;flex-wrap:wrap;gap:var(--s-1);font-size:var(--text-xs)}
+  .jobs-tools{display:block}.jobs-search{max-width:none}
+  .jobs-filter-wrap:after{content:'';position:absolute;inset:0 0 0 auto;width:var(--s-8);background:linear-gradient(to right,transparent,var(--bg));pointer-events:none}
+  .jobs-filter-wrap .filters{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0;padding-right:var(--s-8)}.jobs-filter-wrap .chip{flex:none}
+}
+.palette{position:fixed;left:50%;top:90px;transform:translateX(-50%);width:min(620px,calc(100% - 24px));z-index:41;overflow:hidden}
+.palette .in{display:flex;gap:var(--s-3);align-items:center;padding:var(--s-4) var(--s-4);border-bottom:1px solid var(--line);font-size:var(--text-title3)}
+.palette .in input{flex:1;min-width:0;border:0;background:transparent;color:inherit;font:inherit;outline:0}
+.palette .sec{font-size:var(--text-xs);font-weight:600;color:var(--text-3);padding:var(--s-3) var(--s-4) var(--s-1)}
+.palette .it{display:flex;gap:var(--s-3);align-items:center;padding:var(--s-2) var(--s-4);font-size:var(--text-sm);min-height:44px;color:inherit;text-decoration:none;cursor:pointer;width:100%;border:0;background:transparent;text-align:left;font-family:inherit}
+.palette .it.sel{background:var(--surface-2)}
+.palette .none{padding:var(--s-4);color:var(--text-2)}
+.palette-results{max-height:60vh;overflow:auto}
+
+
+/* Job results and receipts. */
+.jh{display:grid;gap:var(--s-3);margin-bottom:var(--s-6)}.jh>.pill{justify-self:start}
+.back{display:inline-flex;align-items:center;gap:var(--s-1);min-height:var(--touch);color:var(--text-2);text-decoration:none;font-size:var(--text-sm)}
+.back:hover{color:var(--text)}
+.wait-card{padding:var(--s-5);display:grid;gap:var(--s-4)}
+.presence{display:flex;align-items:center;gap:var(--s-3)}
+.prog{display:grid}.prog div{display:flex;gap:var(--s-3);align-items:center;padding:var(--s-2) 0;font-size:var(--text-sm)}
+.prog div+div{border-top:1px solid var(--line)}.prog .ok{color:var(--on)}.prog .now{color:var(--text);font-weight:600}.prog .bad{color:var(--bad-text)}
+.prog div>span{color:var(--text)}.prog .todo,.prog .todo>span{color:var(--text-2)}
+.use{padding:var(--s-5);display:grid;gap:var(--s-3)}
+.use>.action{display:grid;min-width:0;margin:0;align-items:stretch}.use>.action>.btn{width:100%;min-height:var(--touch)}.use>.action>.feedback:empty{display:none}
+.job-asked-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);flex-wrap:wrap}
+.fact code,.fact .by{overflow-wrap:anywhere}.fact .by{font-size:var(--text-xs);color:var(--text-3);margin-top:var(--s-1)}.fact.info .ic{background:var(--surface-2)}
+.job-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,17rem);gap:var(--s-6);align-items:start}
+.job-main,.job-page .rail{min-width:0}.job-page .rail{position:static}
+.job-files{list-style:none;padding:0;margin:0;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface)}
+.job-files li+li{border-top:1px solid var(--line)}.job-files a{display:flex;align-items:center;justify-content:space-between;gap:var(--s-4);padding:var(--s-3) var(--s-4);min-height:var(--touch);color:inherit;text-decoration:none;cursor:pointer}.job-files a:hover{background:var(--surface-2)}.job-files a:focus-visible{outline-offset:-2px}.job-files code{overflow-wrap:anywhere}
+.diff-count{white-space:nowrap;font-size:var(--text-sm);flex:none}.job-page .plus,.apply-files .plus{color:var(--diff-add-mark)}.job-page .minus,.apply-files .minus{color:var(--diff-del-mark)}
+.job-file-head{display:flex;justify-content:space-between;align-items:center;gap:var(--s-3);padding:var(--s-3) var(--s-4);border-bottom:1px solid var(--line)}.job-file-head code{overflow-wrap:anywhere}
+.job-diff{min-width:0;overflow:hidden}.diff-scroll{overflow-x:auto;max-width:100%;padding-block:var(--s-2)}.diff-scroll:focus-visible{outline-offset:-2px}
+.diff-lines{width:max-content;min-width:100%;font:var(--text-mono)/var(--lh-mono) var(--font-mono);font-variant-ligatures:none}
+.diff-row{display:flex;white-space:pre;min-height:1lh}.diff-row code{font:inherit;font-variant-ligatures:none;padding-right:var(--s-5)}.line-number{width:5ch;flex:none;text-align:right;padding-right:var(--s-2);color:var(--text-3);user-select:none;border-right:1px solid var(--line);margin-right:var(--s-2)}
+.diff-add{background:var(--diff-add-bg)}.diff-del{background:var(--diff-del-bg)}.diff-meta{color:var(--text-2);background:var(--surface-2)}
+.job-details summary{cursor:pointer;min-height:var(--touch);display:flex;align-items:center;font-size:var(--text-sm);font-weight:600}
+.job-code{font:var(--text-mono)/var(--lh-mono) var(--font-mono);overflow:auto;white-space:pre;background:var(--surface-2);padding:var(--s-4);border-radius:var(--r-sm);max-height:50vh}
+.apply-remedies{margin-top:var(--s-2)}
+@media(max-width:899px){.job-layout{grid-template-columns:minmax(0,1fr);gap:var(--s-6)}.job-layout>.rail{grid-row:2}.job-main{grid-row:1}.job-file-head{padding-inline:var(--s-3)}}
+
+/* The request page (U5): the two answers sit side by side, and a disabled "Run it" reads as disabled. */
+.rail .pair .action{flex:1;display:flex;flex-direction:column}.rail .pair .action .btn{flex:1}
+.rail .pair .action .feedback:empty{display:none}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-primary:disabled{background:var(--surface-2);color:var(--text-2);border-color:var(--line-strong);box-shadow:none;opacity:1}
+
+/* "What lending needs, in order" (U3c). */
+.blockers .av{background:var(--surface-2);color:var(--text-2)}
+.blockers .av.st-ok{background:var(--on-soft);color:var(--on-text)}
+.blockers .av.st-blocked{background:var(--need-soft);color:var(--need-text)}
+.blockers .row-end{flex-wrap:wrap;justify-content:flex-end}.blockers .legacy button{min-height:36px}
+.blockers [data-state=waits] .row-title{color:var(--text-2)}
+
+/* Add as a branch (U22). */
+.apply-files{list-style:none;margin:0;padding:var(--s-3) var(--s-4);background:var(--surface-2);border-radius:var(--r-md);display:grid;gap:var(--s-2);font-size:var(--text-sm)}
+.apply-files code{font-family:var(--font-mono)}.apply-files .plus{color:var(--diff-add-mark)}.apply-files .minus{color:var(--diff-del-mark)}
+.apply-body .field{display:grid;gap:var(--s-2)}.apply-body input.mono{font-family:var(--font-mono)}
+/* Native dialogs enter the top layer and make the background inert. */
+dialog.palette{margin:0;padding:0;color:var(--text);max-height:calc(100dvh - var(--s-8));top:var(--s-14);border:1px solid var(--line);box-shadow:var(--shadow-3)}
+dialog.palette::backdrop{background:var(--scrim)}
+.palette .it.sel{box-shadow:inset 2px 0 var(--indicator)}
+.palette .it:hover{background:var(--surface-2)}
+.palette .it:focus-visible{outline-offset:-2px}
+.palette-footer{display:flex;align-items:center;justify-content:space-between;padding:var(--s-2) var(--s-4);border-top:1px solid var(--line);color:var(--text-2);font-size:var(--text-xs)}
+.shortcuts{padding:var(--s-6);display:grid;gap:var(--s-5)}
+.shortcuts dl{display:grid;grid-template-columns:auto 1fr;gap:var(--s-3);font-size:var(--text-sm);margin:0}
+.shortcuts dd{margin:0;color:var(--text-2)}
+@media(max-width:899px){dialog.palette{top:var(--s-4)}.palette-results{max-height:55dvh}}
+.palette-loading{height:var(--touch);padding:var(--s-3) var(--s-4)}
+.palette-loading .skeleton{display:block;height:var(--s-4);width:70%;border-radius:var(--r-xs);background:var(--surface-2)}
+.palette .in input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+.job-page .job-main{min-height:calc(var(--s-18) * 6)}.job-loading .jh>.skel{max-width:70%;height:var(--s-5)}.job-loading .jh>.loading-title{height:var(--s-8)}.job-loading .job-main>.card{min-height:calc(var(--s-18) * 4)}.job-loading .rail>.card{min-height:calc(var(--s-18) * 2)}
+
+.job-page .job-main,.job-page .rail{align-content:start}.job-page .btn-primary,dialog:has(.apply-body) .btn-primary{background:var(--ink-btn);color:var(--ink-btn-text);border-color:var(--ink-btn);box-shadow:none}.job-page .btn-primary:hover,dialog:has(.apply-body) .btn-primary:hover{background:var(--ink-btn);filter:brightness(.92)}
+@media(max-width:899px){.job-page .job-main{min-height:0}}
+
+.job-changes-loading{min-height:calc(var(--s-18) * 4)}.job-action-loading{min-height:var(--touch)}
+
+.job-circle{display:block;font-size:var(--text-xs);color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:899px){.job-circle{display:none}}
+
+.job-status-loading{justify-self:start;inline-size:calc(var(--s-18) * 2);block-size:var(--s-6)}
+
+/* What the agent is doing: the transcript as an activity feed (transcript-feed.jsx). */
+.activity{overflow:hidden}
+.activity-head{list-style:none;display:flex;align-items:center;gap:var(--s-2);min-height:var(--touch);padding:var(--s-3) var(--s-5);cursor:pointer;user-select:none;border-radius:var(--r-lg)}
+.activity-head::-webkit-details-marker{display:none}
+.activity-head:hover .activity-chev{color:var(--text)}
+.activity-head h2{margin:0}
+.activity-chev{color:var(--text-3);transition:transform var(--dur-2) var(--ease-out),color var(--dur-1)}
+.activity[open] .activity-chev{transform:rotate(90deg)}
+.activity-live{margin-left:auto;display:inline-flex;align-items:center;gap:var(--s-2);font-size:var(--text-xs);font-weight:500;color:var(--text-2)}
+.activity-dot{width:7px;height:7px;border-radius:50%;background:var(--on);animation:activity-pulse 2s var(--ease-out) infinite}
+@keyframes activity-pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--on) 45%,transparent)}70%,100%{box-shadow:0 0 0 6px transparent}}
+.activity-body{position:relative;border-top:1px solid var(--line)}
+.activity-empty{margin:0;padding:var(--s-4) var(--s-5)}
+.feed{list-style:none;margin:0;padding:var(--s-3) var(--s-5) var(--s-5);max-height:min(560px,62vh);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 var(--s-3));mask-image:linear-gradient(to bottom,transparent,#000 var(--s-3))}
+.feed:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.feed-entry{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:var(--s-3);align-items:start}
+.feed-time{font-size:var(--text-micro);line-height:28px;color:var(--text-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.feed-withheld{display:block;margin:var(--s-3) 0;line-height:1.5;text-wrap:balance}
+.feed-msg{margin:var(--s-4) 0 var(--s-2)}
+.feed-entry:first-child{margin-top:var(--s-1)}
+.feed-msg p,.feed-text p{margin:0;padding-top:var(--s-half);font-size:var(--text-body);line-height:1.6;color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere}
+.feed-msg code,.job-summary code{-webkit-box-decoration-break:clone;box-decoration-break:clone;font:500 var(--text-mono)/1 var(--font-mono);padding:var(--s-half) var(--s-1);border-radius:5px;background:var(--surface-2);border:1px solid var(--line)}
+.feed-text p{font-size:var(--text-sm);color:var(--text-2)}
+.feed-text.is-error p{display:flex;gap:var(--s-2);align-items:baseline;color:var(--bad-text)}
+.feed-text.is-error .i{flex:none;align-self:center}
+.feed-tool+.feed-tool{margin-top:var(--s-half)}
+.feed-row{display:flex;align-items:center;gap:var(--s-2);min-width:0;min-height:30px;padding:var(--s-half) var(--s-2);margin-inline:calc(-1 * var(--s-2));border-radius:var(--r-xs);font-size:var(--text-sm);color:var(--text-2)}
+summary.feed-row{list-style:none;cursor:pointer}
+summary.feed-row::-webkit-details-marker{display:none}
+summary.feed-row:hover,.feed-more[open]>summary.feed-row{background:var(--surface-2)}
+.feed-icon{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;color:var(--text-3)}
+.feed-icon .spinner{width:13px;height:13px;border-width:1.5px;color:var(--run)}
+.feed-line{flex:1;display:flex;align-items:baseline;gap:var(--s-2);min-width:0}
+.feed-verb{flex:none;font-weight:500;color:var(--text-2)}
+.feed-target{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:var(--text-mono)/1.5 var(--font-mono);color:var(--text)}
+.feed-meta{flex:none;font-size:var(--text-xs);color:var(--text-3);font-variant-numeric:tabular-nums}
+.feed-chev{flex:none;color:var(--text-3);transition:transform var(--dur-1) var(--ease-out)}
+.feed-more[open] .feed-chev{transform:rotate(90deg)}
+.feed-tool.is-running .feed-verb{color:var(--text)}
+.feed-tool.is-error .feed-icon,.feed-tool.is-error .feed-verb,.feed-tool.is-error .feed-meta{color:var(--bad)}
+.feed-tool.is-error .feed-meta{font-weight:600}
+.feed-output{margin:var(--s-1) 0 var(--s-2) var(--s-6);padding:var(--s-3);max-height:280px;overflow-y:auto;overflow-x:hidden;white-space:pre-wrap;overflow-wrap:anywhere;font:var(--text-mono)/var(--lh-mono) var(--font-mono);color:var(--text-2);background:var(--bg-sunk);border:1px solid var(--line);border-radius:var(--r-sm)}
+.feed-command{color:var(--text)}
+.feed-tool.is-error .feed-output:not(.feed-command){color:var(--bad-text);background:var(--bad-soft);border-color:color-mix(in srgb,var(--bad) 35%,var(--line))}
+.feed-trim{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-1) 0 var(--s-2);font-size:var(--text-xs);color:var(--text-3)}
+.feed-trim:before,.feed-trim:after{content:'';flex:1;border-top:1px dashed var(--line-strong)}
+.feed-jump{position:absolute;left:50%;bottom:var(--s-4);transform:translateX(-50%);display:inline-flex;align-items:center;gap:var(--s-1);min-height:32px;padding:0 var(--s-3) 0 var(--s-4);border:0;border-radius:var(--r-pill);background:var(--ink-btn);color:var(--ink-btn-text);font:600 var(--text-xs)/1 var(--font-sans);box-shadow:var(--shadow-2);cursor:pointer;animation:feed-jump-in var(--dur-2) var(--ease-out)}
+.feed-jump:hover{background:var(--ink-btn-hover)}
+@keyframes feed-jump-in{from{opacity:0;transform:translate(-50%,6px)}}
+.wait-card,.prog{grid-template-columns:minmax(0,1fr)}.prog div{min-width:0}.prog .prog-text{display:flex;align-items:baseline;gap:var(--s-2);min-width:0;white-space:nowrap}.prog-text>span{flex:none}
+.prog-code{min-width:0;overflow:hidden;text-overflow:ellipsis;font:500 var(--text-mono)/1.4 var(--font-mono);color:var(--text-2)}
+.prog .prog-after{flex:none;margin-left:auto;font-weight:400;color:var(--text-2);font-variant-numeric:tabular-nums}
+.feed-tool.is-running .feed-meta{color:var(--run-text)}
+.feed-quiet{grid-column:1;margin:0 0 var(--s-1) var(--s-6);font-size:var(--text-xs);color:var(--text-3)}
+@media(max-width:899px){.prog .prog-text{flex-wrap:wrap;row-gap:var(--s-half)}.prog-code{flex:1 1 100%}.activity-head{padding-inline:var(--s-4)}.activity-empty{padding-inline:var(--s-4)}.feed{padding-inline:var(--s-4);max-height:70vh}.feed-output{margin-left:0}}
+.job-image-preview { margin: 0; padding: var(--s-4); overflow: hidden; }
+.job-image-preview img { display: block; max-width: 100%; max-height: 40rem; width: auto; height: auto; object-fit: contain; margin-inline: auto; }
+
+.job-image-preview.is-loading { min-height: var(--s-18); }
+
+/* Returned messages share the job page's reading width and surface tokens. */
+.result-reader,.result-file{min-width:0}
+.result-toolbar{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);flex-wrap:wrap}
+.result-prose{font-size:var(--text-body);line-height:1.75;overflow-wrap:break-word;hyphens:auto;max-width:75ch}
+.result-prose>*+*{margin-top:var(--s-4)}
+.result-prose h1{font-size:var(--text-title1);line-height:1.3}
+.result-prose h2{font-size:var(--text-title2);line-height:1.4}
+.result-prose h3,.result-prose h4,.result-prose h5,.result-prose h6{font-size:var(--text-title3);line-height:1.4}
+.result-prose ul,.result-prose ol{padding-inline-start:var(--s-6);list-style:revert}
+.result-prose li+li{margin-top:var(--s-2)}
+.result-prose blockquote{border-inline-start:1px solid var(--line);padding-inline-start:var(--s-4);color:var(--text-2)}
+.result-prose pre{max-width:100%;overflow:auto;padding:var(--s-4);background:var(--surface-2);border-radius:var(--r-sm);font:var(--text-mono)/var(--lh-mono) var(--font-mono);white-space:pre}
+.result-prose :not(pre)>code{font-family:var(--font-mono);font-size:var(--text-sm);background:var(--surface-2);padding:0;border-radius:var(--r-sm)}
+.result-table{overflow:auto;max-width:100%}.result-table table{border-collapse:collapse;width:100%}.result-table th,.result-table td{text-align:start;border-bottom:1px solid var(--line);padding:var(--s-2) var(--s-3);vertical-align:top}
+.result-file .job-file-head{flex-wrap:wrap}.result-file .job-file-head code{flex:1;min-width:10ch}
+@media(max-width:600px){.result-toolbar .pair{width:100%;flex-wrap:wrap}.result-toolbar .pair>*{flex:1}}
+
+.job-timeline .row{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s-1);padding-inline:0}.job-timeline .row-end{white-space:normal;font-variant-numeric:tabular-nums}.job-timeline .row-title{overflow-wrap:anywhere}
+
+/* Results share the page frame with the rest of the app. */
+.job-result .job-layout{grid-template-columns:minmax(0,1fr) 20rem;gap:var(--s-5)}
+.job-page .jh{margin-bottom:0}.job-page .jh h1{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:break-word}
+.job-result .job-main{min-height:0}
+.result-rail{display:block;overflow:visible;align-self:start}
+.result-rail-section{padding:var(--s-4);min-width:0}
+.result-rail-section+.result-rail-section{border-top:1px solid var(--line)}
+.result-rail summary{cursor:pointer;min-height:var(--touch);font-size:var(--text-sm);font-weight:600;align-content:center}
+.result-rail-section>summary{margin-block:calc(-1 * var(--s-2))}
+.result-rail .t-title2{font-size:var(--text-title3)}
+.result-rail .facts{gap:var(--s-2)}.result-rail .fact{padding:0;background:none;border:0}.result-rail .fact .ic{display:none}
+.result-rail .job-thread{padding:0}.result-rail .job-thread-actions{flex-wrap:wrap}
+.result-rail .job-thread-list{max-height:18rem;overflow:auto}
+.job-result .result-rail .job-timeline h2{display:none}
+.result-rail .result-actions{padding-top:var(--s-3)}
+.result-desktop-action:empty{display:none}.result-desktop-action>.btn,.result-desktop-action>.action,.result-desktop-action>.action>.btn{width:100%}
+.result-phone-action{display:none}
+.job-result-error{justify-items:start}
+@media(max-width:899px){
+ .page:has(.job-result){padding-inline:var(--s-4)}
+ .job-result .job-layout{grid-template-columns:minmax(0,1fr)}
+ .result-phone-action{display:block}.result-phone-action:empty{display:none}
+ .result-phone-action>.btn,.result-phone-action>.action,.result-phone-action>.action>.btn{width:100%}
+ .result-desktop-action{display:none}
+}
+.result-rail>.result-rail-section:first-child{border-radius:var(--r-lg) var(--r-lg) 0 0}
+.result-rail>.result-rail-section:last-child{border-radius:0 0 var(--r-lg) var(--r-lg)}
+.result-rail>details>summary~*{margin-top:var(--s-3)}
+.result-rail .job-thread:not(.card){border:0;box-shadow:none;border-radius:0;background:none}
+.result-rail>details>div>h2{display:none}
+.job-summary pre code,.feed-msg pre code{font:inherit;padding:0;border:0;border-radius:0;background:none;white-space:pre;box-decoration-break:slice}
+.job-handoff{scroll-margin-top:var(--s-4)}
+.job-handoff>summary{gap:var(--s-2);font-size:var(--text-title3)}
+.job-handoff .job-thread{padding-top:var(--s-4)}
+.job-handoff .job-thread-actions{flex-direction:row;flex-wrap:wrap}
+.job-handoff .handoff-fields{gap:var(--s-5)}
+.job-handoff .handoff-fields dd{white-space:normal}
+
+/* A single stream while running; ended jobs group their history below the result. */
+.job-result-loading .job-layout>.card{min-height:14rem}
+.job-handoff>div{padding-block:var(--s-4)}
+.activity-bare .activity-head{padding:0}.activity-bare .activity-body{border:0}
+.activity-bare .feed{padding-inline:0;mask-image:none}
+.job-delete{color:var(--bad-text);justify-self:start;width:auto!important}
+.result-rail .job-delete{width:auto!important;align-self:start}
+.result-rail .btn-quiet{justify-content:flex-start;text-align:left}
+.result-toolbar .pair .btn{white-space:nowrap}
+@media(max-width:600px){.result-toolbar .pair{display:grid;grid-template-columns:1fr;justify-items:start}.result-toolbar .pair>*{flex:none}.result-toolbar .pair .btn{width:auto}}
+
+.activity-intro{padding:var(--s-4) var(--s-5) 0}.job-details>div{padding-block:var(--s-4)}
+
+/* Keep the frame fixed as a live job becomes a delivered result. */
+.job-page .job-main{min-height:0}
+.result-rail .fact .by{display:none}
+.job-page .result-prose h1,.job-page .handoff-markdown h1{font-size:var(--text-title3);line-height:1.45}
+.job-page .result-prose h2,.job-page .handoff-markdown h2{font-size:var(--text-title3)}
+.feed-jump{position:static;transform:none;display:flex;margin:var(--s-2) auto;animation:none}
+.activity-intro+.feed{margin-top:var(--s-3);padding-top:var(--s-3)}
+dialog:has(.apply-body) .btn-primary[aria-disabled=true]{background:var(--surface-2);color:var(--text-3);border-color:var(--line);opacity:.7;filter:none;cursor:not-allowed}
+.apply-hint{margin-block:var(--s-3)}
+@media(max-width:899px){.page:has(.job-page){padding-inline:var(--s-4)}.activity-intro{padding-inline:var(--s-4)}}
+
+/* Keep terminal properties beside the outcome, with one compact panel. */
+.terminal-rail>.card{border:0;box-shadow:none;border-radius:0;background:none;margin:0}
+.terminal-rail>.card+.card{border-top:1px solid var(--line)}
+.terminal-rail .use{padding:var(--s-4)}
+.job-handoff>div{gap:var(--s-4)}
+.job-handoff .job-thread{padding-top:0}
+.job-handoff .job-thread-actions{justify-content:flex-start;align-items:center}
+.job-handoff .job-thread-actions>*{flex:none;width:auto}
+.job-page .result-table-hint{margin-top:var(--s-2);font-size:var(--text-xs);font-weight:600}
+
+.result-properties{margin:0;display:grid;gap:var(--s-3)}
+.result-properties>div{display:grid;grid-template-columns:var(--s-18) minmax(0,1fr);gap:var(--s-3);font-size:var(--text-sm);line-height:1.5}
+.result-properties dt{color:var(--text-2)}.result-properties dd{margin:0;overflow-wrap:break-word}
+.result-rail [aria-label="More job actions"]>.btn{width:100%;justify-content:flex-start}
+.result-rail .btn{padding-inline:var(--s-3)}
+
+@media(max-width:899px){.result-action-caption,.result-rail-primary-only{display:none}}
+@media(max-width:599px){.apply-terminal{display:none}.job-page .result-reader .result-table table{width:100%}.job-page .result-reader .result-table th,.job-page .result-reader .result-table td{white-space:normal;padding-inline:var(--s-2)}}
+.job-image-preview img+.btn{margin-top:var(--s-3)}
+.terminal-rail>.card.card-pad{padding:var(--s-4)}
+.terminal-rail .result-footer{border-top:1px solid var(--line);padding-top:var(--s-3)}
+@media(max-width:767px){.job-page .review-diffs .job-file-head>code{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}}
+
+/* Both edges use the common frame. Keep the file tree above the full reading column. */
+@media(min-width:1200px){
+ .job-result .review-layout.has-tree{grid-template-columns:minmax(0,1fr)}
+ .job-result .review-tree{position:static;display:flex;flex-wrap:wrap;gap:var(--s-3);max-height:none;border-block:1px solid var(--line);padding-block:var(--s-2)}
+ .job-result .review-group{flex:1 1 12rem;min-width:0;max-width:none}
+ .job-result .review-group+.review-group{margin-top:0}
+}
+@media(min-width:900px) and (max-width:1199px){
+ .job-result .job-layout{grid-template-columns:minmax(0,1fr)}
+ .result-phone-action{display:block}.result-phone-action:empty{display:none}
+ .result-phone-action>.btn,.result-phone-action>.action,.result-phone-action>.action>.btn{width:100%}
+ .result-desktop-action,.result-action-caption,.result-rail-primary-only{display:none}
+}
+
+.result-rail .action,.result-rail .btn{width:100%}
+.result-rail .job-delete{width:100%!important;align-self:stretch}
+@media(min-width:900px) and (max-width:1199px){.result-phone-action>.btn,.result-phone-action>.action{max-width:24rem}}
+.jobs-notice{margin-bottom:var(--s-4);align-items:center}
+
+.result-rail code{display:inline-block;max-width:100%;vertical-align:top;white-space:normal;overflow-wrap:anywhere;hyphens:none}
+.result-rail p{overflow-wrap:normal;hyphens:none}
+
+.jobs-notice,.jobs-list~.saved-copy{margin-bottom:var(--s-4)}
+.saved-copy{padding-block:var(--s-3);margin-bottom:var(--s-4)}

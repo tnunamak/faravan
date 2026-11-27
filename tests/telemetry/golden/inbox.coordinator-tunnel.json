@@ -1,0 +1,1 @@
+{"format":"faravan-telemetry-inbox","gen":0,"origin":"coordinator","record":{"attrs":{"check":"coordinator_tunnel","reason":"network_error","state":"blocked"},"name":"health.state","period":"2026-10-21T19","value":1},"schema_version":1}

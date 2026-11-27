@@ -1,0 +1,15 @@
+[Unit]
+Description=Faravan coordinator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=PATH=/usr/lib/faravan/bin:/usr/lib/faravan/runtime/bin:/usr/local/bin:/usr/bin:/bin
+UnsetEnvironment=DBUS_SESSION_BUS_ADDRESS
+ExecStart=/usr/lib/faravan/runtime/bin/node /usr/lib/faravan/bin/faravan-coordinator --host-config "%h/.local/share/Faravan/coordinator/host.json"
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,33 @@
+cask "faravan" do
+  version "@VERSION@"
+  sha256 "@SHA256@"
+
+  url "@URL@"
+  name "Faravan"
+  desc "Lend and borrow coding-agent time with people you trust"
+  homepage "@HOMEPAGE@"
+
+  depends_on macos: ">= :sonoma"
+
+  app "Faravan.app"
+  binary "#{appdir}/Faravan.app/Contents/MacOS/faravan"
+
+  uninstall quit: "com.faravan.app"
+
+  # Uninstall directives also run during upgrade. Keep login choices through
+  # upgrades; the app's uninstall command removes startup before ordinary removal.
+  zap launchctl: "com.faravan.agent",
+      delete: "~/Library/LaunchAgents/com.faravan.agent.plist",
+      trash: "~/.faravan"
+
+  caveats <<~EOS
+    This preview has no Developer ID signature or Apple notarization.
+    Open Faravan.app in Finder, then use System Settings > Privacy & Security >
+    Open Anyway if macOS offers that choice. Stop for damage or malware alerts.
+    See the download page for checksums and the complete installation steps.
+
+    Launch at login is optional in You > Profile and devices.
+    Finish jobs and quit Faravan before: brew upgrade --cask faravan
+    Before uninstalling, run: faravan uninstall --keep-data
+  EOS
+end

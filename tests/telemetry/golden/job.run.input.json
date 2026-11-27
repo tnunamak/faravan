@@ -1,0 +1,34 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "observations": [
+    {
+      "kind": "event:lending",
+      "data": {
+        "account": "claude:0",
+        "status": "preparing"
+      },
+      "atMs": 0
+    },
+    {
+      "kind": "event:lending",
+      "data": {
+        "account": "claude:0",
+        "status": "running"
+      },
+      "atMs": 41000
+    },
+    {
+      "kind": "event:lending",
+      "data": {
+        "account": "claude:0",
+        "status": "failed",
+        "reason": "lease_expired"
+      },
+      "atMs": 183000
+    }
+  ]
+}

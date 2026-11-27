@@ -1,0 +1,45 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "health": {
+    "readiness": {
+      "checks": [
+        {
+          "name": "docker_login",
+          "ok": true
+        },
+        {
+          "name": "docker_runtime",
+          "ok": true
+        },
+        {
+          "name": "sbx_daemon",
+          "ok": true
+        },
+        {
+          "name": "kvm_access",
+          "ok": false
+        }
+      ]
+    },
+    "signedIn": {
+      "any": true
+    }
+  },
+  "observations": [
+    {
+      "kind": "lender-failure",
+      "data": {
+        "code": "sandbox_start_failed",
+        "phase": "prepare",
+        "message": "docker: /home/alice/.docker/config.json: permission denied",
+        "ref": "ABCDEF",
+        "job": "sha256:9d0e1c"
+      },
+      "atMs": 0
+    }
+  ]
+}

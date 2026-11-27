@@ -1,0 +1,24 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "observations": [
+    {
+      "kind": "health",
+      "data": {
+        "install": {
+          "lendingOn": true,
+          "hostsCircle": false,
+          "circles": 2,
+          "agents": [
+            "claude",
+            "codex"
+          ]
+        }
+      },
+      "atMs": 0
+    }
+  ]
+}

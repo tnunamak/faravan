@@ -1,0 +1,75 @@
+import {test,expect} from '@playwright/test';
+import {startHarness} from './lib.mjs';
+let harness;
+test.beforeAll(async()=>{harness=await startHarness();});
+test.afterAll(async()=>{await harness?.stop();});
+test('a late branch preview never authorizes a different folder, and only the applied receipt exposes its switch command',async({page})=>{
+  const circle='preview-circle',digest='sha256:'+'a'.repeat(64),requests=[];
+  await page.setViewportSize({width:1200,height:900});
+  await page.addInitScript(()=>{
+    const writes=[];
+    Object.defineProperty(window,'fixtureClipboardWrites',{value:writes});
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{writes.push(text);}}});
+  });
+  const preview=repo=>({status:'preview',job_digest:digest,patch_hash:'d'.repeat(64),preview_token:'fixture-preview',
+    repo,branch:'faravan/result',base:'b'.repeat(40),head:'b'.repeat(40),current_branch:'main',files:1,files_changed:[{path:'sum.mjs',insertions:1,deletions:1}]});
+  await page.route('**/api/circles',r=>r.fulfill({json:[{id:circle,name:'Weekend projects',origin:'http://fixture'}]}));
+  await page.route('**/api/circles/*/compose',r=>r.fulfill({json:{}}));
+  await page.route('**/api/jobs/**',async route=>{
+    const p=new URL(route.request().url()).pathname;
+    if(p.endsWith('/apply')){let release;const response=new Promise(r=>{release=r});requests.push({body:route.request().postDataJSON(),release});await route.fulfill({json:await response});return;}
+    if(p.endsWith('/changes'))return route.fulfill({json:{format:'diff',files:[{path:'sum.mjs',insertions:1,deletions:1}],diffstat:{files:1,insertions:1,deletions:1},diff:'diff --git a/sum.mjs b/sum.mjs\n--- a/sum.mjs\n+++ b/sum.mjs\n@@ -1 +1 @@\n-old\n+new\n'}});
+    if(p.endsWith('/transcript'))return route.fulfill({json:{text:'Done.'}});
+    if(p.endsWith('/retention'))return route.fulfill({json:{}});
+    return route.fulfill({json:{job_digest:digest,state:'result-accepted',local:{title:'Fix the sum',sourcePath:'/repo/A'}}});
+  });
+  await page.goto((await harness.link('owner'))+'#/job/'+encodeURIComponent(digest)+'/'+circle);
+  await page.getByRole('button',{name:'Add as a branch…'}).click();
+  const disclosure=page.locator('.job-applied .job-details');
+  await expect(disclosure).toHaveCount(0);
+  const sheet=page.getByRole('dialog',{name:'Add as a branch'}),folder=sheet.getByRole('textbox',{name:'Repository folder'});
+  await expect.poll(()=>requests.length).toBe(1);
+  await folder.fill('/repo/B');
+  const firstResponse=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/apply'));
+  requests[0].release(preview('/repo/A'));
+  await firstResponse;
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  await expect(sheet.getByRole('button',{name:'Add the branch',exact:true})).toHaveCount(0);
+  await expect(sheet.getByRole('button',{name:'Check the repository',exact:true})).toBeVisible();
+  await expect(sheet.getByText('Check this folder before adding the branch.',{exact:true})).toBeVisible();
+  await expect(sheet.getByRole('button',{name:'Add the branch',exact:true})).toHaveCount(0);
+  await sheet.getByRole('button',{name:'Check the repository',exact:true}).click();
+  await expect.poll(()=>requests.length).toBe(2);
+  expect(requests[1].body.repo).toBe('/repo/B');
+  requests[1].release(preview('/repo/B'));
+  await expect(sheet.getByRole('button',{name:'Add the branch',exact:true})).toBeEnabled();
+  await expect(folder).toHaveValue('/repo/B');
+  await sheet.getByRole('button',{name:'Add the branch',exact:true}).click();
+  await expect.poll(()=>requests.length).toBe(3);
+  expect(requests[2].body).toMatchObject({repo:'/repo/B',dry_run:false});
+  await expect(disclosure).toHaveCount(0);
+  requests[2].release({...preview('/repo/B'),status:'applied',commit:'c'.repeat(40)});
+  await expect(sheet).toBeHidden();
+  const card=page.locator('.job-applied');
+  await expect(card).toBeVisible();
+  await expect(disclosure).toHaveCount(1);
+  await expect(disclosure).not.toHaveAttribute('open','');
+  const summary=disclosure.locator('summary');
+  await expect(summary).toHaveText('Show the switch-branch command');
+  await summary.click();
+  const command=disclosure.locator('code');
+  const copy=disclosure.getByRole('button',{name:'Copy command'});
+  await expect(disclosure.locator('b')).toHaveText(/^(?:\/repo\/)?B$/);
+  await expect(command).toHaveText(/^git switch (?:faravan\/result|'faravan\/result'|"faravan\/result")$/);
+  const exactCommand=await command.textContent();
+  await copy.click();
+  await expect.poll(()=>page.evaluate(()=>window.fixtureClipboardWrites)).toEqual([exactCommand]);
+  await expect(disclosure.getByRole('status')).toHaveText('Copied');
+
+  await page.setViewportSize({width:390,height:844});
+  await expect(disclosure).toHaveAttribute('open','');
+  await expect(command).toBeHidden();
+  await expect(disclosure.locator('button[aria-label="Copy command"]')).toBeHidden();
+  await expect(card.getByText(/^The branch is on your computer, in (?:\/repo\/)?B\. Switch to it there\.$/)).toBeVisible();
+  expect(await page.evaluate(()=>window.fixtureClipboardWrites)).toEqual([exactCommand]);
+});

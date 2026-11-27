@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Faravan
+Comment=Open Faravan
+Exec=faravan
+Icon=faravan
+Terminal=false
+Categories=Utility;Network;
+StartupWMClass=faravan

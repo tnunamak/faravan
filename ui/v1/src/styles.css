@@ -1,0 +1,340 @@
+/* Legacy page styles. The app shell is styled by tokens.css, components.css and shell.css.
+   Pages not yet moved to the design system (U3 onward) render inside `.legacy`; their bare
+   element rules are scoped to it, and their colours now come from the design tokens so they
+   stay readable in the dark theme. Delete a rule here when the page that needs it moves. */
+:where(.legacy) button, :where(.legacy) input, :where(.legacy) select, :where(.legacy) textarea {
+  font:inherit
+}
+:where(.legacy) a {
+  color:var(--text-2);
+  text-underline-offset:3px
+}
+:where(.legacy) a, :where(.legacy) button, :where(.legacy) input, :where(.legacy) textarea, :where(.legacy) select, :where(.legacy) summary {
+  touch-action:manipulation
+}
+:where(.legacy) h2 {
+  font-size:var(--text-title2);
+  margin:0 0 var(--s-3)
+}
+:where(.legacy) h3 {
+  font-size:var(--text-title3)
+}
+:where(.legacy) p {
+  margin:var(--s-3) 0 var(--s-4)
+}
+.badge {
+  display:inline-flex;
+  padding:var(--s-1) var(--s-3);
+  background:var(--surface-2);
+  color:var(--text-2);
+  border-radius:24px;
+  font-weight:650;
+  font-size:var(--text-sm)
+}
+:where(.legacy) a.badge {
+  text-decoration:none
+}
+:where(.legacy) a.badge:hover {
+  text-decoration:underline
+}
+.connection {
+  font-size:var(--text-sm);
+  color:var(--text-2);
+  margin-bottom:var(--s-4)
+}
+.connection:empty {
+  display:none
+}
+.context {
+  max-width:420px;
+  margin-bottom:var(--s-6)
+}
+.stack {
+  display:grid;
+  gap:var(--s-5)
+}
+.panel {
+  border:1px solid var(--line-strong);
+  background:var(--surface);
+  border-radius:14px;
+  padding:var(--s-6);
+  min-width:0
+}
+.panel article+article, .panel li+li {
+  border-top:1px solid var(--line-strong);
+  padding-top:var(--s-4);
+  margin-top:var(--s-4)
+}
+.panel li {
+  overflow-wrap:anywhere
+}
+.panel ul, .panel ol {
+  padding-left:var(--s-6)
+}
+:where(.legacy) form {
+  display:grid;
+  gap:var(--s-4);
+  max-width:720px
+}
+:where(.legacy) label {
+  display:grid;
+  gap:var(--s-1);
+  font-weight:650
+}
+:where(.legacy) input, :where(.legacy) select, :where(.legacy) textarea {
+  min-height:44px;
+  border:1px solid var(--line-input);
+  border-radius:8px;
+  background:var(--surface);
+  color:var(--text);
+  padding:var(--s-3);
+  width:100%;
+  min-width:0
+}
+:where(.legacy) textarea {
+  min-height:120px;
+  resize:vertical
+}
+:where(.legacy) input[type=checkbox] {
+  width:22px;
+  min-height:22px
+}
+.check {
+  display:flex;
+  gap:var(--s-3);
+  align-items:center
+}
+.note {
+  border-left:4px solid var(--wait);
+  background:var(--wait-soft);
+  color:var(--wait-text);
+  padding:var(--s-4);
+  border-radius:4px;
+  overflow-wrap:anywhere
+}
+.error {
+  border:1px solid var(--bad);
+  background:var(--bad-soft);
+  color:var(--bad-text);
+  padding:var(--s-4);
+  border-radius:8px
+}
+.actions {
+  display:flex;
+  flex-wrap:wrap;
+  gap:var(--s-3);
+  margin:var(--s-4) 0
+}
+.action {
+  display:inline-flex;
+  flex-direction:column;
+  align-items:flex-start;
+  max-width:100%;
+  margin:var(--s-1) var(--s-2) var(--s-1) 0
+}
+.feedback {
+  font-size:var(--text-sm);
+  color:var(--text-2);
+  max-width:44em;
+  overflow-wrap:anywhere
+}
+.feedback:empty {
+  display:none
+}
+.muted {
+  color:var(--text-2);
+  font-size:var(--text-sm)
+}
+.large {
+  font-size:var(--text-title2);
+  font-weight:650
+}
+.prewrap {
+  white-space:pre-wrap;
+  overflow-wrap:anywhere
+}
+:where(.legacy) dl {
+  display:grid;
+  grid-template-columns:minmax(100px,180px) minmax(0,1fr);
+  gap:var(--s-3) var(--s-5)
+}
+:where(.legacy) dt {
+  font-weight:650
+}
+:where(.legacy) dd {
+  margin:0;
+  overflow-wrap:anywhere
+}
+.review {
+  padding:var(--s-5);
+  border:1px solid var(--line-strong);
+  border-radius:10px
+}
+.files {
+  list-style:none;
+  padding:0!important
+}
+.files li {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:var(--s-3)
+}
+.files span {
+  overflow-wrap:anywhere;
+  min-width:0
+}
+.timeline {
+  display:flex;
+  flex-wrap:wrap;
+  gap:var(--s-3);
+  list-style:none;
+  padding:0!important
+}
+.timeline li {
+  padding:var(--s-2)!important;
+  border:1px solid var(--line-strong)!important;
+  border-radius:6px;
+  margin:0!important
+}
+.timeline li[aria-current=step] {
+  border:2px solid var(--indicator)!important;
+  font-weight:700
+}
+.transcript {
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  overflow:auto;
+  max-height:420px;
+  min-height:180px;
+  background:#17212b;
+  color:#f3f7fa;
+  padding:var(--s-5);
+  border-radius:8px;
+  font-size:var(--text-sm);
+  line-height:1.6
+}
+:where(.legacy) dialog {
+  max-width:min(560px,calc(100% - 24px));
+  max-height:calc(100vh - 32px);
+  overflow:auto;
+  border:1px solid var(--line-strong);
+  border-radius:14px;
+  padding:var(--s-6);
+  color:var(--text)
+}
+:where(.legacy) dialog::backdrop {
+  background:var(--scrim)
+}
+.skip {
+  position:absolute;
+  left:-9999px;
+  top:8px;
+  z-index:10;
+  background:var(--surface);
+  padding:var(--s-3)
+}
+.skip:focus {
+  left:8px
+}
+:where(.legacy) summary {
+  cursor:pointer;
+  min-height:44px;
+  padding:var(--s-2) 0
+}
+[hidden] {
+  display:none!important
+}
+@media (max-width:650px) {
+  .panel {
+    padding:var(--s-5)
+  }
+  :where(.legacy) dl {
+    grid-template-columns:1fr;
+    gap:var(--s-1)
+  }
+  :where(.legacy) dd {
+    margin-bottom:var(--s-3)
+  }
+  .files li {
+    align-items:flex-start;
+    flex-direction:column
+  }
+  .actions>* {
+    max-width:100%
+  }
+}
+.changes .files {
+  padding-left:var(--s-5)
+}
+.changes .muted {
+  color:var(--text-2)
+}
+:where(.legacy) pre.diff, :where(.legacy) pre.command {
+  overflow:auto;
+  max-height:480px;
+  border:1px solid var(--line-strong);
+  border-radius:8px;
+  background:var(--surface);
+  padding:var(--s-3) var(--s-3);
+  font:var(--text-mono)/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;
+  white-space:pre
+}
+:where(.legacy) pre.command {
+  max-height:none;
+  white-space:pre-wrap;
+  word-break:break-all
+}
+.diff-add {
+  display:inline-block;
+  min-width:100%;
+  background:var(--diff-add-bg)
+}
+.diff-del {
+  display:inline-block;
+  min-width:100%;
+  background:var(--diff-del-bg)
+}
+.diff-meta {
+  color:var(--text-2);
+  font-weight:700
+}
+:where(.legacy) dl>div {
+  display:contents
+}
+.agent-group {
+  margin-top:var(--s-5)
+}
+.agent-group h3 {
+  margin:0 0 var(--s-1)
+}
+.agent {
+  padding:var(--s-4) 0;
+  border-top:1px solid var(--line-strong)
+}
+.agent-head {
+  display:flex;
+  gap:var(--s-3);
+  align-items:center;
+  flex-wrap:wrap
+}
+.agent-head h4 {
+  margin:0;
+  font-size:var(--text-title3)
+}
+.agent .muted {
+  margin:var(--s-1) 0 var(--s-3)
+}
+.agent details summary {
+  color:var(--text-2)
+}
+.agent details.tech summary {
+  color:var(--text-2);
+  font-size:var(--text-sm)
+}
+.agent details.tech dl {
+  font-size:var(--text-sm)
+}
+.review details {
+  margin-bottom:var(--s-2)
+}

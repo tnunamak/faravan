@@ -1,0 +1,19 @@
+.telemetry-card{max-width:640px;width:100%}
+.telemetry-choices{display:grid;gap:var(--s-3);border:0;padding:0;margin:0;min-width:0}
+.telemetry-choice{display:flex;gap:var(--s-3);align-items:flex-start;padding:var(--s-3) var(--s-4);border:1px solid var(--line-strong);border-radius:var(--r-md);background:var(--surface);cursor:pointer;min-height:var(--touch)}
+.telemetry-choice.selected{border-color:var(--text);background:var(--surface-2)}
+.telemetry-choice input{margin-top:var(--s-1);flex:none}
+.telemetry-choice>span{display:grid;gap:var(--s-1);min-width:0}
+.telemetry-choices:disabled .telemetry-choice{cursor:default;opacity:.7}
+.telemetry-links{align-items:center}
+.link-button{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px;cursor:pointer;min-height:var(--touch)}
+.link-button:disabled{cursor:default;opacity:.7}
+.telemetry-details ul{padding-left:var(--s-5);margin:0;list-style:disc}
+.telemetry-region{display:grid;gap:var(--s-2);max-width:320px}
+.telemetry-error{color:var(--bad-text)}
+.telemetry-items{list-style:none;padding:0;margin:0}
+.telemetry-body{max-height:20em;overflow:auto;padding:var(--s-3) var(--s-4);background:var(--bg-sunk);border:1px solid var(--line);border-radius:var(--r-md);white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+.telemetry-card.first-run-line{margin:0 0 var(--s-6)}
+.telemetry-notice{position:fixed;right:var(--s-4);bottom:var(--s-4);z-index:20;display:flex;gap:var(--s-2);align-items:flex-start;max-width:min(360px,calc(100vw - 2 * var(--s-4)));padding:var(--s-3) var(--s-3) var(--s-3) var(--s-4);border:1px solid var(--line-strong);border-radius:var(--r-md);background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.telemetry-notice p{margin:0}
+.telemetry-notice-close{flex:none;background:none;border:0;padding:0;font:inherit;font-size:var(--text-compose);line-height:1;color:inherit;cursor:pointer;min-width:var(--touch);min-height:var(--touch);margin:calc(-1 * var(--s-3)) calc(-1 * var(--s-1)) 0 0}

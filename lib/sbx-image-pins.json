@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "form": "digest",
+  "repository": "docker.io/sbx",
+  "agents": {
+    "claude": "sha256:611f52fac7bfc5fac443802588b490dda463d219b5d35e0b7087156e29d1ef10",
+    "codex": "sha256:fb650ee1799760027821aad3d98a01dd820b6df49ebacd083c293217b3390bdc",
+    "opencode": "sha256:25bc0836ef53dafeb6742a28706a6bbdc5ae33fee1bfba108f271509815868ec",
+    "gemini": null
+  },
+  "unpinned": {
+    "gemini": "No public digest could be read for docker.io/sbx/gemini without signing in. Faravan refuses to create a gemini sandbox until a digest is checked in here."
+  }
+}

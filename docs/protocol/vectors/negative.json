@@ -1,0 +1,118 @@
+[
+  {
+    "name": "wrong-domain",
+    "operation": "wrong-domain",
+    "expected_code": "invalid_signature"
+  },
+  {
+    "name": "tampered-byte",
+    "operation": "tamper",
+    "expected_code": "invalid_signature"
+  },
+  {
+    "name": "wrong-key",
+    "operation": "wrong-key",
+    "expected_code": "key_mismatch"
+  },
+  {
+    "name": "expired-roster",
+    "operation": "roster-expired",
+    "expected_code": "roster_expired"
+  },
+  {
+    "name": "rolled-back-epoch",
+    "operation": "roster-rollback",
+    "expected_code": "roster_stale"
+  },
+  {
+    "name": "author-mismatch",
+    "operation": "author",
+    "expected_code": "author_mismatch"
+  },
+  {
+    "name": "executor-mismatch",
+    "operation": "executor",
+    "expected_code": "executor_mismatch"
+  },
+  {
+    "name": "wrong-circle",
+    "operation": "circle",
+    "expected_code": "wrong_circle"
+  },
+  {
+    "name": "wrong-job-digest",
+    "operation": "job-digest",
+    "expected_code": "wrong_job_digest"
+  },
+  {
+    "name": "replayed-nonce",
+    "operation": "replay",
+    "expected_code": "replay"
+  },
+  {
+    "name": "clock-skew-old",
+    "operation": "clock-old",
+    "expected_code": "clock_skew"
+  },
+  {
+    "name": "clock-skew-future",
+    "operation": "clock-future",
+    "expected_code": "clock_skew"
+  },
+  {
+    "name": "enrollment-substitution",
+    "operation": "enrollment-device",
+    "expected_code": "device_mismatch"
+  },
+  {
+    "name": "duplicate-key",
+    "operation": "parse",
+    "input": "{\"a\":1,\"a\":2}",
+    "expected_code": "duplicate_key"
+  },
+  {
+    "name": "fraction",
+    "operation": "parse",
+    "input": "0.5",
+    "expected_code": "invalid_number"
+  },
+  {
+    "name": "negative-zero",
+    "operation": "parse",
+    "input": "-0",
+    "expected_code": "invalid_number"
+  },
+  {
+    "name": "unsafe-integer",
+    "operation": "parse",
+    "input": "9007199254740992",
+    "expected_code": "invalid_number"
+  },
+  {
+    "name": "lone-surrogate",
+    "operation": "parse",
+    "input": "\"\\ud800\"",
+    "expected_code": "invalid_unicode"
+  },
+  {
+    "name": "binding-forged-root",
+    "operation": "binding-forged-root",
+    "expected_code": "invalid_signature"
+  },
+  {
+    "name": "binding-wrong-seed",
+    "operation": "binding-wrong-seed",
+    "expected_code": "key_mismatch"
+  },
+  {
+    "name": "binding-wrong-domain",
+    "operation": "binding-wrong-domain",
+    "expected_code": "invalid_signature"
+  },
+  {
+    "name": "short-link-with-query",
+    "operation": "short-link",
+    "input": "https://coordinator.example/i/7tqzxvbhk2?seed=BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+    "expected_code": "invalid_invite_link"
+  }
+]

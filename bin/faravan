@@ -1,0 +1,617 @@
+#!/usr/bin/env node
+/** Faravan CLI: local app, circles, jobs, hosting and sandbox readiness. */
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { spawn } = require('node:child_process');
+const readline = require('node:readline/promises');
+
+function fail(message) {
+  process.stderr.write(`faravan: ${message}\n`);
+  process.exit(1);
+}
+
+// A port is in use when either address cannot be bound. macOS lets a wildcard listen succeed while another process holds the
+// same port on 127.0.0.1, so a wildcard probe alone calls a running loopback coordinator "free". A holder on the wildcard
+// blocks the loopback bind on every platform, so the two probes together cover both. Any bind error counts as in use.
+function localPortInUse(port, bindHost = '127.0.0.1') {
+  const tryHost = (host) => new Promise((resolve) => {
+    const probe = require('node:net').createServer();
+    // A host with no IPv6 (or no such address) cannot hold the port there; every other error means it is held.
+    probe.once('error', (e) => resolve(!(e?.code === 'EADDRNOTAVAIL' || e?.code === 'EAFNOSUPPORT')));
+    probe.listen({ port, host }, () => probe.close(() => resolve(false)));
+  });
+  return (async () => {
+    for (const host of new Set([bindHost, '127.0.0.1', '::1', '0.0.0.0'])) if (await tryHost(host)) return true;
+    return false;
+  })();
+}
+
+// The candidate port must be free on every address the coordinator check looks at, not only on the wildcard.
+async function pickFreeLocalPort() {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const port = await new Promise((resolve, reject) => {
+      const probe = require('node:net').createServer();
+      probe.once('error', reject);
+      probe.listen({ port: 0, host: '0.0.0.0' }, () => {
+        const { port: picked } = probe.address();
+        probe.close(() => resolve(picked));
+      });
+    });
+    if (!(await localPortInUse(port))) return port;
+  }
+  throw new Error('no free local port');
+}
+
+function log(message) {
+  process.stderr.write(`faravan: ${message}\n`);
+}
+
+const ROOT = path.join(__dirname, '..');
+
+// Parse only the flags supported by the current command.
+function parseFlags(argv, known, booleanFlags = []) {
+  const flags = {};
+  const positional = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--json') { flags.json = true; continue; }
+    const name = arg.startsWith('--') ? arg.slice(2) : null;
+    if (name !== null && booleanFlags.includes(name)) {
+      flags[name] = true;
+      continue;
+    }
+    if (name !== null && known.includes(name)) {
+      const value = argv[++i];
+      if (value === undefined) fail(`--${name} requires a value`);
+      flags[name] = value;
+      continue;
+    }
+    positional.push(arg);
+  }
+  return { flags, positional };
+}
+
+// --- sandbox install preflight ---------------------------------------------
+//
+// This is intentionally the same backend preflight used immediately before a
+// contribution. A green `sbx version` alone is not enough: the real runtime
+// also needs Docker CE/containerd v2, a healthy daemon, policy, KVM access,
+// and Docker login. Keeping the probe in the backend prevents the doctor and
+// contribution paths from silently disagreeing.
+function preflightHumanLines(preflight) {
+  const lines = ['Sandbox install preflight'];
+  for (const item of preflight.checks) {
+    lines.push(`${item.status === 'inconclusive' ? 'CHECK' : item.ok ? 'PASS' : 'FAIL'} ${item.label || item.name}: ${item.detail}`);
+    if (!item.ok) lines.push(`  Fix: ${item.fix}`);
+  }
+  if (preflight.ok) lines.push(preflight.checks.some(item => item.name === 'test_workspace' && item.ok)
+    ? 'Your sandbox is ready for Faravan contributions.'
+    : 'Install checks passed. Run faravan doctor without --quick to test a workspace.');
+  else lines.push('Your sandbox is not ready yet. Fix the failed checks, then re-run: faravan doctor');
+  return lines;
+}
+
+async function sandboxPreflight({ json, fixPolicy = false, report = true, quick = false, backendFactory, home, storeFree } = {}) {
+  const { DockerSbxBackend, initializeDefaultSbxPolicy } = await import('../lib/docker-backend.mjs');
+  const backend = backendFactory ? backendFactory() : new DockerSbxBackend();
+  // The probe workspace is a create like any other: the backend takes its protection through the same
+  // store (the sbx HOME's ledger and gate) as the running app, so a sweep never removes what this probe uses.
+  const appHome = home ?? (await import('../lib/local-state.mjs')).configHome();
+  let capabilities = await backend.probeCapabilities();
+  let preflight = capabilities.preflight;
+  const identityRepairs = capabilities.identity_repairs || [];
+  let policyFix = null;
+
+  if (fixPolicy && preflight?.checks.some((item) => item.name === 'network_policy' && !item.ok)) {
+    log('initializing the global sandbox network policy with the balanced preset...');
+    policyFix = await initializeDefaultSbxPolicy();
+    if (policyFix.code === 0) capabilities = await backend.probeCapabilities();
+    preflight = capabilities.preflight;
+  }
+
+  if (preflight.ok && !quick) {
+    const workspace = await backend.testWorkspace({ version: capabilities.version });
+    preflight = { ...preflight, ok: workspace.ok,
+      checks: [...preflight.checks, { name: 'test_workspace', label: 'Test workspace', ...workspace }] };
+  }
+
+  const result = {
+    status: preflight.ok ? 'ready' : 'setup_required',
+    backend_id: preflight.backend_id,
+    checks: preflight.checks,
+  };
+  if (identityRepairs.length > 0) result.identity_repairs = identityRepairs;
+  // Disk use per category and the last sweep, from the ledger file; absent when the app never recorded one.
+  const { readDiskReport, withFreeReading, diskLines } = await import('../lib/disk-report.mjs');
+  const reading = await (storeFree ?? (async () => (await import('../lib/docker-backend.mjs')).storeFreeBytes()))();
+  const disk = withFreeReading(readDiskReport(appHome, { ledgerFile: (await import('../lib/docker-backend.mjs')).sbxDiskLedgerFile() }), reading ?? null);
+  if (disk) result.disk = disk;
+  if (policyFix) result.policy_fix = { ok: policyFix.code === 0, detail: `${policyFix.stdout || ''}${policyFix.stderr || ''}`.trim() };
+  if (report && json) {
+    printResult(true, [], result, 'sandbox_preflight');
+  } else if (report) {
+    for (const line of preflightHumanLines(preflight)) process.stdout.write(`${line}\n`);
+    for (const line of diskLines(disk, { listKept: true })) process.stdout.write(`${line}\n`);
+    if (policyFix && policyFix.code !== 0) process.stdout.write(`Policy initialization failed: ${result.policy_fix.detail || 'no diagnostic output'}\n`);
+  }
+  return { ok: preflight.ok, preflight, result };
+}
+
+async function cmdDoctor(argv, options = {}) {
+  const { flags, positional } = parseFlags(argv, [], ['fix-policy', 'quick']);
+  if (positional.length > 0) fail('usage: faravan doctor [--fix-policy] [--quick] [--json]');
+  const result = await sandboxPreflight({ json: flags.json, fixPolicy: flags['fix-policy'], quick: flags.quick, ...options });
+  try {
+    const {configHome}=await import('../lib/local-state.mjs');
+    const state=JSON.parse(fs.readFileSync(path.join(configHome(),'v1','lending-pace50-state.json'),'utf8'));
+    const holds=state.attempts.filter(a=>a.hold_closed!==true&&a.resources.some(r=>r.held_micro>0||r.unrepresented_micro>0));
+    if(!flags.json)for(const hold of holds)process.stdout.write(`HOLD ${hold.id}: turn lending off, then faravan lending release-hold --attempt-id '${hold.id.replaceAll("'", "'\\''")}' --yes (charged in full; wait for delayed provider charges to be ruled out)\n`);
+  } catch(error) {if(error.code!=='ENOENT'&&!flags.json)process.stdout.write('CHECK Lending holds could not be read.\n');}
+  if (!result.ok) process.exitCode = 1;
+}
+
+// Keep doctor and host JSON output machine-readable.
+function printResult(json, humanLines, structured, type) {
+  if (json) {
+    process.stdout.write(JSON.stringify({ ...structured, schema_version: 1, type }) + '\n');
+  } else {
+    for (const line of humanLines) process.stdout.write(line + '\n');
+  }
+}
+
+function runCommand(command, args) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', (error) => resolve({ code: 127, stderr: error.message, stdout }));
+    child.on('exit', (code) => resolve({ code: code ?? 1, stdout, stderr }));
+  });
+}
+
+async function askOptional(question) {
+  if (!process.stdin.isTTY) return '';
+  const prompt = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try { return (await prompt.question(question)).trim(); } finally { prompt.close(); }
+}
+
+function coordinatorServiceInstalled() {
+  return process.platform === 'linux' && fs.existsSync('/usr/lib/systemd/user/faravan-coordinator.service');
+}
+
+async function startPackagedCoordinator(config) {
+  for (const args of [
+    ['--user', 'daemon-reload'],
+    ['--user', 'enable', '--now', 'faravan-coordinator.service'],
+    ['--user', 'restart', 'faravan-coordinator.service'],
+  ]) {
+    const result = await runCommand('systemctl', args);
+    if (result.code !== 0) return { started: false, detail: result.stderr.trim() || result.stdout.trim() };
+  }
+  return { started: true };
+}
+
+async function cmdHostV1(argv) {
+  const {flags, positional} = parseFlags(argv, ['tunnel', 'origin', 'port', 'circle-name', 'collective-name', 'name', 'resume'], ['stop', 'new-circle']);
+  if (positional.length) fail('usage: faravan host [--stop] [--new-circle] [--tunnel public|private|offer:<id>|lan] [--origin HTTPS-ORIGIN] [--circle-name <name>] [--port <number>] [--json]');
+  // --resume <stop generation|initial> is an automatic restart of the saved host, not an owner's start (assertResumable).
+  if (flags.resume !== undefined && Object.keys(flags).some(key => !['resume','json'].includes(key))) fail('--resume cannot be combined with other options');
+  const resume = flags.resume === undefined ? undefined : {stopGeneration:flags.resume === 'initial' ? null : flags.resume};
+  const {hostV1, stopV1Host, hostLaunchWithCleanup} = await import('../lib/v1/host.mjs');
+  const {coordinatorBindHost, coordinatorHome, hostPaths, FaravanHostError} = await import('../lib/host.mjs');
+  const {compatEnv} = await import('../lib/compat/env.mjs');
+  const home = coordinatorHome();
+  const {channelDataHome} = await import('../lib/channel-identity.mjs');
+  const installedDefaultHome = path.join(channelDataHome({env:{}}), 'coordinator');
+  const {hostingInteraction} = await import('../lib/hosting-cli.mjs');
+  const interaction = hostingInteraction();
+  const explicitHome = compatEnv('COORDINATOR_HOME') || compatEnv('HOME');
+  const base = explicitHome ? path.dirname(explicitHome) : os.homedir();
+  if (flags.stop) {
+    if (Object.keys(flags).some(key => !['stop','json'].includes(key))) fail('--stop cannot be combined with hosting options');
+    if (process.env.FARAVAN_PACKAGE_REMOVAL_FALLBACK !== '1' && coordinatorServiceInstalled() && path.resolve(home) === installedDefaultHome) {
+      const stopped = await runCommand('systemctl', ['--user', 'stop', 'faravan-coordinator.service']);
+      if (stopped.code !== 0) fail('could not stop the coordinator service');
+    }
+    const {portAnswers, portListeners} = await import('../lib/v1/port-listeners.mjs');
+    try { await stopV1Host({home}, {clearIntent:true, portAnswers, portListeners, ...(interaction.interactive && {interaction})}); }
+    catch (error) {
+      // "Stopped" is printed only after the circle's port stops answering. A named refusal reaches the app as host_error.
+      if (!flags.json || !(error instanceof FaravanHostError) || !error.code) throw error;
+      printResult(true, [], {status:'failed',code:error.code,message:error.message,
+        ...(error.route&&{route:error.route}),...(error.operation&&{operation:error.operation}),
+        ...(error.action&&{action:error.action})},'host_error');
+      process.exit(1);
+    }
+    printResult(flags.json, ['Host stopped.'], {status:'stopped'}, 'host_stopped');
+    return;
+  }
+  const existing = fs.existsSync(hostPaths(home).config)
+    ? JSON.parse(fs.readFileSync(hostPaths(home).config, 'utf8')) : null;
+  if(flags['circle-name']&&flags['collective-name']&&flags['circle-name']!==flags['collective-name'])fail('--circle-name and --collective-name must name the same circle');
+  let name = flags['circle-name'] || flags['collective-name'] || flags.name || existing?.circle_name || existing?.collective_name;
+  if (!name) name = (resume ? '' : await askOptional('Name your circle [My circle]: ')) || 'My circle';
+  if (!name.trim() || name.length > 256) fail('circle name must be between 1 and 256 characters');
+  const launch = hostLaunchWithCleanup(signal => hostV1({home, base, signal, name:resume ? undefined : name.trim(), tunnel:flags.tunnel,
+    port:flags.port === undefined ? undefined : Number(flags.port),
+    origin:flags.origin, newCircle:flags['new-circle'] === true, resume}, {
+    portInUse:localPortInUse, freePort:pickFreeLocalPort, interaction,
+    chooseReachability:() => interaction.ask('Require public or private reach? [public] ').then(value => value || 'public'),
+    stopServer:async (_config, status) => {
+      const defaultHome = installedDefaultHome;
+      if (coordinatorServiceInstalled() && path.resolve(home) === defaultHome) {
+        const stopped = await runCommand('systemctl', ['--user', 'stop', 'faravan-coordinator.service']);
+        if (stopped.code !== 0) fail('could not restart the coordinator service for the new circle');
+      } else {
+        const {stopOwnedCoordinatorProcess} = await import('../lib/v1/host.mjs');
+        stopOwnedCoordinatorProcess(status.pid, hostPaths(home).config,{expectedOwner:status.owner});
+      }
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (!(await localPortInUse(_config.port, coordinatorBindHost({reachability:_config.reachability})))) return;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      fail('the previous host did not stop; the new circle is saved and can start when the port is free');
+    },
+    startServer:async (config, paths, launchState = {}) => {
+      // The installed unit has a fixed default config path. A custom home
+      // stays attached to this command rather than starting a different host.
+      const defaultHome = installedDefaultHome;
+      if (coordinatorServiceInstalled() && path.resolve(home) === defaultHome) {
+        const service = await startPackagedCoordinator(config);
+        const stop = async () => {
+          const stopped = await runCommand('systemctl', ['--user', 'stop', 'faravan-coordinator.service']);
+          if (stopped.code !== 0) throw new Error('coordinator service cleanup failed');
+        };
+        if (!service.started) {
+          await stop();
+          throw new Error(`could not start the coordinator service: ${service.detail}`);
+        }
+        return {packaged:true, stop};
+      }
+      const {superviseProcess}=await import('../lib/v1/process-supervisor.mjs');
+      const {supervisorMayRestart,coordinatorLaunchEnv}=await import('../lib/v1/host.mjs');
+      const {createOutputTail}=await import('../lib/v1/coordinator-output.mjs');
+      const outputTail=createOutputTail(40);
+      // The owner's first launch is not gated by the saved intent: a stop saves host_wanted:false, and that stays until ready.
+      // A crash restart after this launch returned is fenced against an owner's stop in the coordinator itself.
+      let ownerLaunch=!launchState.resume;
+      const supervised=superviseProcess({shouldRestart:()=>{if(ownerLaunch){ownerLaunch=false;return true;}return supervisorMayRestart(paths.config,config.stop_generation);},launch:()=>{
+        const child=spawn(process.execPath,[path.join(ROOT,'bin','faravan-coordinator'),'--host-config',path.resolve(paths.config)],{
+          stdio:['ignore','pipe','pipe'],
+          env:coordinatorLaunchEnv(process.env,{fenced:!launchState.holdsLock?.(),stopGeneration:config.stop_generation}),
+        });
+        child.stderr.on('data',chunk=>{process.stderr.write(chunk);outputTail.push(chunk);});child.stdout.on('data',chunk=>outputTail.push(chunk));
+        return child;
+      }});
+      const forwardSignal = signal => { supervised.stop(signal); };
+      const sigint = () => forwardSignal('SIGINT');
+      const exit = () => forwardSignal('SIGTERM');
+      process.on('SIGINT', sigint); process.on('exit', exit);
+      const finished = supervised.finished.then(code=>{
+        process.removeListener('SIGINT', sigint); process.removeListener('exit', exit);
+        return code;
+      });
+      return {get child(){return supervised.child;},finished,get error(){return supervised.error;},outputTail,logPath:path.join(path.dirname(path.resolve(paths.config)),'coordinator-last-output.log'),stop:async()=>{ supervised.stop(); await finished; }};
+    },
+    waitReady:async (config, started) => {
+      const {readCoordinatorStatus} = await import('../lib/host.mjs');
+      const attempts = config.reachability.kind === 'gozar' ? 1350 : 100;
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        if (started?.error) throw started.error;
+        const status = readCoordinatorStatus(config);
+        if (status?.public_url || status?.status === 'exposure_blocked') return status;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      // Never ready: keep what the coordinator last printed, so the next failure can be diagnosed.
+      try { started?.outputTail?.writeTo(started.logPath); process.stderr.write('The coordinator’s last output is saved in ' + started.logPath + '\n'); } catch {}
+      return null;
+    },
+  }), {
+    acknowledge: () => {
+      const token = process.env.FARAVAN_HOST_LAUNCH_TOKEN;
+      // A manual run has no launcher waiting for proof; only an app-owned launch passes a token.
+      if (!token) return;
+      fs.writeSync(1, JSON.stringify({type:'host_launch_stopped', token}) + '\n');
+    },
+  });
+  try {
+  let result;
+  try { result = await launch.result.catch(error => { if (launch.stopping) return null; throw error; }); }
+  catch (error) {
+    // A refusal with a reason code is machine-readable for the app. A person still gets the message on stderr.
+    if (!flags.json || !(error instanceof FaravanHostError) || !error.code) throw error;
+    printResult(true, [], {status:'failed',code:error.code,message:error.message,
+        ...(error.route&&{route:error.route}),...(error.operation&&{operation:error.operation}),
+        ...(error.action&&{action:error.action})},'host_error');
+    launch.dispose();
+    process.exit(1);
+  }
+  if (launch.stopping) return;
+  printResult(flags.json, [
+    '\nYOUR CIRCLE IS READY',
+    result.origin,
+    `Local server: http://${result.circle.lanMode ? new URL(result.origin).hostname : '127.0.0.1'}:${result.config.port}`,
+    'Send this invite privately to one member:',
+    result.invite,
+    ...(result.inviteNote ? [result.inviteNote] : []),
+    ...(result.reach === 'tailnet' ? ['Members need access to the same private network.'] : []),
+    ...(result.circle.lanMode ? ['This circle uses your local network without encryption; people on the same network could read uploaded code.'] : []),
+    ...(result.process?.child ? ['This source-checkout coordinator stops when this terminal closes.'] : []),
+  ], {status:'ready', circle_id:result.circle.id, circle_name:result.circle.name,
+    coordinator_url:result.origin, local_port:result.config.port, invite:result.invite, ...(result.inviteNote ? {invite_note:result.inviteNote} : {}), lan_mode:Boolean(result.circle.lanMode)}, 'host_ready');
+  if (result.process?.finished) {
+    const code = await result.process.finished;
+    if (code) process.exitCode = code;
+  }
+  } finally { if (!launch.stopping) launch.dispose(); }
+}
+
+// The default entrypoint opens v1 without probing providers or old coordinators.
+const APP_STARTUP_WAIT_MS = 15_000;
+
+function discoveryProcessAlive(pid) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; }
+  catch (error) { return error.code !== 'ESRCH'; }
+}
+
+// The running app's origin and session token. The token stays in this process: it goes only in request headers.
+async function discoverApp(home) {
+  let record;
+  try { record = JSON.parse(fs.readFileSync(path.join(home, 'v1', 'app.json'), 'utf8')); }
+  catch (error) {
+    if (error.code === 'ENOENT' || error instanceof SyntaxError) return null;
+    throw error;
+  }
+  if (!discoveryProcessAlive(record?.pid)) return null;
+  // A live but unreachable owner is not permission to start another app.
+  const unavailable = () => fail('the existing v1 app is not responding. Restart faravan app, then try again.');
+  if (!Number.isInteger(record.port) || record.port < 1 || record.port > 65535 ||
+      typeof record.token !== 'string' || !record.token) return unavailable();
+  const origin = 'http://127.0.0.1:' + record.port;
+  const startedAt = Date.parse(record.started_at);
+  const startupAge = Date.now() - startedAt;
+  const retryUntil = Number.isFinite(startedAt) && startupAge < APP_STARTUP_WAIT_MS
+    ? Date.now() + Math.min(5_000, APP_STARTUP_WAIT_MS - Math.max(0, startupAge))
+    : 0;
+  while (true) {
+    try {
+      const response = await fetch(origin + '/api/lending', {
+        headers: { 'x-faravan-session-token': record.token },
+        signal: AbortSignal.timeout(2_000),
+        redirect: 'error',
+      });
+      if (response.ok) {
+        await response.arrayBuffer();
+        return { origin, token: record.token };
+      }
+    } catch {}
+    if (Date.now() >= retryUntil) return unavailable();
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+}
+
+// The running app, starting it first when none is running. Callers print the origin only.
+async function ensureAppRecord() {
+  const { configHome } = await import('../lib/local-state.mjs');
+  const home = configHome();
+  let app = await discoverApp(home);
+  if (!app) {
+    const {setResidentQuit}=await import('../lib/v1/resident-intent.mjs');
+    setResidentQuit(false,home);
+    const macLauncher=process.platform==='darwin'?(await import('../lib/v1/autostart.mjs')).bundledLauncher():null;
+    const packagedLinux=process.platform==='linux'&&ROOT==='/usr/lib/faravan'&&fs.existsSync('/usr/lib/systemd/user/faravan-tray.service');
+    const tray=process.platform==='win32'?path.resolve(ROOT,'..','faravan-tray.exe'):path.join(ROOT,'faravan-tray');
+    const windowsLauncher=process.platform==='win32'?path.resolve(ROOT,'..','faravan-resident.exe'):null;
+    const packagedWindows=windowsLauncher&&fs.existsSync(windowsLauncher);
+    const command=packagedLinux?path.join(ROOT,'bin','faravan-tray-start'):packagedWindows?windowsLauncher:macLauncher??process.execPath;
+    const args=packagedLinux?[]:packagedWindows?[]:macLauncher?['--background']:
+      [path.join(ROOT,'lib/v1/resident.mjs'),...(fs.existsSync(tray)?['--tray',tray]:[])];
+    let spawnError, childExited = false, launches = 0;
+    const launch = () => {
+      childExited = false;
+      launches++;
+      const child = spawn(command, args, {
+        detached: true, stdio: 'ignore',
+        env: { ...process.env, FARAVAN_NO_BROWSER: '1' },
+      });
+      child.once('error', error => { spawnError = error; });
+      child.once('exit', () => { childExited = true; });
+      child.unref();
+    };
+    launch();
+    const deadline = performance.now() + APP_STARTUP_WAIT_MS;
+    while (!app && performance.now() < deadline) {
+      if (spawnError) throw spawnError;
+      await new Promise(resolve => setTimeout(resolve, 50));
+      app = await discoverApp(home);
+      // Zero-wait app lock contenders can both lose admission. Retry only
+      // after our own child exited, with jitter and a fresh discovery check.
+      // Never restart a live child, steal its lock, or keep spawning on failure.
+      if (!app && childExited && launches < 3) {
+        await new Promise(resolve => setTimeout(resolve, 75 + Math.floor(Math.random() * 150)));
+        app = await discoverApp(home);
+        if (!app && performance.now() < deadline) launch();
+      }
+    }
+    if (!app) fail('could not start the v1 app. Run faravan app to see the startup error.');
+  }
+  return app;
+}
+
+/** The running app's origin only. */
+async function ensureAppUrl() {
+  return (await ensureAppRecord()).origin;
+}
+
+/** A one-time sign-in link for the running app, so opening it never puts the session token in a URL or argument. */
+async function ensureAppHandoff() {
+  const { requestHandoffLink } = await import('../lib/v1/handoff-link.mjs');
+  return requestHandoffLink(await ensureAppRecord());
+}
+
+async function cmdFirstRun() {
+  const { configHome } = await import('../lib/local-state.mjs');
+  const home = configHome();
+  const legacy = fs.existsSync(path.join(home, 'config.json'));
+  if (legacy) process.stdout.write('Found v0 state; it is preserved and is not used by this app. See docs/protocol/hosting.md for retirement steps.\n');
+
+  process.stdout.write('Open Faravan: ' + (await ensureAppUrl()) + '\nIf the page asks you to reconnect, run faravan app open-link.\n');
+  const { openUrl } = await import('../lib/v1/open-url.mjs');
+  openUrl(await ensureAppHandoff());
+}
+
+async function printHelp(path, stream = process.stdout) {
+  const { helpFor } = await import('../lib/v1/help.mjs');
+  const text = helpFor(path);
+  if (text === null) return false;
+  stream.write(text);
+  return true;
+}
+
+async function main() {
+  const [verb, ...rest] = process.argv.slice(2);
+  if (verb === '--version' || verb === '-v') {
+    let version = '0.1.0-dev';
+    try { version = fs.readFileSync(path.join(ROOT, 'VERSION'), 'utf8').trim(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    process.stdout.write(version + '\n');
+    return;
+  }
+  if (!verb) return cmdFirstRun();
+  if (verb === 'diagnostics' && rest[0] !== 'preview') {
+    if (rest.includes('--help') || rest.includes('-h')) return printHelp(['diagnostics']);
+    const {runDiagnosticsCommand} = await import('../lib/v1/diagnostics-cli.mjs');
+    const {configHome} = await import('../lib/local-state.mjs');
+    process.exitCode = await runDiagnosticsCommand(rest, {home:configHome()});
+    return;
+  }
+  // The portable installer's check that this runtime can start the app (lib/v1/readiness.mjs). Not a user command.
+  if (verb === '--readiness') {
+    const { runReadiness } = await import('../lib/v1/readiness.mjs');
+    process.exitCode = await runReadiness();
+    return;
+  }
+  // Operations (faravan ops ..., faravan <group> <verb>): the same operations as POST /api/ops/<id> and the MCP tools.
+  // The human `telemetry on` and `telemetry show` verbs (design §4.5) are answered by the telemetry CLI; the other telemetry verbs are operations.
+  if (verb === 'telemetry' && ['on', 'show'].includes(rest[0])) {
+    const { runTelemetryCommand } = await import('../lib/v1/telemetry/cli.mjs');
+    const { createOpsClient } = await import('../lib/v1/ops/execute.mjs');
+    const { configHome } = await import('../lib/local-state.mjs');
+    process.exitCode = await runTelemetryCommand(rest, { client: createOpsClient({ home: configHome(), surface: 'cli' }), stdout: process.stdout, stderr: process.stderr });
+    return;
+  }
+  const ops = await import('../lib/v1/ops/cli.mjs');
+  const route = ops.opsRoute(verb === 'help' ? [...rest.filter(a => !a.startsWith('-')), '--help'] : [verb, ...rest]);
+  if (route) {
+    process.exitCode = await ops.runOpsCommand(verb === 'help' ? [...rest, '--help'] : [verb, ...rest], { route });
+    return;
+  }
+  if (verb === '--help' || verb === '-h' || verb === 'help') {
+    if (!(await printHelp(verb === 'help' ? rest.filter(a => !a.startsWith('-')).slice(0, 2) : []))) {
+      process.stderr.write(`faravan: unknown command "${rest[0]}". Run faravan --help.\n`);
+      process.exit(2);
+    }
+    return;
+  }
+  if (rest.includes('--help') || rest.includes('-h')) {
+    if (await printHelp([verb, ...rest.filter(a => !a.startsWith('-')).slice(0, 1)])) return;
+  }
+  switch (verb) {
+    case 'autostart': {
+      const {runAutostart}=await import('../lib/v1/autostart.mjs');
+      process.exitCode=await runAutostart(rest);return;
+    }
+    case 'app': {
+      // A running app (for example the background service) is opened, not started twice.
+      if (!rest.includes('--json')) {
+        const { configHome } = await import('../lib/local-state.mjs');
+        const app = await discoverApp(configHome());
+        if (app) {
+          process.stdout.write('Faravan is already running. Run faravan app open-link to open it again.\n' + (process.stdout.isTTY ? app.origin + '\n' : ''));
+          const { requestHandoffLink } = await import('../lib/v1/handoff-link.mjs');
+          const { openUrl } = await import('../lib/v1/open-url.mjs');
+          openUrl(await requestHandoffLink(app));
+          return;
+        }
+      }
+      const { runV1Command } = await import('../lib/v1/cli.mjs');
+      process.exitCode = await runV1Command([verb, ...rest]);
+      return;
+    }
+    case 'accounts':
+    case 'circle':
+    case 'join':
+    case 'stop':
+    case 'lending':
+    case 'job':
+    case 'mcp':
+    case 'run':
+    case 'apply':
+    case 'uninstall':
+    case 'name': {
+      const { runV1Command } = await import('../lib/v1/cli.mjs');
+      process.exitCode = await runV1Command([verb, ...rest]);
+      return;
+    }
+    case 'status': {
+      const { runV1Command } = await import('../lib/v1/cli.mjs');
+      process.exitCode = await runV1Command([verb, ...rest]);
+      return;
+    }
+    case 'doctor': return cmdDoctor(rest);
+    case 'open-link': { // target of the faravan:// scheme handler (faravan:// remains supported); hidden from top-level help
+      const { runOpenLink } = await import('../lib/v1/open-link.mjs');
+      process.exitCode = await runOpenLink(rest, { ensureHandoff: ensureAppHandoff });
+      return;
+    }
+    case 'open-setup': { // run by the restart/log-out resume hook; hidden from top-level help
+      const { runOpenSetup } = await import('../lib/v1/open-setup.mjs');
+      process.exitCode = await runOpenSetup(rest, { ensureHandoff: ensureAppHandoff });
+      return;
+    }
+    case 'update': { // tarball installs only; a package install updates through apt
+      const { runUpdateCommand, updaterForInstall } = await import('../lib/v1/self-update.mjs');
+      const { readLending } = await import('../lib/v1/status.mjs');
+      const { configHome } = await import('../lib/local-state.mjs');
+      const { coordinatorHome } = await import('../lib/host.mjs');
+      const home = configHome();
+      process.exitCode = await runUpdateCommand(rest, { updater: await updaterForInstall({ home, coordinatorHome: coordinatorHome(), log }), appRunning: async () => (await readLending(home)) !== null });
+      return;
+    }
+    case 'host': return cmdHostV1(rest);
+    case 'connect': {
+      const { runConnectCommand } = await import('../lib/v1/connect-chatgpt.mjs');
+      process.exitCode = await runConnectCommand(rest);
+      return;
+    }
+    default:
+      process.stderr.write(`faravan: unknown command "${verb}".\n`);
+      await printHelp([], process.stderr);
+      process.exit(2);
+  }
+}
+
+// Expected setup errors carry actionable copy without a stack trace.
+function isExpectedError(error) {
+  return !!error && typeof error.name === 'string' && /^(Faravan|FaravanHost)\w*Error$/.test(error.name);
+}
+
+module.exports = { cmdDoctor, sandboxPreflight, preflightHumanLines };
+
+// A dying process leaves a crash marker for the next app start (telemetry; nothing is sent from here).
+if (require.main === module) {
+  import('../lib/v1/telemetry/crash.mjs').then(async ({ installCrashMonitor }) => {
+    const { configHome } = await import('../lib/local-state.mjs');
+    installCrashMonitor({ dir: path.join(configHome(), 'v1', 'telemetry') });
+  }).catch(() => {});
+}
+
+if (require.main === module) main().catch((error) => {
+  if (isExpectedError(error)) fail(error.message);
+  else fail(error && error.stack ? error.stack : String(error));
+});

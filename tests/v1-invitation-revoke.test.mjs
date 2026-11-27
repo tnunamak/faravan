@@ -1,0 +1,51 @@
+import './helpers/no-browser.mjs';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync, rmSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {randomUUID, randomBytes} from 'node:crypto';
+import * as p from '../lib/protocol/index.mjs';
+import {openV1Store} from '../lib/v1/store.mjs';
+import {invitationRevocation} from '../lib/v1/invitation-revoke.mjs';
+
+test('root-authorized revocation survives restart and blocks old short and long invitation clients', t => {
+  const dir=mkdtempSync(join(tmpdir(),'faravan-revoke-'));
+  const keys=[1,2,3,4].map(n=>p.privateKeyFromSeed(Buffer.alloc(32,n))), pub=keys.map(p.exportPublicKey);
+  const circle=randomUUID(), origin='https://circle.example', now=1792454400;
+  const roster=p.createRoster({circle,epoch:1,issued_at:new Date(now*1000).toISOString().replace('.000Z','Z'),valid_until:new Date((now+86400)*1000).toISOString().replace('.000Z','Z'),members:[{key_id:p.fingerprint(pub[1]),public_key:pub[1],joined_epoch:1}]},keys[0]);
+  const options={path:join(dir,'store.sqlite'),circle,origin,rootFingerprint:p.fingerprint(pub[0]),initialRoster:roster,clock:()=>now};
+  let store=openV1Store(options);
+  t.after(()=>{store.close();rmSync(dir,{recursive:true,force:true});});
+  const ctx=(method,route,body,key=keys[1],epoch=1)=>({proof:p.buildRequestProof({circle,roster_epoch:epoch,method,target:origin+'/v1/circles/'+circle+route,body:Buffer.from(p.canonicalize(body)),content_type:'application/json',created:now,nonce:randomBytes(16).toString('base64url'),idempotency_key:randomUUID()},key)});
+  const invite=p.createInvite({circle,coordinator:origin,invite_id:randomUUID(),invite_public_key:pub[2],created_at:new Date(now*1000).toISOString().replace('.000Z','Z'),expires_at:new Date((now+3600)*1000).toISOString().replace('.000Z','Z')},keys[0]);
+  const publication={code:'abcdefghij',envelope:invite,invite_binding:p.createInviteBinding(invite,keys[2])};
+  store.registerInvite(publication,ctx('POST','/invites',publication));
+  const makeBody=key=>invitationRevocation({circle,origin,epoch:1,inviteId:invite.payload.invite_id,now,rootKey:key});
+  const forged=makeBody(keys[1]);
+  assert.throws(()=>store.revokeInvite(forged,ctx('POST','/invites/revoke',forged)));
+  assert.equal(store.resolveInvite(publication.code).envelope.payload.invite_id,invite.payload.invite_id);
+  const body=makeBody(keys[0]);
+  assert.equal(store.revokeInvite(body,ctx('POST','/invites/revoke',body)).revoked,true);
+  store.close();store=openV1Store(options);
+  assert.throws(()=>store.resolveInvite(publication.code),e=>e.code==='enrollment_rejected');
+  const enrollment={invite,device_public_key:pub[3],enrollment_proof:p.createEnrollmentProof({circle,invite_id:invite.payload.invite_id,device_public_key:pub[3]},keys[2])};
+  assert.throws(()=>store.createEnrollment(enrollment,ctx('POST','/enrollments',enrollment,keys[3],0)),e=>e.code==='enrollment_rejected');
+  store.registerInvite(publication,ctx('POST','/invites',publication));
+  assert.throws(()=>store.resolveInvite(publication.code),e=>e.code==='enrollment_rejected','republication cannot resurrect a revoked invitation');
+});
+
+test('revoking before publication leaves a durable tombstone that rejects delayed publication', t=>{
+  const dir=mkdtempSync(join(tmpdir(),'faravan-revoke-unpublished-'));
+  const keys=[1,2,3].map(n=>p.privateKeyFromSeed(Buffer.alloc(32,n))),pub=keys.map(p.exportPublicKey);
+  const circle=randomUUID(),origin='https://circle.example',now=1792454400,iso=t=>new Date(t*1000).toISOString().replace('.000Z','Z');
+  const roster=p.createRoster({circle,epoch:1,issued_at:iso(now),members:[{key_id:p.fingerprint(pub[1]),public_key:pub[1],joined_epoch:1}]},keys[0]);
+  const options={path:join(dir,'store.sqlite'),circle,origin,rootFingerprint:p.fingerprint(pub[0]),initialRoster:roster,clock:()=>now};
+  let store=openV1Store(options);t.after(()=>{store.close();rmSync(dir,{recursive:true,force:true});});
+  const ctx=(route,body)=>({proof:p.buildRequestProof({circle,roster_epoch:1,method:'POST',target:origin+'/v1/circles/'+circle+route,body:Buffer.from(p.canonicalize(body)),content_type:'application/json',created:now,nonce:randomBytes(16).toString('base64url'),idempotency_key:randomUUID()},keys[1])});
+  const id=randomUUID(),body=invitationRevocation({circle,origin,epoch:1,inviteId:id,now,rootKey:keys[0]});
+  assert.equal(store.revokeInvite(body,ctx('/invites/revoke',body)).revoked,true);
+  store.close();store=openV1Store(options);
+  const invite=p.createInvite({circle,coordinator:origin,invite_id:id,invite_public_key:pub[2],created_at:iso(now),expires_at:iso(now+3600)},keys[0]);
+  assert.throws(()=>store.registerInvite(invite,ctx('/invites',invite)),e=>e.code==='enrollment_conflict');
+});

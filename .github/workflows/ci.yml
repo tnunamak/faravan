@@ -1,0 +1,46 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm ci
+      - run: npm --prefix ui ci
+      - run: npx --no-install playwright install --with-deps chromium
+      - run: npm run test:fast
+      - name: UI tests and built bundle is current
+        run: |
+          npm --prefix ui test
+          npm --prefix ui run build
+          sh scripts/check-public-v1-current.sh
+      - uses: actions/setup-go@v5
+        with: { go-version-file: tray/go.mod, cache-dependency-path: tray/go.sum }
+      - name: Tray vet and tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libayatana-appindicator3-dev
+          cd tray
+          go vet ./...
+          go test ./...
+      - name: Check public tree dependencies
+        run: node scripts/public-tree.mjs "$RUNNER_TEMP/public-tree"
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm ci
+      - run: npm --prefix ui ci
+      - run: npx --no-install playwright install chromium
+      - run: npm run test:fast

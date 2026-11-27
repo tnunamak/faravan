@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faravan.dev/protocol/v1/roster.schema.json",
+  "title": "Faravan v1 roster",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "faravan.roster.v1"
+        },
+        "circle": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "root_public_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "issued_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "valid_until": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+          "description": "Later than issued_at; at most 30 days later. Creation defaults to 7 days. Cross-field bounds require semantic validation."
+        },
+        "members": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "key_id": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "public_key": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{43}$"
+              },
+              "joined_epoch": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "person_name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "description": "Optional person name from the enrollment proof. A display claim, not proof of identity."
+              },
+              "device_name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "description": "Optional display name the owner saw (and the joining device signed) at approval. A claim, not an identity proof."
+              },
+              "origin": {
+                "type": "string",
+                "description": "Optional member origin (owner-offline topology): the stable HTTPS address this member serves the circle at. Reach data signed by the same root authority; it never grants membership or signing power. Two members never share one origin."
+              },
+              "person_id": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "person_link": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "person_proof",
+                  "device_proof"
+                ],
+                "properties": {
+                  "person_proof": {
+                    "type": "object"
+                  },
+                  "device_proof": {
+                    "type": "object"
+                  }
+                }
+              }
+            },
+            "required": [
+              "key_id",
+              "public_key",
+              "joined_epoch"
+            ]
+          }
+        },
+        "lan_mode": {
+          "const": true
+        },
+        "profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Optional circle-authority-signed settings (root signed for legacy circles). Members show these, never unsigned coordinator data. Absent in legacy rosters.",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "purpose": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "description": "Omitted when the owner has not set or has cleared it."
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "coordinator": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 4096
+        },
+        "governance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version",
+            "owner_person",
+            "state",
+            "people"
+          ],
+          "properties": {
+            "version": {
+              "const": 1
+            },
+            "owner_person": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "state": {
+              "enum": [
+                "active",
+                "archived",
+                "closed"
+              ]
+            },
+            "people": {
+              "type": "array",
+              "maxItems": 10000,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "person_id",
+                  "role",
+                  "blocked"
+                ],
+                "properties": {
+                  "person_id": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "role": {
+                    "enum": [
+                      "owner",
+                      "co-admin",
+                      "member",
+                      "borrow-only",
+                      "lend-only"
+                    ]
+                  },
+                  "blocked": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "authority_chain": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "circle",
+        "root_public_key",
+        "epoch",
+        "issued_at",
+        "valid_until",
+        "members"
+      ]
+    },
+    "signature": {
+      "$ref": "job.schema.json#/$defs/signature"
+    }
+  },
+  "required": [
+    "payload",
+    "signature"
+  ]
+}

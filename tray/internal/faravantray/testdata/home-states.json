@@ -1,0 +1,1440 @@
+[
+  {
+    "name": "ready",
+    "status": {
+      "state": "ready",
+      "reason": null,
+      "until": null,
+      "needs_you": [],
+      "intent": {
+        "on": true,
+        "state": "ready",
+        "reason": null,
+        "until": null
+      },
+      "execution": {
+        "state": "idle"
+      },
+      "blockers": [],
+      "headline": "Lending is on",
+      "lending_blockers": {
+        "headline": "Lending is on",
+        "first": null,
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "ok",
+            "detail": "Installed and running.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "ok",
+            "detail": "Signed in.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "ok",
+            "detail": "On.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "ok",
+            "detail": "Ready.",
+            "detail_code": "ok",
+            "waits_for": null
+          }
+        ],
+        "needsYou": [],
+        "canLend": true
+      },
+      "iconState": "Lending on"
+    },
+    "lines": [
+      [
+        "Lending is on",
+        "dis"
+      ],
+      [
+        "Codex · Ready",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "off",
+    "status": {
+      "state": "off",
+      "reason": null,
+      "until": null,
+      "needs_you": [],
+      "intent": {
+        "on": false,
+        "state": "off",
+        "reason": null,
+        "until": null
+      },
+      "execution": {
+        "state": "idle"
+      },
+      "blockers": [],
+      "headline": "Lending is off",
+      "lending_blockers": {
+        "headline": "Lending is off",
+        "first": {
+          "key": "lending",
+          "label": "Lending",
+          "status": "blocked",
+          "detail": "Turned off.",
+          "action": "Turn lending on",
+          "headline": "Lending is off",
+          "detail_code": "off",
+          "waits_for": null
+        },
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "ok",
+            "detail": "Installed and running.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "ok",
+            "detail": "Signed in.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "blocked",
+            "detail": "Turned off.",
+            "action": "Turn lending on",
+            "headline": "Lending is off",
+            "detail_code": "off",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "ok",
+            "detail": "Ready.",
+            "detail_code": "ok",
+            "waits_for": null
+          }
+        ],
+        "needsYou": [
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "blocked",
+            "detail": "Turned off.",
+            "action": "Turn lending on",
+            "headline": "Lending is off",
+            "detail_code": "off",
+            "waits_for": null
+          }
+        ],
+        "canLend": false
+      },
+      "iconState": "Paused"
+    },
+    "lines": [
+      [
+        "Lending is off",
+        "dis"
+      ],
+      [
+        "Turn lending on…",
+        "hl"
+      ],
+      [
+        "Lending · Turned off",
+        "dis"
+      ],
+      [
+        "Codex · Ready",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "paused",
+    "status": {
+      "state": "paused",
+      "reason": "paused",
+      "until": 1792447200000,
+      "needs_you": [],
+      "intent": {
+        "on": true,
+        "state": "paused",
+        "reason": "paused",
+        "until": 1792447200000
+      },
+      "execution": {
+        "state": "idle"
+      },
+      "blockers": [],
+      "headline": "Paused until 3:00 PM",
+      "lending_blockers": {
+        "headline": "Paused until 3:00 PM",
+        "first": {
+          "key": "lending",
+          "label": "Lending",
+          "status": "blocked",
+          "detail": "Paused until 3:00 PM.",
+          "action": "Resume now",
+          "headline": "Paused until 3:00 PM",
+          "detail_code": "paused",
+          "waits_for": null
+        },
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "ok",
+            "detail": "Installed and running.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "ok",
+            "detail": "Signed in.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "blocked",
+            "detail": "Paused until 3:00 PM.",
+            "action": "Resume now",
+            "headline": "Paused until 3:00 PM",
+            "detail_code": "paused",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "ok",
+            "detail": "Ready.",
+            "detail_code": "ok",
+            "waits_for": null
+          }
+        ],
+        "needsYou": [
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "blocked",
+            "detail": "Paused until 3:00 PM.",
+            "action": "Resume now",
+            "headline": "Paused until 3:00 PM",
+            "detail_code": "paused",
+            "waits_for": null
+          }
+        ],
+        "canLend": false
+      },
+      "iconState": "Paused"
+    },
+    "lines": [
+      [
+        "Paused until 3:00 PM",
+        "dis"
+      ],
+      [
+        "Resume now…",
+        "hl"
+      ],
+      [
+        "Lending · Paused until 3:00 PM",
+        "dis"
+      ],
+      [
+        "Codex · Ready",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "docker_missing",
+    "status": {
+      "state": "blocked",
+      "reason": "docker_not_installed",
+      "until": null,
+      "needs_you": [
+        {
+          "kind": "docker_not_installed"
+        }
+      ],
+      "intent": {
+        "on": true,
+        "state": "blocked",
+        "reason": "docker_not_installed",
+        "until": null
+      },
+      "execution": {
+        "state": "idle"
+      },
+      "blockers": [
+        {
+          "kind": "docker_not_installed"
+        }
+      ],
+      "headline": "Lending needs Docker Sandboxes",
+      "lending_blockers": {
+        "headline": "Lending needs Docker Sandboxes",
+        "first": {
+          "key": "docker_installed",
+          "label": "Docker Sandboxes",
+          "status": "blocked",
+          "detail": "Not installed.",
+          "action": "Install Docker Sandboxes",
+          "headline": "Lending needs Docker Sandboxes",
+          "detail_code": "not_installed",
+          "waits_for": null
+        },
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "blocked",
+            "detail": "Not installed.",
+            "action": "Install Docker Sandboxes",
+            "headline": "Lending needs Docker Sandboxes",
+            "detail_code": "not_installed",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "waits",
+            "detail": "Waits for Docker Sandboxes.",
+            "waitsFor": "docker_installed",
+            "detail_code": "waits",
+            "waits_for": "docker_installed"
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "ok",
+            "detail": "On.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "waits",
+            "detail": "Waits for Docker Sandboxes.",
+            "waitsFor": "docker_installed",
+            "detail_code": "waits",
+            "waits_for": "docker_installed"
+          }
+        ],
+        "needsYou": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "blocked",
+            "detail": "Not installed.",
+            "action": "Install Docker Sandboxes",
+            "headline": "Lending needs Docker Sandboxes",
+            "detail_code": "not_installed",
+            "waits_for": null
+          }
+        ],
+        "canLend": false
+      },
+      "iconState": "Needs attention"
+    },
+    "lines": [
+      [
+        "Lending needs Docker Sandboxes",
+        "dis"
+      ],
+      [
+        "Install Docker Sandboxes…",
+        "hl"
+      ],
+      [
+        "Docker Sandboxes · Not installed",
+        "dis"
+      ],
+      [
+        "Docker sign-in · Waits for Docker Sandboxes",
+        "dis"
+      ],
+      [
+        "Codex · Waits for Docker Sandboxes",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "docker_stopped",
+    "status": {
+      "state": "blocked",
+      "reason": "docker_not_running",
+      "until": null,
+      "needs_you": [
+        {
+          "kind": "docker_not_running"
+        }
+      ],
+      "intent": {
+        "on": true,
+        "state": "blocked",
+        "reason": "docker_not_running",
+        "until": null
+      },
+      "execution": {
+        "state": "idle"
+      },
+      "blockers": [
+        {
+          "kind": "docker_not_running"
+        }
+      ],
+      "headline": "Lending stopped: Docker Sandboxes isn’t running",
+      "lending_blockers": {
+        "headline": "Lending stopped: Docker Sandboxes isn’t running",
+        "first": {
+          "key": "docker_running",
+          "label": "Docker Sandboxes",
+          "status": "blocked",
+          "detail": "Not running.",
+          "action": "Start Docker Sandboxes",
+          "headline": "Lending stopped: Docker Sandboxes isn’t running",
+          "detail_code": "not_running",
+          "waits_for": null
+        },
+        "items": [
+          {
+            "key": "docker_running",
+            "label": "Docker Sandboxes",
+            "status": "blocked",
+            "detail": "Not running.",
+            "action": "Start Docker Sandboxes",
+            "headline": "Lending stopped: Docker Sandboxes isn’t running",
+            "detail_code": "not_running",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "waits",
+            "detail": "Waits for Docker Sandboxes.",
+            "waitsFor": "docker_running",
+            "detail_code": "waits",
+            "waits_for": "docker_running"
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "ok",
+            "detail": "On.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "waits",
+            "detail": "Waits for Docker Sandboxes.",
+            "waitsFor": "docker_running",
+            "detail_code": "waits",
+            "waits_for": "docker_running"
+          }
+        ],
+        "needsYou": [
+          {
+            "key": "docker_running",
+            "label": "Docker Sandboxes",
+            "status": "blocked",
+            "detail": "Not running.",
+            "action": "Start Docker Sandboxes",
+            "headline": "Lending stopped: Docker Sandboxes isn’t running",
+            "detail_code": "not_running",
+            "waits_for": null
+          }
+        ],
+        "canLend": false
+      },
+      "iconState": "Needs attention"
+    },
+    "lines": [
+      [
+        "Lending stopped: Docker Sandboxes isn’t running",
+        "dis"
+      ],
+      [
+        "Start Docker Sandboxes…",
+        "hl"
+      ],
+      [
+        "Docker Sandboxes · Not running",
+        "dis"
+      ],
+      [
+        "Docker sign-in · Waits for Docker Sandboxes",
+        "dis"
+      ],
+      [
+        "Codex · Waits for Docker Sandboxes",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "docker_signed_out",
+    "status": {
+      "state": "blocked",
+      "reason": "docker_signed_out",
+      "until": null,
+      "needs_you": [
+        {
+          "kind": "docker_signed_out"
+        }
+      ],
+      "intent": {
+        "on": true,
+        "state": "blocked",
+        "reason": "docker_signed_out",
+        "until": null
+      },
+      "execution": {
+        "state": "idle"
+      },
+      "blockers": [
+        {
+          "kind": "docker_signed_out"
+        }
+      ],
+      "headline": "Lending stopped: sign in to Docker",
+      "lending_blockers": {
+        "headline": "Lending stopped: sign in to Docker",
+        "first": {
+          "key": "docker_signin",
+          "label": "Docker sign-in",
+          "status": "blocked",
+          "detail": "Not signed in.",
+          "action": "Sign in to Docker",
+          "headline": "Lending stopped: sign in to Docker",
+          "detail_code": "signed_out",
+          "waits_for": null
+        },
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "ok",
+            "detail": "Installed and running.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "blocked",
+            "detail": "Not signed in.",
+            "action": "Sign in to Docker",
+            "headline": "Lending stopped: sign in to Docker",
+            "detail_code": "signed_out",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "ok",
+            "detail": "On.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "waits",
+            "detail": "Waits for the Docker sign-in.",
+            "waitsFor": "docker_signin",
+            "detail_code": "waits",
+            "waits_for": "docker_signin"
+          }
+        ],
+        "needsYou": [
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "blocked",
+            "detail": "Not signed in.",
+            "action": "Sign in to Docker",
+            "headline": "Lending stopped: sign in to Docker",
+            "detail_code": "signed_out",
+            "waits_for": null
+          }
+        ],
+        "canLend": false
+      },
+      "iconState": "Needs attention"
+    },
+    "lines": [
+      [
+        "Lending stopped: sign in to Docker",
+        "dis"
+      ],
+      [
+        "Sign in to Docker…",
+        "hl"
+      ],
+      [
+        "Docker sign-in · Not signed in",
+        "dis"
+      ],
+      [
+        "Codex · Waits for the Docker sign-in",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "checking",
+    "status": {
+      "state": "ready",
+      "reason": null,
+      "until": null,
+      "needs_you": [],
+      "intent": {
+        "on": true,
+        "state": "ready",
+        "reason": null,
+        "until": null
+      },
+      "execution": {
+        "state": "idle"
+      },
+      "blockers": [],
+      "headline": "Lending is on",
+      "lending_blockers": {
+        "headline": "Checking this computer…",
+        "first": null,
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "unknown",
+            "detail": "Checking…",
+            "detail_code": "checking",
+            "waits_for": null
+          },
+          {
+            "key": "docker_running",
+            "label": "Docker Sandboxes",
+            "status": "unknown",
+            "detail": "Checking…",
+            "detail_code": "checking",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "unknown",
+            "detail": "Checking…",
+            "detail_code": "checking",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "ok",
+            "detail": "On.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "ok",
+            "detail": "Ready.",
+            "detail_code": "ok",
+            "waits_for": null
+          }
+        ],
+        "needsYou": [],
+        "canLend": false
+      },
+      "iconState": "Lending on"
+    },
+    "lines": [
+      [
+        "Checking this computer…",
+        "dis"
+      ],
+      [
+        "Docker Sandboxes · Checking…",
+        "dis"
+      ],
+      [
+        "Docker Sandboxes · Checking…",
+        "dis"
+      ],
+      [
+        "Docker sign-in · Checking…",
+        "dis"
+      ],
+      [
+        "Codex · Ready",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "codex_signed_out",
+    "status": {
+      "state": "blocked",
+      "reason": "agent_not_ready",
+      "until": null,
+      "needs_you": [
+        {
+          "kind": "agent_signed_out",
+          "agent": "codex"
+        }
+      ],
+      "intent": {
+        "on": true,
+        "state": "blocked",
+        "reason": "agent_not_ready",
+        "until": null
+      },
+      "execution": {
+        "state": "idle"
+      },
+      "blockers": [
+        {
+          "kind": "agent_signed_out",
+          "agent": "codex"
+        }
+      ],
+      "headline": "Lending stopped",
+      "lending_blockers": {
+        "headline": "Lending stopped: Codex is signed out",
+        "first": {
+          "key": "agent",
+          "agent": "codex",
+          "label": "Codex",
+          "status": "blocked",
+          "detail": "Signed out.",
+          "action": "Sign in to Codex",
+          "headline": "Lending stopped: Codex is signed out",
+          "detail_code": "signed_out",
+          "waits_for": null
+        },
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "ok",
+            "detail": "Installed and running.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "ok",
+            "detail": "Signed in.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "ok",
+            "detail": "On.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "blocked",
+            "detail": "Signed out.",
+            "action": "Sign in to Codex",
+            "headline": "Lending stopped: Codex is signed out",
+            "detail_code": "signed_out",
+            "waits_for": null
+          }
+        ],
+        "needsYou": [
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "blocked",
+            "detail": "Signed out.",
+            "action": "Sign in to Codex",
+            "headline": "Lending stopped: Codex is signed out",
+            "detail_code": "signed_out",
+            "waits_for": null
+          }
+        ],
+        "canLend": false
+      },
+      "iconState": "Needs attention"
+    },
+    "lines": [
+      [
+        "Lending stopped: Codex is signed out",
+        "dis"
+      ],
+      [
+        "Sign in to Codex…",
+        "hl"
+      ],
+      [
+        "Codex · Signed out",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "partial",
+    "status": {
+      "state": "ready",
+      "reason": null,
+      "until": null,
+      "needs_you": [
+        {
+          "kind": "agent_signed_out",
+          "agent": "claude"
+        }
+      ],
+      "intent": {
+        "on": true,
+        "state": "ready",
+        "reason": null,
+        "until": null
+      },
+      "execution": {
+        "state": "idle"
+      },
+      "blockers": [
+        {
+          "kind": "agent_signed_out",
+          "agent": "claude"
+        }
+      ],
+      "headline": "Lending is on",
+      "lending_blockers": {
+        "headline": "Lending is on",
+        "first": null,
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "ok",
+            "detail": "Installed and running.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "ok",
+            "detail": "Signed in.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "ok",
+            "detail": "On.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "ok",
+            "detail": "Ready.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "claude",
+            "label": "Claude Code",
+            "status": "blocked",
+            "detail": "Signed out.",
+            "action": "Sign in to Claude Code",
+            "headline": "Lending stopped: Claude Code is signed out",
+            "detail_code": "signed_out",
+            "waits_for": null
+          }
+        ],
+        "needsYou": [
+          {
+            "key": "agent",
+            "agent": "claude",
+            "label": "Claude Code",
+            "status": "blocked",
+            "detail": "Signed out.",
+            "action": "Sign in to Claude Code",
+            "headline": "Lending stopped: Claude Code is signed out",
+            "detail_code": "signed_out",
+            "waits_for": null
+          }
+        ],
+        "canLend": true
+      },
+      "iconState": "Needs attention"
+    },
+    "lines": [
+      [
+        "Lending is on",
+        "dis"
+      ],
+      [
+        "Codex · Ready",
+        "dis"
+      ],
+      [
+        "Claude Code · Signed out",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "host_unreachable",
+    "status": {
+      "state": "blocked",
+      "reason": "circle_unreachable",
+      "until": null,
+      "needs_you": [],
+      "intent": {
+        "on": true,
+        "state": "blocked",
+        "reason": "circle_unreachable",
+        "until": null
+      },
+      "execution": {
+        "state": "idle"
+      },
+      "blockers": [
+        {
+          "kind": "circle_unreachable"
+        }
+      ],
+      "headline": "Lending waits: can’t reach Sam",
+      "lending_blockers": {
+        "headline": "Lending waits: can’t reach Sam",
+        "first": {
+          "key": "circle",
+          "label": "Weekend projects",
+          "status": "blocked",
+          "detail": "Can’t reach Sam, which hosts the circle.",
+          "headline": "Lending waits: can’t reach Sam",
+          "detail_code": "unreachable",
+          "waits_for": null
+        },
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "ok",
+            "detail": "Installed and running.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "ok",
+            "detail": "Signed in.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "ok",
+            "detail": "On.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "circle",
+            "label": "Weekend projects",
+            "status": "blocked",
+            "detail": "Can’t reach Sam, which hosts the circle.",
+            "headline": "Lending waits: can’t reach Sam",
+            "detail_code": "unreachable",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "ok",
+            "detail": "Ready.",
+            "detail_code": "ok",
+            "waits_for": null
+          }
+        ],
+        "needsYou": [],
+        "canLend": false
+      },
+      "iconState": "Lending on"
+    },
+    "lines": [
+      [
+        "Lending waits: can’t reach Sam",
+        "dis"
+      ],
+      [
+        "Weekend projects · Can’t reach Sam, which hosts the circle",
+        "dis"
+      ],
+      [
+        "Codex · Ready",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "host_update",
+    "status": {
+      "state": "blocked",
+      "reason": "circle_update_needed",
+      "until": null,
+      "needs_you": [],
+      "intent": {
+        "on": true,
+        "state": "blocked",
+        "reason": "circle_update_needed",
+        "until": null
+      },
+      "execution": {
+        "state": "idle"
+      },
+      "blockers": [
+        {
+          "kind": "circle_update_needed"
+        }
+      ],
+      "headline": "Lending waits: Weekend projects needs an update",
+      "lending_blockers": {
+        "headline": "Lending waits: Weekend projects needs an update",
+        "first": {
+          "key": "circle",
+          "label": "Weekend projects",
+          "status": "blocked",
+          "detail": "Sam runs Faravan 1.0. This computer needs 2.0 or later to lend to it.",
+          "headline": "Lending waits: Weekend projects needs an update",
+          "detail_code": "host_too_old",
+          "waits_for": null
+        },
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "ok",
+            "detail": "Installed and running.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "ok",
+            "detail": "Signed in.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "ok",
+            "detail": "On.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "circle",
+            "label": "Weekend projects",
+            "status": "blocked",
+            "detail": "Sam runs Faravan 1.0. This computer needs 2.0 or later to lend to it.",
+            "headline": "Lending waits: Weekend projects needs an update",
+            "detail_code": "host_too_old",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "ok",
+            "detail": "Ready.",
+            "detail_code": "ok",
+            "waits_for": null
+          }
+        ],
+        "needsYou": [],
+        "canLend": false
+      },
+      "iconState": "Lending on"
+    },
+    "lines": [
+      [
+        "Lending waits: Weekend projects needs an update",
+        "dis"
+      ],
+      [
+        "Weekend projects · Sam runs Faravan 1.0. This computer needs 2.0 or later to lend to it",
+        "dis"
+      ],
+      [
+        "Codex · Ready",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "finishing",
+    "status": {
+      "state": "paused",
+      "reason": "paused",
+      "until": 1792447200000,
+      "needs_you": [],
+      "intent": {
+        "on": true,
+        "state": "paused",
+        "reason": "paused",
+        "until": 1792447200000
+      },
+      "execution": {
+        "state": "finishing",
+        "job": "attempt-1",
+        "person": "Sam",
+        "stops_by": 1792447260000
+      },
+      "blockers": [],
+      "headline": "Paused · Sam's job is finishing, stops by 3:01 PM",
+      "lending_blockers": {
+        "headline": "Paused until 3:00 PM",
+        "first": {
+          "key": "lending",
+          "label": "Lending",
+          "status": "blocked",
+          "detail": "Paused until 3:00 PM.",
+          "action": "Resume now",
+          "headline": "Paused until 3:00 PM",
+          "detail_code": "paused",
+          "waits_for": null
+        },
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "ok",
+            "detail": "Installed and running.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "ok",
+            "detail": "Signed in.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "blocked",
+            "detail": "Paused until 3:00 PM.",
+            "action": "Resume now",
+            "headline": "Paused until 3:00 PM",
+            "detail_code": "paused",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "ok",
+            "detail": "Ready.",
+            "detail_code": "ok",
+            "waits_for": null
+          }
+        ],
+        "needsYou": [
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "blocked",
+            "detail": "Paused until 3:00 PM.",
+            "action": "Resume now",
+            "headline": "Paused until 3:00 PM",
+            "detail_code": "paused",
+            "waits_for": null
+          }
+        ],
+        "canLend": false
+      },
+      "iconState": "Paused"
+    },
+    "lines": [
+      [
+        "Paused until 3:00 PM",
+        "dis"
+      ],
+      [
+        "Resume now…",
+        "hl"
+      ],
+      [
+        "Lending · Paused until 3:00 PM",
+        "dis"
+      ],
+      [
+        "Codex · Ready",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "stopping",
+    "status": {
+      "state": "running",
+      "reason": null,
+      "until": null,
+      "needs_you": [],
+      "intent": {
+        "on": true,
+        "state": "ready",
+        "reason": null,
+        "until": null
+      },
+      "execution": {
+        "state": "stopping",
+        "job": "attempt-1",
+        "person": "Sam",
+        "stops_by": 1792447260000
+      },
+      "blockers": [],
+      "headline": "Lending is on · Stop requested for Sam's job",
+      "lending_blockers": {
+        "headline": "Lending is on",
+        "first": null,
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "ok",
+            "detail": "Installed and running.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "ok",
+            "detail": "Signed in.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "ok",
+            "detail": "On.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "ok",
+            "detail": "Ready.",
+            "detail_code": "ok",
+            "waits_for": null
+          }
+        ],
+        "needsYou": [],
+        "canLend": true
+      },
+      "iconState": "Lending on"
+    },
+    "lines": [
+      [
+        "Lending is on",
+        "dis"
+      ],
+      [
+        "Codex · Ready",
+        "dis"
+      ]
+    ]
+  },
+  {
+    "name": "isolation_failed",
+    "status": {
+      "state": "paused",
+      "reason": "paused",
+      "until": null,
+      "needs_you": [
+        {
+          "kind": "isolation_check_failed"
+        }
+      ],
+      "intent": {
+        "on": true,
+        "state": "paused",
+        "reason": "paused",
+        "until": null
+      },
+      "execution": {
+        "state": "idle"
+      },
+      "blockers": [
+        {
+          "kind": "isolation_check_failed"
+        }
+      ],
+      "headline": "Paused",
+      "lending_blockers": {
+        "headline": "Lending paused: sandbox isolation check failed",
+        "first": {
+          "key": "isolation_check",
+          "label": "Sandbox isolation",
+          "status": "blocked",
+          "detail": "The sandbox could read your agent sign-in. Check Docker Sandboxes, then resume lending.",
+          "action": "Resume lending",
+          "headline": "Lending paused: sandbox isolation check failed",
+          "detail_code": "failed",
+          "waits_for": null
+        },
+        "items": [
+          {
+            "key": "docker_installed",
+            "label": "Docker Sandboxes",
+            "status": "ok",
+            "detail": "Installed and running.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "docker_signin",
+            "label": "Docker sign-in",
+            "status": "ok",
+            "detail": "Signed in.",
+            "detail_code": "ok",
+            "waits_for": null
+          },
+          {
+            "key": "isolation_check",
+            "label": "Sandbox isolation",
+            "status": "blocked",
+            "detail": "The sandbox could read your agent sign-in. Check Docker Sandboxes, then resume lending.",
+            "action": "Resume lending",
+            "headline": "Lending paused: sandbox isolation check failed",
+            "detail_code": "failed",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "blocked",
+            "detail": "Paused until you resume.",
+            "action": "Resume now",
+            "headline": "Paused until you resume",
+            "detail_code": "paused",
+            "waits_for": null
+          },
+          {
+            "key": "agent",
+            "agent": "codex",
+            "label": "Codex",
+            "status": "waits",
+            "detail": "Waits for the isolation check.",
+            "waitsFor": "isolation_check",
+            "detail_code": "waits",
+            "waits_for": "isolation_check"
+          }
+        ],
+        "needsYou": [
+          {
+            "key": "isolation_check",
+            "label": "Sandbox isolation",
+            "status": "blocked",
+            "detail": "The sandbox could read your agent sign-in. Check Docker Sandboxes, then resume lending.",
+            "action": "Resume lending",
+            "headline": "Lending paused: sandbox isolation check failed",
+            "detail_code": "failed",
+            "waits_for": null
+          },
+          {
+            "key": "lending",
+            "label": "Lending",
+            "status": "blocked",
+            "detail": "Paused until you resume.",
+            "action": "Resume now",
+            "headline": "Paused until you resume",
+            "detail_code": "paused",
+            "waits_for": null
+          }
+        ],
+        "canLend": false
+      }
+    },
+    "lines": [
+      [
+        "Lending paused: sandbox isolation check failed",
+        "dis"
+      ],
+      [
+        "Resume lending…",
+        "hl"
+      ],
+      [
+        "Sandbox isolation · The sandbox could read your agent sign-in. Check Docker Sandboxes, then resume lending",
+        "dis"
+      ],
+      [
+        "Lending · Paused until you resume",
+        "dis"
+      ],
+      [
+        "Codex · Waits for the isolation check",
+        "dis"
+      ]
+    ]
+  }
+]

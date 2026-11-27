@@ -1,0 +1,185 @@
+/* Shared app frame: persistent desktop navigation, measured phone navigation,
+   and one aligned heading/content column. Page interiors retain their own layouts. */
+.app{display:flex;min-height:100vh;min-height:100svh}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.page,.page.wide{width:100%;max-width:var(--page-max);margin:0 auto;padding:var(--s-6) var(--s-8) var(--s-14)}
+.main>.page-head{width:100%;max-width:var(--page-max);margin:0 auto;padding:var(--s-6) var(--s-8) var(--s-5);margin-bottom:var(--s-6);border-bottom:1px solid var(--line)}
+.main>.page-head+.page{padding-top:0}
+.page-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s-4);margin-bottom:var(--s-6);min-height:var(--touch)}
+.page-heading{min-width:0;flex:1;overflow-wrap:anywhere}
+.page-heading .t-page{max-width:28ch}
+.page-heading .page-sub{max-width:64ch}
+.page-head-actions{flex:none;max-width:100%;align-self:flex-start;flex-wrap:wrap;justify-content:flex-end}
+.back-link{display:inline-flex;align-items:center;gap:var(--s-half);color:var(--text-2);text-decoration:none;font-weight:550;font-size:var(--text-sm);min-height:44px}
+/* Sidebar is fixed: it never scrolls away (finding 8.8) */
+.sidebar{position:sticky;top:0;height:100vh;height:100dvh;width:var(--sidebar-w);flex:none;padding:var(--s-4);display:flex;flex-direction:column;gap:var(--s-1);border-right:1px solid var(--line);background:var(--bg-sunk);overflow:auto}
+.side-brand{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-2) var(--s-3) var(--s-5)}
+.side-search{display:flex;align-items:center;gap:var(--s-2);min-height:44px;padding:var(--s-2) var(--s-3);margin-bottom:var(--s-3);border-radius:var(--r-sm);border:1px solid var(--line);background:var(--surface);color:var(--text-3);text-decoration:none;font-size:var(--text-sm)}
+.side-search:hover{background:var(--surface-2)}
+.side-link{display:flex;align-items:center;gap:var(--s-3);min-height:44px;padding:var(--s-2) var(--s-3);border-radius:var(--r-sm);color:var(--text-2);text-decoration:none;font-weight:550;font-size:var(--text-sm)}
+.side-link{overflow-wrap:anywhere}
+.side-link>.i,.side-link>.av{flex:none}
+.side-link:hover{background:var(--surface-2);color:var(--text)}
+.side-link[aria-current=page]{background:var(--ink-btn);color:var(--ink-btn-text);font-weight:700}
+.side-link .count{margin-left:auto;font:700 var(--text-micro)/var(--s-5) var(--font-sans);color:var(--text-on-brand);background:var(--brand);border-radius:10px;min-width:20px;height:20px;text-align:center;padding:0 var(--s-2)}
+.side-h{font-size:var(--text-xs);font-weight:600;color:var(--text-2);padding:var(--s-6) var(--s-3) var(--s-2)}
+.side-foot{margin-top:auto;display:grid;gap:var(--s-2);padding-top:var(--s-6)}
+.machine{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--line);text-decoration:none;color:inherit}
+.machine>.i{color:var(--text-2)}
+.tabbar{display:none}
+.phone-profile-row{display:none}
+.phone-only{display:none!important}
+.grid-2{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:var(--s-8);align-items:start}
+.rail{position:sticky;top:var(--s-8);display:grid;gap:var(--s-6)}
+.dock{display:none}
+
+@media (max-width:899px){
+  .sidebar,.desk-only{display:none!important}
+  .phone-only{display:revert!important}
+  .app{flex-direction:column}
+  /* Untitled routes own their heading. Keep profile access in flow, never over their actions. */
+  .phone-profile-row{display:flex;justify-content:space-between;align-items:center;padding:calc(env(safe-area-inset-top) + var(--s-1)) var(--s-4) 0}
+  .phone-profile-link{display:inline-flex;align-items:center;gap:var(--s-2);min-width:var(--touch);min-height:var(--touch);padding:0 var(--s-2);border-radius:var(--r-md);color:var(--text-2);text-decoration:none;font-size:var(--text-sm);font-weight:600}
+  .phone-profile-link:hover{background:var(--surface-2);color:var(--text)}
+  .phone-profile-link:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+  .main{padding-bottom:calc(var(--bar-h, var(--s-18)) + var(--s-6))}
+  .main>.page-head{align-items:flex-start;max-width:none;margin:0;padding:calc(env(safe-area-inset-top) + var(--s-3)) var(--s-4) var(--s-3);position:sticky;top:0;z-index:5;
+    background:var(--bg)}
+  .main>.page-head .page-sub{margin-top:var(--s-1)}
+  .page-head-actions .hit{min-width:var(--touch);min-height:var(--touch)}
+
+  .page,.page.wide{padding:var(--s-2) var(--s-4) var(--s-8)}
+  .grid-2{grid-template-columns:minmax(0,1fr);gap:var(--s-6)}
+  .rail{position:static}
+  .tabbar{display:grid;position:fixed;left:0;right:0;bottom:0;z-index:6;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:var(--s-1);background:var(--surface);
+    border-top:1px solid var(--line);padding:var(--s-2) var(--s-2) calc(var(--s-2) + env(safe-area-inset-bottom))}
+  .tabbar a{display:grid;justify-items:center;align-content:start;gap:var(--s-1);min-height:56px;padding:var(--s-1) 0;text-decoration:none;color:var(--text-2);font:600 var(--text-xs)/var(--lh-xs) var(--font-sans);position:relative;min-width:0}
+  .tab-icon{display:flex;align-items:center;justify-content:center;width:44px;min-height:28px;border-radius:var(--r-pill)}
+  .tab-label{max-width:100%;overflow-wrap:anywhere}
+  .tabbar a[aria-current=page]{color:var(--text);font-weight:700}
+  .tabbar a[aria-current=page] .tab-icon{background:var(--ink-btn);color:var(--ink-btn-text)}
+  .tabbar .badge{position:absolute;top:0;left:calc(50% + 8px);min-width:18px;height:18px;padding:0 var(--s-1);border-radius:9px;background:var(--brand);color:var(--text-on-brand);font:700 var(--text-micro)/var(--lh-badge) var(--font-sans);text-align:center;box-shadow:0 0 0 2px var(--surface)}
+  /* Sticky action dock above the home indicator (thumb zone) */
+  .dock{display:block;position:fixed;left:0;right:0;bottom:0;z-index:7;padding:var(--s-3) var(--s-4) var(--s-8);background:color-mix(in srgb,var(--bg) 96%,transparent);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-top:1px solid var(--line)}
+  body[data-dock] .tabbar{display:none}
+  body[data-dock] .main{padding-bottom:0}
+  body[data-dock] .page{padding-bottom:200px} /* Keeps content above the fixed phone action dock. */
+}
+/* Overlays: sheets and dialogs over a dimmed screen */
+.overlay{position:fixed;inset:0;z-index:40;background:var(--scrim);display:flex;align-items:flex-end;justify-content:center}
+.overlay.center{align-items:center}
+.overlay .sheet{width:100%;max-width:520px}
+.dialog{background:var(--surface);border-radius:var(--r-xl);box-shadow:var(--shadow-3);padding:var(--s-6);width:min(460px,calc(100% - 32px))}
+.toast-wrap{position:fixed;left:16px;right:16px;bottom:100px;z-index:45;display:flex;justify-content:center}
+@media (min-width:900px){.overlay{align-items:center}.overlay .sheet{border-radius:var(--r-xl);padding-bottom:var(--s-6)}.overlay .sheet .grab{display:none}.toast-wrap{bottom:28px;left:auto;right:28px;justify-content:flex-end}}
+
+/* App additions to the mockup shell */
+.page-sub{margin-top:var(--s-2)}
+h1.t-page:focus{outline:none;box-shadow:none}
+.side-nav{display:flex;flex-direction:column;gap:var(--s-1)}
+.machine .grow{font-size:var(--text-sm)}
+a.machine:hover{background:var(--surface-2)}
+.av.xs{width:20px;height:20px;font-size:var(--text-avatar-xs)}
+
+/* Shell states (U21): offline strip, update toast. From mockups/src/home.html. */
+.offline{display:flex;gap:var(--s-3);align-items:center;padding:var(--s-3) var(--s-4);background:var(--wait-soft);color:var(--wait-text);font-size:var(--text-sm);font-weight:600}
+.offline .linkish{color:inherit;min-height:44px;text-decoration:underline}
+.offline .action{display:inline-flex;align-items:center}
+.offline .feedback:empty{display:none}
+@media(min-width:900px){.offline{border-bottom:1px solid var(--line)}}
+@media(max-width:899px){.offline{margin:0 var(--s-4) var(--s-2);border-radius:12px}}
+.toast .btn{--h:44px}
+
+/* Full-width phone action follows the heading; desktop actions remain in the head. */
+.phone-action{padding:var(--s-1) var(--s-4) var(--s-2)}.phone-action .btn{width:100%}
+@media(min-width:900px){.phone-action{display:none}}
+
+/* Height alone cannot distinguish a keyboard from a landscape phone: keep navigation reachable. */
+
+
+/* Keep the sidebar surface continuous on long pages. */
+@media(min-width:900px){.app{background:linear-gradient(to right,var(--bg-sunk) var(--sidebar-w),var(--bg) var(--sidebar-w))}}
+
+/* Keep generous titles without forcing narrow-phone actions over the heading.
+   Both rows remain in flow; page-owned Back links are never repositioned. */
+@media(max-width:399px){.main>.page-head{flex-wrap:wrap}.page-head-actions{margin-left:auto}.page-heading{flex-basis:calc(100% - var(--touch) - var(--s-4))}}
+
+/* Lead swing navigation and shared shell measurements. */
+/* The swing sidebar is page-coloured, so the desktop gutter under its sticky box matches it, rule included. */
+@media(min-width:900px){.swing-app.app{background:linear-gradient(to right,var(--bg) calc(var(--sidebar-w) - 1px),var(--line) calc(var(--sidebar-w) - 1px) var(--sidebar-w),var(--bg) var(--sidebar-w))}}
+.swing-app .sidebar{width:232px;padding:20px 12px;gap:4px;background:var(--bg);border-color:var(--line)}
+.swing-app .side-brand{gap:10px;padding:4px 10px 16px}
+.swing-app .brand-name{font-size:16px;line-height:20px;font-weight:600;letter-spacing:-.01em;color:var(--text)}
+.swing-app .side-search{height:34px;min-height:34px;padding:0 10px;margin:0 0 12px;border:0;border-radius:9px;background:var(--surface-2);color:var(--text-3)}
+.swing-app .side-search:hover{background:var(--surface-2);color:var(--text)}
+.swing-app .side-search .grow{font-size:14px}
+.swing-app .side-search .i{width:16px;height:16px}
+.swing-app .side-nav{gap:4px}
+.swing-app .side-nav .side-link{height:34px;min-height:34px;padding:0 10px;gap:10px;border-radius:9px;font-size:14px;font-weight:500}
+.swing-app .side-nav .side-link>.i{width:18px;height:18px}
+.swing-app .side-nav .side-link[aria-current=page]{background:var(--surface);color:var(--text);font-weight:600;box-shadow:var(--shadow-1)}
+.swing-app .side-nav .side-link:hover:not([aria-current=page]){background:var(--surface-2);color:var(--text)}
+.swing-app .side-nav .count{margin-left:auto;min-width:20px;height:20px;padding:0 5px;border-radius:50%;background:var(--brand);color:#1d1600;font-size:12px;line-height:20px;font-weight:700}
+.swing-app .side-foot{gap:4px;padding:0 0 0 0}
+.swing-app .side-foot .side-link{height:40px;min-height:40px;padding:0 10px;border-radius:9px;font-size:14px;font-weight:500}
+.swing-app .progress-mark{display:inline-block;width:7px;height:7px;border:1px solid var(--need-dot);border-radius:50%;background:var(--need-dot);flex:none}
+.swing-app .side-nav .progress-mark{margin-left:auto;margin-right:4px}
+.swing-app .tabbar{font-family:var(--font-sans)}
+@media(max-width:899px){
+  .swing-app .tabbar{height:calc(76px + env(safe-area-inset-bottom));grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:0;padding:8px 8px calc(20px + env(safe-area-inset-bottom));
+    background:color-mix(in srgb,var(--bg) 88%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-color:var(--line)}
+  .swing-app .tabbar a{min-height:0;gap:4px;padding:0;color:var(--text-3);font-size:11.5px;line-height:16px;font-weight:600}
+  .swing-app .tabbar a[aria-current=page]{color:var(--text);font-weight:600}
+  .swing-app .tabbar a[aria-current=page] .tab-icon{background:transparent;color:var(--text)}
+  .swing-app .tabbar a[aria-current=page]::after{content:'';position:absolute;bottom:-8px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--text)}
+  .swing-app .tabbar .tab-icon{width:28px;min-height:24px}
+  .swing-app .tabbar .tab-icon .i{width:22px;height:22px}
+  .swing-app .tabbar .badge{top:-4px;left:calc(50% + 10px);min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--brand);color:#1d1600;font-size:11px;line-height:18px;box-shadow:none}
+  .swing-app .tabbar .progress-mark{position:absolute;top:1px;left:calc(50% + 10px);width:7px;height:7px}
+}
+
+/* A single frame owns page geometry, including page-owned headings. */
+.swing-app .main{display:flex;flex-direction:column;padding:0;min-width:0}
+/* 56px shell gutters leave a 610px reading measure inside the shared page frame. */
+.swing-app .main>.page,.swing-app .main>.page-head{width:100%;max-width:722px;margin-inline:auto;padding-inline:56px}
+.swing-app .main>.page{container-type:inline-size}
+.swing-app .main:has(.jobs-list)>.page-head,.swing-app .main>.page:has(.jobs-list),.swing-app .main>.page:has(.job-layout),.swing-app .main>.page:has(.rq-grid){max-width:992px}
+.swing-app .main>.page{padding-top:40px}
+.swing-app .main>.page-head{padding-top:40px;padding-bottom:20px;margin-bottom:0;border:0}
+.swing-app .main>.page-head+.page{padding-top:0}
+@container (max-width:720px){
+ .swing-app .main>.page :is(.setup-grid,.cols,.you-page,.rq-grid,.job-layout){grid-template-columns:minmax(0,1fr)}
+}
+.swing-app h1,.swing-app h2,.swing-app h3{font-weight:600}
+.swing-app [tabindex="-1"]:focus{outline:none;box-shadow:none}
+.swing-app :focus-visible:not([tabindex="-1"]){outline:2px solid var(--focus);outline-offset:3px}
+.swing-app .mark,.swing-app .mark svg{background:none;box-shadow:none;width:32px;height:32px}
+[data-theme=dark] .swing-app .mark{background:none;box-shadow:none}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .swing-app .mark{background:none;box-shadow:none}}
+@media(max-width:899px){
+ .swing-app .main>.page,.swing-app .main>.page-head{padding-inline:16px;max-width:none}
+ .swing-app .main>.page{padding-top:16px}
+ html:has(.swing-app){scroll-padding-block-end:calc(76px + env(safe-area-inset-bottom) + var(--s-2))}
+ .swing-app .main>.page-head{padding-top:calc(env(safe-area-inset-top) + 12px);padding-bottom:12px}
+ .swing-app .main{padding-bottom:calc(var(--bar-h, var(--s-18)) + var(--s-6))}
+ body[data-dock] .swing-app .main{padding-bottom:0}
+ .swing-app .phone-profile-row{padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;min-height:68px;display:flex;justify-content:space-between;align-items:center}
+ .swing-app .phone-brand{display:inline-flex;align-items:center;min-height:44px;color:var(--text);text-decoration:none}
+ .swing-app .phone-brand:focus-visible{outline:2px solid var(--text);outline-offset:2px;border-radius:var(--r-md)}
+ .swing-app .phone-profile-link{display:flex;align-items:center;justify-content:center;width:44px;height:44px}
+ .swing-app .phone-profile-link .av{width:32px;height:32px}
+}
+
+/* Preserve high-contrast navigation and focus states across the new surfaces. */
+@media (forced-colors:active){
+  .side-link[aria-current=page],.tabbar a[aria-current=page],.you-nav .row[aria-current=page]{outline:2px solid CanvasText;outline-offset:-2px}
+  .seg button[aria-pressed=true]{outline:2px solid Highlight;outline-offset:-2px}
+  .onboarding-steps .step-dot{border:1.5px solid CanvasText}
+  .onboarding-steps li.current .step-dot{forced-color-adjust:none;background:CanvasText}
+  :focus-visible{outline:2px solid Highlight}
+}
+@media (prefers-contrast:more){
+  :root{--line:var(--line-strong);--text-2:var(--text);--text-3:var(--text-2)}
+}
+
+.not-found-links{display:flex;flex-wrap:wrap;gap:var(--s-2)}

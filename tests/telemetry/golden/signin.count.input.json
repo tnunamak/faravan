@@ -1,0 +1,27 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "observations": [
+    {
+      "kind": "event:signin",
+      "data": {
+        "flowId": "flow-1",
+        "target": "codex",
+        "status": "starting"
+      },
+      "atMs": 0
+    },
+    {
+      "kind": "event:signin",
+      "data": {
+        "flowId": "flow-1",
+        "target": "codex",
+        "status": "timed_out"
+      },
+      "atMs": 300000
+    }
+  ]
+}

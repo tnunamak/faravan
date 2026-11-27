@@ -1,0 +1,47 @@
+import './helpers/no-browser.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawn} from 'node:child_process';import {once} from 'node:events';
+import {deadlineProcessStart,createSandboxDeadlineManager} from '../lib/sandbox-deadline.mjs';
+import {fileSbx,receiptBackend} from './helpers/sandbox-receipt-fixture.mjs';
+import {seedSandboxOwner} from './helpers/sandbox-owner.mjs';
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+test('parent SIGKILL during create leaves an exited guard and a persistent late-name fence',{timeout:150000},async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'deadline-create-crash-')),inventory=path.join(root,'inventory'),marker=path.join(root,'dispatched'),binary=path.join(root,'sbx'),program=path.join(root,'parent.mjs');
+ const variables=['FARAVAN_HOME','FARAVAN_SBX_HOME','FARAVAN_SCRATCH_ROOT'],saved=Object.fromEntries(variables.map(key=>[key,process.env[key]]));
+ process.env.FARAVAN_HOME=path.join(root,'profile');process.env.FARAVAN_SBX_HOME=path.join(root,'sbx-home');process.env.FARAVAN_SCRATCH_ROOT=path.join(root,'scratch');
+ fs.mkdirSync(process.env.FARAVAN_SBX_HOME);seedSandboxOwner();
+ const managerModule=new URL('../lib/sandbox-deadline.mjs',import.meta.url).href,fixtureModule=new URL('./helpers/sandbox-receipt-fixture.mjs',import.meta.url).href;
+ fs.writeFileSync(inventory,'[]');fs.writeFileSync(binary,'#!'+process.execPath+'\nimport fs from "node:fs";const file='+JSON.stringify(inventory)+';if(process.argv[2]==="rm")fs.writeFileSync(file,"[]");else console.log(fs.readFileSync(file,"utf8"));',{mode:0o755});
+ fs.writeFileSync(program,`import fs from 'node:fs';import path from 'node:path';import {fileSbx,receiptBackend,receiptJob} from ${JSON.stringify(fixtureModule)};import {createSandboxDeadlineManager} from ${JSON.stringify(managerModule)};
+ const root=${JSON.stringify(root)},directory=path.join(root,'profile/v1/sandbox-cleanup');process.env.FARAVAN_SCRATCH_ROOT=path.join(root,'scratch');fs.mkdirSync(process.env.FARAVAN_SCRATCH_ROOT);
+ const fake=fileSbx(root),backend=receiptBackend(root,fake,{sandboxDeadlines:createSandboxDeadlineManager({binary:${JSON.stringify(binary)},platform:'darwin',directory})}),run=backend.runSbx;
+ backend.runSbx=async(args,options)=>{if(['create','run'].includes(args[0])){fs.writeFileSync(${JSON.stringify(marker)},args[args.indexOf('--name')+1]);return new Promise(()=>{});}return run(args,options);};
+ const job=receiptJob();job.resources.wall_seconds=1;backend.prepare(job).catch(()=>{});setInterval(()=>{},1000);`);
+ const parent=spawn(process.execPath,[program],{env:{HOME:process.env.HOME,PATH:process.env.PATH,FARAVAN_HOME:process.env.FARAVAN_HOME,FARAVAN_SBX_HOME:process.env.FARAVAN_SBX_HOME},stdio:'ignore'});let guard;
+ t.after(async()=>{if(parent.exitCode===null&&parent.signalCode===null)parent.kill('SIGKILL');if(guard&&await deadlineProcessStart(guard.pid)===guard.start)process.kill(guard.pid,'SIGTERM');await pause(100);fs.rmSync(root,{recursive:true,force:true});for(const key of variables)if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key];});
+ const readyBy=Date.now()+10000;while(!fs.existsSync(marker)&&Date.now()<readyBy)await pause(20);assert.ok(fs.existsSync(marker),'create reached only after registration');
+ const directory=path.join(root,'profile/v1/sandbox-cleanup'),file=fs.readdirSync(directory).find(name=>/^[a-f0-9-]{36}\.json$/.test(name)),recordPath=path.join(directory,file),row=JSON.parse(fs.readFileSync(recordPath));
+ guard=JSON.parse(fs.readFileSync(recordPath+'.deadline'));assert.equal(guard.state,'armed');assert.ok(row.deadline_enforcer);
+ const exited=once(parent,'exit');parent.kill('SIGKILL');assert.equal((await exited)[1],'SIGKILL');
+ const deadline=row.deadline_at;while(Date.now()<deadline+1500)await pause(Math.min(500,deadline+1500-Date.now()));
+ assert.equal(JSON.parse(fs.readFileSync(recordPath+'.deadline')).state,'removed','expired never-created compute settles behind a durable fence');
+ const exitedBy=Date.now()+5000;while(await deadlineProcessStart(guard.pid)&&Date.now()<exitedBy)await pause(50);
+ assert.equal(await deadlineProcessStart(guard.pid),null,'the never-created supervisor exits');
+ assert.equal(JSON.parse(fs.readFileSync(recordPath)).create_abandoned,true);
+ assert.equal(JSON.parse(fs.readFileSync(recordPath)).create_settled,false);
+ const name=fs.readFileSync(marker,'utf8');fs.writeFileSync(inventory,JSON.stringify([{name}]));
+ assert.equal(JSON.parse(fs.readFileSync(inventory)).length,1,'the late inert name remains until the app resumes its fence sweep');
+ const doneBy=Date.now()+5000;while(await deadlineProcessStart(guard.pid)&&Date.now()<doneBy)await pause(50);assert.equal(await deadlineProcessStart(guard.pid),null);
+ assert.equal(JSON.parse(fs.readFileSync(recordPath+'.deadline')).state,'removed');
+ assert.equal(JSON.parse(fs.readFileSync(recordPath)).create_settled,false,'the supervisor never invents materialization');
+ const model=fileSbx(root),manager=createSandboxDeadlineManager({binary,platform:'darwin',directory});let registrations=0;
+ const register=manager.register;manager.register=(...args)=>{registrations++;return register(...args);};
+ const backend=receiptBackend(root,{run:async(args,options)=>{
+  if(args[0]==='ls')return {code:0,stdout:fs.readFileSync(inventory,'utf8')};
+  if(args[0]==='rm'){fs.writeFileSync(inventory,'[]');return {code:0};}
+  return model.run(args,options);
+ }},{sandboxDeadlines:manager});
+ assert.equal((await backend.reconcileOwnedSandboxes()).removed,true,'restart removes the late fenced name and finishes cleanup');
+ assert.equal(fs.existsSync(recordPath),false);assert.equal(fs.existsSync(row.scratch_dir),false);
+ assert.deepEqual(JSON.parse(fs.readFileSync(inventory)),[],'the app removes the exact late name');
+ assert.equal(registrations,0,'completed independent removal never rearms the guard');
+});

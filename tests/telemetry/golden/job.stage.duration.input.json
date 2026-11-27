@@ -1,0 +1,33 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "observations": [
+    {
+      "kind": "event:lending",
+      "data": {
+        "account": "claude:0",
+        "status": "preparing"
+      },
+      "atMs": 0
+    },
+    {
+      "kind": "event:lending",
+      "data": {
+        "account": "claude:0",
+        "status": "running"
+      },
+      "atMs": 1000
+    },
+    {
+      "kind": "event:lending",
+      "data": {
+        "account": "claude:0",
+        "status": "finished"
+      },
+      "atMs": 143000
+    }
+  ]
+}

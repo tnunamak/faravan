@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faravan.dev/protocol/v1/requirements.schema.json",
+  "title": "Faravan v1 requirements",
+  "description": "Standalone view of the requirements definition shared by signed jobs.",
+  "$ref": "job.schema.json#/$defs/requirements"
+}

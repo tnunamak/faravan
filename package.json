@@ -1,0 +1,40 @@
+{
+  "name": "faravan",
+  "private": true,
+  "description": "Lend and borrow coding-agent time with people you trust",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "bar": "node scripts/bar.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "test:fast": "node scripts/run-tests.mjs --fast",
+    "test:slow": "node scripts/run-tests.mjs --slow",
+    "test:ui": "npm --prefix ui ci && npm --prefix ui test",
+    "test:tray": "cd tray && go test ./...",
+    "test:all": "npm test && npm run test:ui && npm run test:tray",
+    "build:ui": "npm --prefix ui ci && npm --prefix ui run build",
+    "package": "bash packaging/build.sh",
+    "test:e2e": "playwright test",
+    "status": "node scripts/status-table.mjs",
+    "journey-check": "node scripts/journey-check.mjs",
+    "protocol:check": "node scripts/protocol-check.mjs",
+    "protocol:replay": "node --test --test-concurrency=2 tests/protocol-replay/",
+    "test:browser": "node scripts/browser-verify.mjs",
+    "gen:ops": "node scripts/gen-ops-docs.mjs",
+    "gen:support-schema": "node scripts/gen-support-schema.mjs",
+    "gen:telemetry": "node scripts/gen-telemetry-catalog.mjs && node scripts/gen-support-schema.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "acorn": "^8.19.0",
+    "axe-core": "^4.14.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "1.5.2",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@tnunamak/gozar": "file:vendor/tnunamak-gozar-0.5.1.tgz",
+    "yaml": "2.9.1",
+    "yauzl": "3.4.0"
+  }
+}

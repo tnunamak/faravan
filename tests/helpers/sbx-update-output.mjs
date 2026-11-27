@@ -1,0 +1,2 @@
+// Captured macOS sbx 0.53.0 client / 0.49.1 daemon failure, with hashes shortened.
+export const sbxUpdateOutput={code:1,stdout:'  Client Version:  v0.53.0 2c62\n  Server Version:  v0.49.1 c5b1\n',stderr:'warning: Docker Sandboxes has been updated and needs to restart; all running sandboxes will be stopped\nerror: ensure daemon: cannot prompt for restart: stdin is not a terminal; run the command in an interactive terminal to confirm the restart\n  try: sbx daemon restart\n'};

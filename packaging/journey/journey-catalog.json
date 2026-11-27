@@ -1,0 +1,443 @@
+{
+  "schemaVersion": 1,
+  "sourceBase": "746d855575052ebeade7197d39393862d2ce07e0",
+  "scope": "First owner/friend acceptance path; source inventory, not execution evidence.",
+  "cases": [
+    {
+      "id": "install",
+      "role": "both",
+      "preconditions": [
+        "Fresh app data and approved local candidate"
+      ],
+      "action": "Install and open the candidate",
+      "visibleOutcome": "Each app uses its own installed runtime and data home",
+      "failureVariant": "Wrong runtime or shared data home",
+      "testId": "packaging/journey/smoke.mjs#checks.ownerProfile+friendProfile",
+      "fidelity": "installed one host",
+      "platforms": {
+        "linux": {
+          "status": "BUILT",
+          "testId": "packaging/journey/smoke.mjs#checks.ownerProfile+friendProfile",
+          "fidelity": "installed one host"
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "limitations": [
+        "Locally built candidate on one Linux host; headless browser with two homes.",
+        "Synthetic account/backend unless separately authorized live mode.",
+        "Failure variant describes required behavior, not additional fault-injection coverage."
+      ]
+    },
+    {
+      "id": "sign-in",
+      "role": "both",
+      "preconditions": [
+        "Fresh provider and sandbox accounts"
+      ],
+      "action": "Complete sign-in from Setup",
+      "visibleOutcome": "Account is usable and truthfully shown",
+      "failureVariant": "Interrupted or unavailable sign-in",
+      "testId": null,
+      "fidelity": "installed two hosts",
+      "platforms": {
+        "linux": {
+          "status": "NOT_BUILT",
+          "reason": "Scoped smoke uses prepared sign-in; fresh sign-in is explicitly excluded."
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "coverageKnowledge": "UNKNOWN",
+      "reason": "Scoped smoke uses prepared sign-in; fresh sign-in is explicitly excluded."
+    },
+    {
+      "id": "pick-agent",
+      "role": "owner",
+      "preconditions": [
+        "Prepared account and completed safety check"
+      ],
+      "action": "Select the lending agent and model",
+      "visibleOutcome": "Selection survives restart",
+      "failureVariant": "Selection is missing or changes",
+      "testId": "packaging/journey/smoke.mjs#checks.lendingSettingsThroughUi",
+      "fidelity": "installed one host",
+      "platforms": {
+        "linux": {
+          "status": "BUILT",
+          "testId": "packaging/journey/smoke.mjs#checks.lendingSettingsThroughUi",
+          "fidelity": "installed one host"
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "limitations": [
+        "Locally built candidate on one Linux host; headless browser with two homes.",
+        "Synthetic account/backend unless separately authorized live mode.",
+        "Failure variant describes required behavior, not additional fault-injection coverage."
+      ]
+    },
+    {
+      "id": "host-circle",
+      "role": "owner",
+      "preconditions": [
+        "Independent owner and friend homes"
+      ],
+      "action": "Start a local circle",
+      "visibleOutcome": "Circle is visible to the owner",
+      "failureVariant": "Start fails or uses another circle",
+      "testId": "packaging/journey/smoke.mjs#checks.circleInviteJoinApprovalUi",
+      "fidelity": "installed one host",
+      "platforms": {
+        "linux": {
+          "status": "BUILT",
+          "testId": "packaging/journey/smoke.mjs#checks.circleInviteJoinApprovalUi",
+          "fidelity": "installed one host"
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "limitations": [
+        "Locally built candidate on one Linux host; headless browser with two homes.",
+        "Synthetic account/backend unless separately authorized live mode.",
+        "Failure variant describes required behavior, not additional fault-injection coverage."
+      ]
+    },
+    {
+      "id": "invite-join",
+      "role": "both",
+      "preconditions": [
+        "Owner hosts a circle; lending stays off"
+      ],
+      "action": "Create an invitation, review and join on the friend",
+      "visibleOutcome": "Owner approves the requested computer",
+      "failureVariant": "Wrong membership or unapproved join",
+      "testId": "packaging/journey/smoke.mjs#checks.circleInviteJoinApprovalUi",
+      "fidelity": "installed one host",
+      "platforms": {
+        "linux": {
+          "status": "BUILT",
+          "testId": "packaging/journey/smoke.mjs#checks.circleInviteJoinApprovalUi",
+          "fidelity": "installed one host"
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "limitations": [
+        "Locally built candidate on one Linux host; headless browser with two homes.",
+        "Synthetic account/backend unless separately authorized live mode.",
+        "Failure variant describes required behavior, not additional fault-injection coverage."
+      ]
+    },
+    {
+      "id": "send",
+      "role": "friend",
+      "preconditions": [
+        "Joined circle and first-send review"
+      ],
+      "action": "Send one no-project job",
+      "visibleOutcome": "Friend opens the new job page",
+      "failureVariant": "No job identity is returned",
+      "testId": "packaging/journey/smoke.mjs#checks.friendSentJobFromUi",
+      "fidelity": "installed one host",
+      "platforms": {
+        "linux": {
+          "status": "BUILT",
+          "testId": "packaging/journey/smoke.mjs#checks.friendSentJobFromUi",
+          "fidelity": "installed one host"
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "limitations": [
+        "Locally built candidate on one Linux host; headless browser with two homes.",
+        "Synthetic account/backend unless separately authorized live mode.",
+        "Failure variant describes required behavior, not additional fault-injection coverage."
+      ]
+    },
+    {
+      "id": "approve",
+      "role": "owner",
+      "preconditions": [
+        "Job awaiting explicit review; smoke approve mode"
+      ],
+      "action": "Review and approve that job",
+      "visibleOutcome": "Exactly one execution begins",
+      "failureVariant": "Wrong job or repeated execution",
+      "testId": "packaging/journey/smoke.mjs#checks.job1HandApprovedOnce",
+      "fidelity": "installed one host",
+      "platforms": {
+        "linux": {
+          "status": "BUILT",
+          "testId": "packaging/journey/smoke.mjs#checks.job1HandApprovedOnce",
+          "fidelity": "installed one host"
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "limitations": [
+        "Locally built candidate on one Linux host; headless browser with two homes.",
+        "Synthetic account/backend unless separately authorized live mode.",
+        "Failure variant describes required behavior, not additional fault-injection coverage."
+      ]
+    },
+    {
+      "id": "watch",
+      "role": "both",
+      "preconditions": [
+        "Job is running"
+      ],
+      "action": "Watch live output on both screens",
+      "visibleOutcome": "Both screens show current output before completion",
+      "failureVariant": "Stale output or premature result label",
+      "testId": null,
+      "fidelity": "headless browser two homes",
+      "platforms": {
+        "linux": {
+          "status": "NOT_BUILT",
+          "reason": "Scoped browser helper liveBoth has assertions, but its calling scenario test is outside the read allow-list."
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "coverageKnowledge": "UNKNOWN",
+      "reason": "Scoped browser helper liveBoth has assertions, but its calling scenario test is outside the read allow-list."
+    },
+    {
+      "id": "read-result",
+      "role": "friend",
+      "preconditions": [
+        "Job produced a message result"
+      ],
+      "action": "Read the returned result and reopen after owner restart",
+      "visibleOutcome": "Same result remains available",
+      "failureVariant": "Result missing despite job completion",
+      "testId": "packaging/journey/smoke.mjs#checks.job1CompletedAndResultReachedFriend+friendCanReopenResultAfterRestart",
+      "fidelity": "installed one host",
+      "platforms": {
+        "linux": {
+          "status": "BUILT",
+          "testId": "packaging/journey/smoke.mjs#checks.job1CompletedAndResultReachedFriend+friendCanReopenResultAfterRestart",
+          "fidelity": "installed one host"
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "limitations": [
+        "Locally built candidate on one Linux host; headless browser with two homes.",
+        "Synthetic account/backend unless separately authorized live mode.",
+        "Failure variant describes required behavior, not additional fault-injection coverage."
+      ]
+    },
+    {
+      "id": "apply",
+      "role": "friend",
+      "preconditions": [
+        "A project result is available"
+      ],
+      "action": "Apply the result to its originating project",
+      "visibleOutcome": "Correct project changes while unrelated work remains intact",
+      "failureVariant": "Wrong route or missing authorization context",
+      "testId": null,
+      "fidelity": "installed two hosts",
+      "platforms": {
+        "linux": {
+          "status": "NOT_BUILT",
+          "reason": "No complete apply scenario test was found within the read allow-list."
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "coverageKnowledge": "UNKNOWN",
+      "reason": "No complete apply scenario test was found within the read allow-list."
+    },
+    {
+      "id": "P1-ui",
+      "role": "friend",
+      "preconditions": [
+        "UI publication interrupted after server acceptance"
+      ],
+      "action": "Recover by operation key after lost response and restart",
+      "visibleOutcome": "One stable job identity; no blind resubmission",
+      "failureVariant": "Lost response or app restart",
+      "testId": null,
+      "fidelity": "installed two hosts",
+      "platforms": {
+        "linux": {
+          "status": "NOT_BUILT",
+          "reason": "No operation-key recovery scenario through this surface was found within the read allow-list."
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "coverageKnowledge": "UNKNOWN",
+      "reason": "No operation-key recovery scenario through this surface was found within the read allow-list."
+    },
+    {
+      "id": "P1-mcp",
+      "role": "friend",
+      "preconditions": [
+        "MCP publication interrupted after server acceptance"
+      ],
+      "action": "Look up the operation key before any new publication",
+      "visibleOutcome": "Same published job identity is returned",
+      "failureVariant": "Lost response or client restart",
+      "testId": null,
+      "fidelity": "installed two hosts",
+      "platforms": {
+        "linux": {
+          "status": "NOT_BUILT",
+          "reason": "No operation-key recovery scenario through this surface was found within the read allow-list."
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "coverageKnowledge": "UNKNOWN",
+      "reason": "No operation-key recovery scenario through this surface was found within the read allow-list."
+    },
+    {
+      "id": "P1-cli",
+      "role": "friend",
+      "preconditions": [
+        "CLI publication interrupted after server acceptance"
+      ],
+      "action": "Look up the operation key before any new publication",
+      "visibleOutcome": "Same published job identity is returned",
+      "failureVariant": "Lost response or process restart",
+      "testId": null,
+      "fidelity": "installed two hosts",
+      "platforms": {
+        "linux": {
+          "status": "NOT_BUILT",
+          "reason": "No operation-key recovery scenario through this surface was found within the read allow-list."
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "coverageKnowledge": "UNKNOWN",
+      "reason": "No operation-key recovery scenario through this surface was found within the read allow-list."
+    },
+    {
+      "id": "P2",
+      "role": "both",
+      "preconditions": [
+        "Two physical computers share a pending job"
+      ],
+      "action": "Approve on the owner and observe both computers",
+      "visibleOutcome": "Approval identity and state agree across computers",
+      "failureVariant": "Delayed, repeated or reordered approval",
+      "testId": null,
+      "fidelity": "installed two hosts",
+      "platforms": {
+        "linux": {
+          "status": "NOT_BUILT",
+          "reason": "Scoped browser helper covers two app homes, not two physical computers."
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "coverageKnowledge": "UNKNOWN",
+      "reason": "Scoped browser helper covers two app homes, not two physical computers."
+    },
+    {
+      "id": "P3",
+      "role": "friend",
+      "preconditions": [
+        "Job finishes before its result becomes available"
+      ],
+      "action": "Read state, wait for delayed result, then read result",
+      "visibleOutcome": "Completion is distinct from result availability; late result remains readable",
+      "failureVariant": "Late result after an execution time-window failure",
+      "testId": null,
+      "fidelity": "installed two hosts",
+      "platforms": {
+        "linux": {
+          "status": "NOT_BUILT",
+          "reason": "Normal result retrieval is covered; delayed result after execution time-window failure is not established by scoped tests."
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "coverageKnowledge": "UNKNOWN",
+      "reason": "Normal result retrieval is covered; delayed result after execution time-window failure is not established by scoped tests."
+    },
+    {
+      "id": "P4",
+      "role": "friend",
+      "preconditions": [
+        "Project result available through supported real surfaces"
+      ],
+      "action": "Apply from UI, MCP and CLI with authorization context preserved",
+      "visibleOutcome": "All surfaces route to the correct project",
+      "failureVariant": "Wrong project or missing authorization token",
+      "testId": null,
+      "fidelity": "installed two hosts",
+      "platforms": {
+        "linux": {
+          "status": "NOT_BUILT",
+          "reason": "No complete real-surface routing and authorization propagation scenario was found within the read allow-list."
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "coverageKnowledge": "UNKNOWN",
+      "reason": "No complete real-surface routing and authorization propagation scenario was found within the read allow-list."
+    },
+    {
+      "id": "P5",
+      "role": "owner",
+      "preconditions": [
+        "Real backend running with a durable lender journal"
+      ],
+      "action": "Stop backend work and process a full explicit accounting acknowledgement",
+      "visibleOutcome": "Backend work ceases; only full explicit acknowledgement clears the journal",
+      "failureVariant": "Partial or missing acknowledgement must retain journal",
+      "testId": null,
+      "fidelity": "installed two hosts",
+      "platforms": {
+        "linux": {
+          "status": "NOT_BUILT",
+          "reason": "Scoped smoke checks backend cessation, but does not prove journal ownership under partial versus full explicit acknowledgement."
+        },
+        "macos": {
+          "status": "NOT_BUILT",
+          "reason": "No macOS scenario implementation is established by the scoped source; Linux /proc checks do not prove macOS coverage."
+        }
+      },
+      "coverageKnowledge": "UNKNOWN",
+      "reason": "Scoped smoke checks backend cessation, but does not prove journal ownership under partial versus full explicit acknowledgement."
+    }
+  ]
+}

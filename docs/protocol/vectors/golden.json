@@ -1,0 +1,323 @@
+{
+  "warning": "TEST-ONLY SYNTHETIC KEYS. Fixed repeated-byte seeds have no account or production identity. NEVER use these keys for real enrollment.",
+  "keys": [
+    {
+      "seed_hex": "0101010101010101010101010101010101010101010101010101010101010101",
+      "public_key": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+      "fingerprint": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e"
+    },
+    {
+      "seed_hex": "0202020202020202020202020202020202020202020202020202020202020202",
+      "public_key": "gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q",
+      "fingerprint": "sha256:6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827"
+    },
+    {
+      "seed_hex": "0303030303030303030303030303030303030303030303030303030303030303",
+      "public_key": "7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E",
+      "fingerprint": "sha256:b62e867fa2f33afe62d5d6b1642e1621d543307846b2a57b897e710919b76709"
+    },
+    {
+      "seed_hex": "0404040404040404040404040404040404040404040404040404040404040404",
+      "public_key": "ypOsFwUYcHHWe4PH_w7-gQjo7EUwV113JoeTM9vavnw",
+      "fingerprint": "sha256:c5b940ed3f65c391965de8295fc5d25f474fa57b48d36eb10ad363b8539c1b79"
+    }
+  ],
+  "objects": {
+    "job": {
+      "key_index": 0,
+      "payload_jcs": "{\"author\":\"sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e\",\"circle\":\"11111111-1111-4111-8111-111111111111\",\"created_at\":\"2026-10-09T12:00:00Z\",\"expires_at\":\"2026-10-09T13:00:00Z\",\"input_protection\":\"none\",\"intent_id\":\"22222222-2222-4222-8222-222222222222\",\"max_attempts\":3,\"prompt\":{\"bytes\":80,\"digest\":\"sha256:2222222222222222222222222222222222222222222222222222222222222222\",\"media_type\":\"text/plain\"},\"requirements\":{\"capabilities\":[\"patch-output\"],\"egress\":\"provider-only\",\"harness\":[\"codex\"],\"limits\":{\"cpu\":2,\"disk_bytes\":4294967296,\"memory_bytes\":2147483648,\"output_bytes\":10485760,\"wall_seconds\":600},\"model\":{\"any_of\":[\"example-model\"]}},\"roster_epoch\":7,\"schema\":\"faravan.job.v1\",\"source\":{\"artifact\":{\"bytes\":1000,\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"media_type\":\"application/gzip\"},\"kind\":\"archive\"}}",
+      "digest": "sha256:78369c3dc5dcd0b18c7fa4af64bcc76a8bb891ea0cddd3c45827123a296f0367",
+      "envelope": {
+        "payload": {
+          "author": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
+          "circle": "11111111-1111-4111-8111-111111111111",
+          "created_at": "2026-10-09T12:00:00Z",
+          "expires_at": "2026-10-09T13:00:00Z",
+          "input_protection": "none",
+          "intent_id": "22222222-2222-4222-8222-222222222222",
+          "max_attempts": 3,
+          "prompt": {
+            "bytes": 80,
+            "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "media_type": "text/plain"
+          },
+          "requirements": {
+            "capabilities": [
+              "patch-output"
+            ],
+            "egress": "provider-only",
+            "harness": [
+              "codex"
+            ],
+            "limits": {
+              "cpu": 2,
+              "disk_bytes": 4294967296,
+              "memory_bytes": 2147483648,
+              "output_bytes": 10485760,
+              "wall_seconds": 600
+            },
+            "model": {
+              "any_of": [
+                "example-model"
+              ]
+            }
+          },
+          "roster_epoch": 7,
+          "schema": "faravan.job.v1",
+          "source": {
+            "artifact": {
+              "bytes": 1000,
+              "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+              "media_type": "application/gzip"
+            },
+            "kind": "archive"
+          }
+        },
+        "signature": {
+          "algorithm": "Ed25519",
+          "key_id": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
+          "value": "1Ijfou4bzz35o0nCKfbFywAi3a5BT4XP1mt1sxXA25WAuCjkNy2OXwY3dPZpIT5EImSRWFX3fm88d-xbp_w_Cg"
+        }
+      },
+      "envelope_jcs": "{\"payload\":{\"author\":\"sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e\",\"circle\":\"11111111-1111-4111-8111-111111111111\",\"created_at\":\"2026-10-09T12:00:00Z\",\"expires_at\":\"2026-10-09T13:00:00Z\",\"input_protection\":\"none\",\"intent_id\":\"22222222-2222-4222-8222-222222222222\",\"max_attempts\":3,\"prompt\":{\"bytes\":80,\"digest\":\"sha256:2222222222222222222222222222222222222222222222222222222222222222\",\"media_type\":\"text/plain\"},\"requirements\":{\"capabilities\":[\"patch-output\"],\"egress\":\"provider-only\",\"harness\":[\"codex\"],\"limits\":{\"cpu\":2,\"disk_bytes\":4294967296,\"memory_bytes\":2147483648,\"output_bytes\":10485760,\"wall_seconds\":600},\"model\":{\"any_of\":[\"example-model\"]}},\"roster_epoch\":7,\"schema\":\"faravan.job.v1\",\"source\":{\"artifact\":{\"bytes\":1000,\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"media_type\":\"application/gzip\"},\"kind\":\"archive\"}},\"signature\":{\"algorithm\":\"Ed25519\",\"key_id\":\"sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e\",\"value\":\"1Ijfou4bzz35o0nCKfbFywAi3a5BT4XP1mt1sxXA25WAuCjkNy2OXwY3dPZpIT5EImSRWFX3fm88d-xbp_w_Cg\"}}"
+    },
+    "result": {
+      "key_index": 1,
+      "payload_jcs": "{\"attempt_id\":\"33333333-3333-4333-8333-333333333333\",\"candidate\":{\"bytes\":120,\"digest\":\"sha256:3333333333333333333333333333333333333333333333333333333333333333\",\"media_type\":\"text/x-diff\"},\"circle\":\"11111111-1111-4111-8111-111111111111\",\"executor\":\"sha256:6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827\",\"generation\":1,\"job_digest\":\"sha256:78369c3dc5dcd0b18c7fa4af64bcc76a8bb891ea0cddd3c45827123a296f0367\",\"receipt\":{\"backend\":\"example-microvm\",\"capabilities_applied\":[\"patch-output\"],\"duration_ms\":50000,\"egress_applied\":\"provider-only\",\"finished_at\":\"2026-10-09T12:01:00Z\",\"harness\":\"codex\",\"harness_version\":\"example-version\",\"limits_applied\":{\"cpu\":2,\"disk_bytes\":4294967296,\"memory_bytes\":2147483648,\"output_bytes\":10485760,\"wall_seconds\":600},\"model\":\"example-model\",\"schema\":\"faravan.receipt.v1\",\"self_reported\":true,\"source\":{\"artifact\":{\"bytes\":1000,\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"media_type\":\"application/gzip\"},\"kind\":\"archive\"},\"started_at\":\"2026-10-09T12:00:10Z\"},\"roster_epoch\":7,\"schema\":\"faravan.result.v1\",\"submitted_at\":\"2026-10-09T12:01:01Z\",\"transcript\":{\"bytes\":500,\"digest\":\"sha256:4444444444444444444444444444444444444444444444444444444444444444\",\"media_type\":\"application/x-ndjson\"}}",
+      "digest": "sha256:492680a6b6a5f8b700092f73803a4fe8f6206a356b8fe8ae5b8cf512d65f95eb",
+      "envelope": {
+        "payload": {
+          "attempt_id": "33333333-3333-4333-8333-333333333333",
+          "candidate": {
+            "bytes": 120,
+            "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "media_type": "text/x-diff"
+          },
+          "circle": "11111111-1111-4111-8111-111111111111",
+          "executor": "sha256:6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827",
+          "generation": 1,
+          "job_digest": "sha256:78369c3dc5dcd0b18c7fa4af64bcc76a8bb891ea0cddd3c45827123a296f0367",
+          "receipt": {
+            "backend": "example-microvm",
+            "capabilities_applied": [
+              "patch-output"
+            ],
+            "duration_ms": 50000,
+            "egress_applied": "provider-only",
+            "finished_at": "2026-10-09T12:01:00Z",
+            "harness": "codex",
+            "harness_version": "example-version",
+            "limits_applied": {
+              "cpu": 2,
+              "disk_bytes": 4294967296,
+              "memory_bytes": 2147483648,
+              "output_bytes": 10485760,
+              "wall_seconds": 600
+            },
+            "model": "example-model",
+            "schema": "faravan.receipt.v1",
+            "self_reported": true,
+            "source": {
+              "artifact": {
+                "bytes": 1000,
+                "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "media_type": "application/gzip"
+              },
+              "kind": "archive"
+            },
+            "started_at": "2026-10-09T12:00:10Z"
+          },
+          "roster_epoch": 7,
+          "schema": "faravan.result.v1",
+          "submitted_at": "2026-10-09T12:01:01Z",
+          "transcript": {
+            "bytes": 500,
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "media_type": "application/x-ndjson"
+          }
+        },
+        "signature": {
+          "algorithm": "Ed25519",
+          "key_id": "sha256:6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827",
+          "value": "BMHpTjus59sHlMhVVEkrRf_FodrwtXJ2tAMYUmURO9ZSIek5WvxBgKkq2jHgh8Pq6dsPFipRHuL5DRvYYMLvAQ"
+        }
+      },
+      "envelope_jcs": "{\"payload\":{\"attempt_id\":\"33333333-3333-4333-8333-333333333333\",\"candidate\":{\"bytes\":120,\"digest\":\"sha256:3333333333333333333333333333333333333333333333333333333333333333\",\"media_type\":\"text/x-diff\"},\"circle\":\"11111111-1111-4111-8111-111111111111\",\"executor\":\"sha256:6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827\",\"generation\":1,\"job_digest\":\"sha256:78369c3dc5dcd0b18c7fa4af64bcc76a8bb891ea0cddd3c45827123a296f0367\",\"receipt\":{\"backend\":\"example-microvm\",\"capabilities_applied\":[\"patch-output\"],\"duration_ms\":50000,\"egress_applied\":\"provider-only\",\"finished_at\":\"2026-10-09T12:01:00Z\",\"harness\":\"codex\",\"harness_version\":\"example-version\",\"limits_applied\":{\"cpu\":2,\"disk_bytes\":4294967296,\"memory_bytes\":2147483648,\"output_bytes\":10485760,\"wall_seconds\":600},\"model\":\"example-model\",\"schema\":\"faravan.receipt.v1\",\"self_reported\":true,\"source\":{\"artifact\":{\"bytes\":1000,\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"media_type\":\"application/gzip\"},\"kind\":\"archive\"},\"started_at\":\"2026-10-09T12:00:10Z\"},\"roster_epoch\":7,\"schema\":\"faravan.result.v1\",\"submitted_at\":\"2026-10-09T12:01:01Z\",\"transcript\":{\"bytes\":500,\"digest\":\"sha256:4444444444444444444444444444444444444444444444444444444444444444\",\"media_type\":\"application/x-ndjson\"}},\"signature\":{\"algorithm\":\"Ed25519\",\"key_id\":\"sha256:6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827\",\"value\":\"BMHpTjus59sHlMhVVEkrRf_FodrwtXJ2tAMYUmURO9ZSIek5WvxBgKkq2jHgh8Pq6dsPFipRHuL5DRvYYMLvAQ\"}}"
+    },
+    "roster": {
+      "key_index": 2,
+      "payload_jcs": "{\"circle\":\"11111111-1111-4111-8111-111111111111\",\"epoch\":7,\"issued_at\":\"2026-10-09T11:00:00Z\",\"members\":[{\"joined_epoch\":1,\"key_id\":\"sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e\",\"public_key\":\"iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w\"},{\"joined_epoch\":7,\"key_id\":\"sha256:6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827\",\"public_key\":\"gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q\"}],\"root_public_key\":\"7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E\",\"schema\":\"faravan.roster.v1\",\"valid_until\":\"2026-10-16T11:00:00Z\"}",
+      "digest": "sha256:e4b141e1e3e7e441c1f87e3baa1b39a4c211e1f77b5181193042be2aa11c2815",
+      "envelope": {
+        "payload": {
+          "circle": "11111111-1111-4111-8111-111111111111",
+          "epoch": 7,
+          "issued_at": "2026-10-09T11:00:00Z",
+          "members": [
+            {
+              "joined_epoch": 1,
+              "key_id": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
+              "public_key": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w"
+            },
+            {
+              "joined_epoch": 7,
+              "key_id": "sha256:6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827",
+              "public_key": "gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q"
+            }
+          ],
+          "root_public_key": "7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E",
+          "schema": "faravan.roster.v1",
+          "valid_until": "2026-10-16T11:00:00Z"
+        },
+        "signature": {
+          "algorithm": "Ed25519",
+          "key_id": "sha256:b62e867fa2f33afe62d5d6b1642e1621d543307846b2a57b897e710919b76709",
+          "value": "J9bX6fDrQzVpofHMDg7vrXW-AN3wBmvdLeoLcf0fEBRG8goTCylBZZu_AW4CWw7n535Q3vYdzIrtfacEGYGcBw"
+        }
+      },
+      "envelope_jcs": "{\"payload\":{\"circle\":\"11111111-1111-4111-8111-111111111111\",\"epoch\":7,\"issued_at\":\"2026-10-09T11:00:00Z\",\"members\":[{\"joined_epoch\":1,\"key_id\":\"sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e\",\"public_key\":\"iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w\"},{\"joined_epoch\":7,\"key_id\":\"sha256:6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827\",\"public_key\":\"gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q\"}],\"root_public_key\":\"7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E\",\"schema\":\"faravan.roster.v1\",\"valid_until\":\"2026-10-16T11:00:00Z\"},\"signature\":{\"algorithm\":\"Ed25519\",\"key_id\":\"sha256:b62e867fa2f33afe62d5d6b1642e1621d543307846b2a57b897e710919b76709\",\"value\":\"J9bX6fDrQzVpofHMDg7vrXW-AN3wBmvdLeoLcf0fEBRG8goTCylBZZu_AW4CWw7n535Q3vYdzIrtfacEGYGcBw\"}}"
+    },
+    "invite": {
+      "key_index": 2,
+      "payload_jcs": "{\"circle\":\"11111111-1111-4111-8111-111111111111\",\"coordinator\":\"https://coordinator.example\",\"created_at\":\"2026-10-09T10:00:00Z\",\"expires_at\":\"2026-10-09T11:00:00Z\",\"invite_id\":\"44444444-4444-4444-8444-444444444444\",\"invite_public_key\":\"ypOsFwUYcHHWe4PH_w7-gQjo7EUwV113JoeTM9vavnw\",\"root_fingerprint\":\"sha256:b62e867fa2f33afe62d5d6b1642e1621d543307846b2a57b897e710919b76709\",\"root_public_key\":\"7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E\",\"schema\":\"faravan.invite.v1\"}",
+      "digest": "sha256:284a8d6aea5549f38e88fee671a83298846c0754702cea9c48f10a806eb577ac",
+      "envelope": {
+        "payload": {
+          "circle": "11111111-1111-4111-8111-111111111111",
+          "coordinator": "https://coordinator.example",
+          "created_at": "2026-10-09T10:00:00Z",
+          "expires_at": "2026-10-09T11:00:00Z",
+          "invite_id": "44444444-4444-4444-8444-444444444444",
+          "invite_public_key": "ypOsFwUYcHHWe4PH_w7-gQjo7EUwV113JoeTM9vavnw",
+          "root_fingerprint": "sha256:b62e867fa2f33afe62d5d6b1642e1621d543307846b2a57b897e710919b76709",
+          "root_public_key": "7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E",
+          "schema": "faravan.invite.v1"
+        },
+        "signature": {
+          "algorithm": "Ed25519",
+          "key_id": "sha256:b62e867fa2f33afe62d5d6b1642e1621d543307846b2a57b897e710919b76709",
+          "value": "QGtxN1akw2kYhctWNIbJ1m6cXcKGeM-UQs-T8kLf6QnIYuC_sqkWnosavm613RMgggIb0pOBC3numHqQx6eJCw"
+        }
+      },
+      "envelope_jcs": "{\"payload\":{\"circle\":\"11111111-1111-4111-8111-111111111111\",\"coordinator\":\"https://coordinator.example\",\"created_at\":\"2026-10-09T10:00:00Z\",\"expires_at\":\"2026-10-09T11:00:00Z\",\"invite_id\":\"44444444-4444-4444-8444-444444444444\",\"invite_public_key\":\"ypOsFwUYcHHWe4PH_w7-gQjo7EUwV113JoeTM9vavnw\",\"root_fingerprint\":\"sha256:b62e867fa2f33afe62d5d6b1642e1621d543307846b2a57b897e710919b76709\",\"root_public_key\":\"7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E\",\"schema\":\"faravan.invite.v1\"},\"signature\":{\"algorithm\":\"Ed25519\",\"key_id\":\"sha256:b62e867fa2f33afe62d5d6b1642e1621d543307846b2a57b897e710919b76709\",\"value\":\"QGtxN1akw2kYhctWNIbJ1m6cXcKGeM-UQs-T8kLf6QnIYuC_sqkWnosavm613RMgggIb0pOBC3numHqQx6eJCw\"}}"
+    },
+    "cancellation": {
+      "key_index": 0,
+      "payload_jcs": "{\"author\":\"sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e\",\"circle\":\"11111111-1111-4111-8111-111111111111\",\"created_at\":\"2026-10-09T12:00:40Z\",\"job_digest\":\"sha256:78369c3dc5dcd0b18c7fa4af64bcc76a8bb891ea0cddd3c45827123a296f0367\",\"reason\":\"TEST-ONLY cancellation\",\"roster_epoch\":7,\"schema\":\"faravan.cancellation.v1\"}",
+      "digest": "sha256:b87aca7275418cae0198cee58b0d6ff1152bd57487ce639bfbf73b1d93509d91",
+      "envelope": {
+        "payload": {
+          "author": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
+          "circle": "11111111-1111-4111-8111-111111111111",
+          "created_at": "2026-10-09T12:00:40Z",
+          "job_digest": "sha256:78369c3dc5dcd0b18c7fa4af64bcc76a8bb891ea0cddd3c45827123a296f0367",
+          "reason": "TEST-ONLY cancellation",
+          "roster_epoch": 7,
+          "schema": "faravan.cancellation.v1"
+        },
+        "signature": {
+          "algorithm": "Ed25519",
+          "key_id": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
+          "value": "CSnbkwaRmKcfaR26Y5OPIdmGemEb7D5EFEIYhqZ45VfsI-fguxq1tnSJPNUClvUsLrz9xzv54mo05f79VaufBA"
+        }
+      },
+      "envelope_jcs": "{\"payload\":{\"author\":\"sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e\",\"circle\":\"11111111-1111-4111-8111-111111111111\",\"created_at\":\"2026-10-09T12:00:40Z\",\"job_digest\":\"sha256:78369c3dc5dcd0b18c7fa4af64bcc76a8bb891ea0cddd3c45827123a296f0367\",\"reason\":\"TEST-ONLY cancellation\",\"roster_epoch\":7,\"schema\":\"faravan.cancellation.v1\"},\"signature\":{\"algorithm\":\"Ed25519\",\"key_id\":\"sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e\",\"value\":\"CSnbkwaRmKcfaR26Y5OPIdmGemEb7D5EFEIYhqZ45VfsI-fguxq1tnSJPNUClvUsLrz9xzv54mo05f79VaufBA\"}}"
+    },
+    "request": {
+      "key_index": 0,
+      "payload_jcs": "{\"artifact_media_type\":\"\",\"body_digest\":\"sha256:ead7839ee3b4566dd3210a27430da1a0395fe9de10489bfc1d2cea3ecc1f9323\",\"circle\":\"11111111-1111-4111-8111-111111111111\",\"content_length\":1112,\"content_type\":\"application/json\",\"created\":1791547200,\"idempotency_key\":\"TEST-ONLY-submit-1\",\"key_id\":\"sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e\",\"method\":\"POST\",\"nonce\":\"BQUFBQUFBQUFBQUFBQUFBQ\",\"roster_epoch\":7,\"schema\":\"faravan.request.v1\",\"target\":\"https://coordinator.example/v1/circles/11111111-1111-4111-8111-111111111111/jobs\"}",
+      "digest": "sha256:78555f1c3f1e1f7338a51a551a63921fa7255f076c3b9d72dfc537d1789e11f8",
+      "envelope": {
+        "payload": {
+          "artifact_media_type": "",
+          "body_digest": "sha256:ead7839ee3b4566dd3210a27430da1a0395fe9de10489bfc1d2cea3ecc1f9323",
+          "circle": "11111111-1111-4111-8111-111111111111",
+          "content_length": 1112,
+          "content_type": "application/json",
+          "created": 1791547200,
+          "idempotency_key": "TEST-ONLY-submit-1",
+          "key_id": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
+          "method": "POST",
+          "nonce": "BQUFBQUFBQUFBQUFBQUFBQ",
+          "roster_epoch": 7,
+          "schema": "faravan.request.v1",
+          "target": "https://coordinator.example/v1/circles/11111111-1111-4111-8111-111111111111/jobs"
+        },
+        "signature": {
+          "algorithm": "Ed25519",
+          "key_id": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
+          "value": "ypS2oF_lu4Ug3sdbCzIKnNSJm38AMJ2cPDub9SnucKZssGyjP-LZv5KjqIUVWpnfHStDzgnbtgGmIUc41ubrAA"
+        }
+      },
+      "envelope_jcs": "{\"payload\":{\"artifact_media_type\":\"\",\"body_digest\":\"sha256:ead7839ee3b4566dd3210a27430da1a0395fe9de10489bfc1d2cea3ecc1f9323\",\"circle\":\"11111111-1111-4111-8111-111111111111\",\"content_length\":1112,\"content_type\":\"application/json\",\"created\":1791547200,\"idempotency_key\":\"TEST-ONLY-submit-1\",\"key_id\":\"sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e\",\"method\":\"POST\",\"nonce\":\"BQUFBQUFBQUFBQUFBQUFBQ\",\"roster_epoch\":7,\"schema\":\"faravan.request.v1\",\"target\":\"https://coordinator.example/v1/circles/11111111-1111-4111-8111-111111111111/jobs\"},\"signature\":{\"algorithm\":\"Ed25519\",\"key_id\":\"sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e\",\"value\":\"ypS2oF_lu4Ug3sdbCzIKnNSJm38AMJ2cPDub9SnucKZssGyjP-LZv5KjqIUVWpnfHStDzgnbtgGmIUc41ubrAA\"}}"
+    },
+    "enrollment": {
+      "key_index": 3,
+      "payload_jcs": "{\"circle\":\"11111111-1111-4111-8111-111111111111\",\"device_public_key\":\"gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q\",\"invite_id\":\"44444444-4444-4444-8444-444444444444\"}",
+      "digest": "sha256:eb47df96c1057b8fd6e2d9f03656ad37f31ca7f335136b977104d210b325ef44",
+      "envelope": {
+        "payload": {
+          "circle": "11111111-1111-4111-8111-111111111111",
+          "invite_id": "44444444-4444-4444-8444-444444444444",
+          "device_public_key": "gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q"
+        },
+        "signature": {
+          "algorithm": "Ed25519",
+          "key_id": "sha256:c5b940ed3f65c391965de8295fc5d25f474fa57b48d36eb10ad363b8539c1b79",
+          "value": "70VBhvHmVX8jwUjl22fknRqgQoufwbx9oKeoJLgg_EsAoVa_P8Khu1TUJydJLJEvDjeq5T-9WY6wqHymqC6mDw"
+        }
+      },
+      "envelope_jcs": "{\"payload\":{\"circle\":\"11111111-1111-4111-8111-111111111111\",\"device_public_key\":\"gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q\",\"invite_id\":\"44444444-4444-4444-8444-444444444444\"},\"signature\":{\"algorithm\":\"Ed25519\",\"key_id\":\"sha256:c5b940ed3f65c391965de8295fc5d25f474fa57b48d36eb10ad363b8539c1b79\",\"value\":\"70VBhvHmVX8jwUjl22fknRqgQoufwbx9oKeoJLgg_EsAoVa_P8Khu1TUJydJLJEvDjeq5T-9WY6wqHymqC6mDw\"}}"
+    }
+  },
+  "receipt": {
+    "payload": {
+      "schema": "faravan.receipt.v1",
+      "self_reported": true,
+      "harness": "codex",
+      "harness_version": "example-version",
+      "model": "example-model",
+      "backend": "example-microvm",
+      "limits_applied": {
+        "wall_seconds": 600,
+        "cpu": 2,
+        "memory_bytes": 2147483648,
+        "disk_bytes": 4294967296,
+        "output_bytes": 10485760
+      },
+      "egress_applied": "provider-only",
+      "capabilities_applied": [
+        "patch-output"
+      ],
+      "started_at": "2026-10-09T12:00:10Z",
+      "finished_at": "2026-10-09T12:01:00Z",
+      "duration_ms": 50000,
+      "source": {
+        "kind": "archive",
+        "artifact": {
+          "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "bytes": 1000,
+          "media_type": "application/gzip"
+        }
+      }
+    },
+    "payload_jcs": "{\"backend\":\"example-microvm\",\"capabilities_applied\":[\"patch-output\"],\"duration_ms\":50000,\"egress_applied\":\"provider-only\",\"finished_at\":\"2026-10-09T12:01:00Z\",\"harness\":\"codex\",\"harness_version\":\"example-version\",\"limits_applied\":{\"cpu\":2,\"disk_bytes\":4294967296,\"memory_bytes\":2147483648,\"output_bytes\":10485760,\"wall_seconds\":600},\"model\":\"example-model\",\"schema\":\"faravan.receipt.v1\",\"self_reported\":true,\"source\":{\"artifact\":{\"bytes\":1000,\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"media_type\":\"application/gzip\"},\"kind\":\"archive\"},\"started_at\":\"2026-10-09T12:00:10Z\"}",
+    "digest": "sha256:a611158f5dbf2b4e19d08148ae768642825463c07fc9e6be08ccad54b6631237"
+  },
+  "invite_link": "https://coordinator.example/join#invite=eyJpbnZpdGUiOnsicGF5bG9hZCI6eyJjaXJjbGUiOiIxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEiLCJjb29yZGluYXRvciI6Imh0dHBzOi8vY29vcmRpbmF0b3IuZXhhbXBsZSIsImNyZWF0ZWRfYXQiOiIyMDI2LTEwLTA5VDEwOjAwOjAwWiIsImV4cGlyZXNfYXQiOiIyMDI2LTEwLTA5VDExOjAwOjAwWiIsImludml0ZV9pZCI6IjQ0NDQ0NDQ0LTQ0NDQtNDQ0NC04NDQ0LTQ0NDQ0NDQ0NDQ0NCIsImludml0ZV9wdWJsaWNfa2V5IjoieXBPc0Z3VVljSEhXZTRQSF93Ny1nUWpvN0VVd1YxMTNKb2VUTTl2YXZudyIsInJvb3RfZmluZ2VycHJpbnQiOiJzaGEyNTY6YjYyZTg2N2ZhMmYzM2FmZTYyZDVkNmIxNjQyZTE2MjFkNTQzMzA3ODQ2YjJhNTdiODk3ZTcxMDkxOWI3NjcwOSIsInJvb3RfcHVibGljX2tleSI6IjdVa294aWpSd3NicTZRTTRrRm1WWVNsWkp6cGNZX2syTnNGR0ZLeUhOOUUiLCJzY2hlbWEiOiJmYXJhdmFuLmludml0ZS52MSJ9LCJzaWduYXR1cmUiOnsiYWxnb3JpdGhtIjoiRWQyNTUxOSIsImtleV9pZCI6InNoYTI1NjpiNjJlODY3ZmEyZjMzYWZlNjJkNWQ2YjE2NDJlMTYyMWQ1NDMzMDc4NDZiMmE1N2I4OTdlNzEwOTE5Yjc2NzA5IiwidmFsdWUiOiJRR3R4TjFha3cya1loY3RXTkliSjFtNmNYY0tHZU0tVVFzLVQ4a0xmNlFuSVl1Q19zcWtXbm9zYXZtNjEzUk1nZ2dJYjBwT0JDM251bUhxUXg2ZUpDdyJ9fSwiaW52aXRlX3ByaXZhdGVfc2VlZCI6IkJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVEifQ",
+  "request_header": "eyJwYXlsb2FkIjp7ImFydGlmYWN0X21lZGlhX3R5cGUiOiIiLCJib2R5X2RpZ2VzdCI6InNoYTI1NjplYWQ3ODM5ZWUzYjQ1NjZkZDMyMTBhMjc0MzBkYTFhMDM5NWZlOWRlMTA0ODliZmMxZDJjZWEzZWNjMWY5MzIzIiwiY2lyY2xlIjoiMTExMTExMTEtMTExMS00MTExLTgxMTEtMTExMTExMTExMTExIiwiY29udGVudF9sZW5ndGgiOjExMTIsImNvbnRlbnRfdHlwZSI6ImFwcGxpY2F0aW9uL2pzb24iLCJjcmVhdGVkIjoxNzkxNTQ3MjAwLCJpZGVtcG90ZW5jeV9rZXkiOiJURVNULU9OTFktc3VibWl0LTEiLCJrZXlfaWQiOiJzaGEyNTY6MzQ3NTBmOThiZDU5ZmNmYzk0NmRhNDVhYWFiZTkzM2JlMTU0YTRiNTA5NGUxYzRhYmY0Mjg2NjUwNWYzYzk3ZSIsIm1ldGhvZCI6IlBPU1QiLCJub25jZSI6IkJRVUZCUVVGQlFVRkJRVUZCUVVGQlEiLCJyb3N0ZXJfZXBvY2giOjcsInNjaGVtYSI6ImZhcmF2YW4ucmVxdWVzdC52MSIsInRhcmdldCI6Imh0dHBzOi8vY29vcmRpbmF0b3IuZXhhbXBsZS92MS9jaXJjbGVzLzExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMS9qb2JzIn0sInNpZ25hdHVyZSI6eyJhbGdvcml0aG0iOiJFZDI1NTE5Iiwia2V5X2lkIjoic2hhMjU2OjM0NzUwZjk4YmQ1OWZjZmM5NDZkYTQ1YWFhYmU5MzNiZTE1NGE0YjUwOTRlMWM0YWJmNDI4NjY1MDVmM2M5N2UiLCJ2YWx1ZSI6InlwUzJvRl9sdTRVZzNzZGJDeklLbk5TSm0zOEFNSjJjUER1YjlTbnVjS1pzc0d5alAtTFp2NUtqcUlVVldwbmZIU3REemduYnRnR21JVWM0MXVickFBIn19",
+  "invite_binding": {
+    "key_index": 3,
+    "domain": "faravan/invite-binding/v1",
+    "envelope_digest": "sha256:ac3625d923082c64aab97ee625d198cced5837f2a9ac45d6c14df75b3c7ba46e",
+    "binding": {
+      "algorithm": "Ed25519",
+      "key_id": "sha256:c5b940ed3f65c391965de8295fc5d25f474fa57b48d36eb10ad363b8539c1b79",
+      "value": "h5B9a5t04dOv8gGXacUEzQWXfyzZwTrR-WIEanutEX-rgKj9BZe0useYWOwzFkKEu4bkp0t0ROXobOpsJdV6Dw"
+    }
+  },
+  "short_link": {
+    "code": "7tqzxvbhk2",
+    "link": "https://coordinator.example/i/7tqzxvbhk2#BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "ctx": {
+    "origin": "app",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "observations": [
+    {
+      "kind": "health",
+      "data": {
+        "notifications": {
+          "degraded": true,
+          "lastCode": "EACCES"
+        }
+      },
+      "atMs": 0
+    }
+  ]
+}

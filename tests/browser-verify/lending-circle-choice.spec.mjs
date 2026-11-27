@@ -1,0 +1,22 @@
+import {test,expect} from '@playwright/test';
+import {startHarness} from './lib.mjs';
+let harness;
+test.beforeAll(async()=>{harness=await startHarness();});
+test.afterAll(async()=>{await harness?.stop();});
+test('Lends to presents each circle once in a radio list',async({page})=>{
+ const circles=[{id:'saved',name:'Weekend projects',origin:'http://fixture',rosterMembershipVerified:true},{id:'other',name:'Booking site crew',origin:'http://fixture',rosterMembershipVerified:true}];
+ await page.route('**/api/circles',r=>r.fulfill({json:circles}));
+ await page.route('**/api/home',r=>r.fulfill({json:{lending:{enabled:false,circle:'saved',status:'idle'}}}));
+ await page.route('**/api/agents',r=>r.fulfill({json:[{id:'codex',installed:true,signedIn:true,useForLending:true}]}));
+ await page.route('**/api/readiness',r=>r.fulfill({json:{ready:true,checks:[]}}));
+ await page.goto((await harness.link('lender'))+'#/lend');
+ const choices=page.getByRole('radiogroup',{name:'Choose a circle'});
+ await expect(choices.locator('.lending-circle-row')).toHaveCount(2);
+ await expect(choices.getByRole('radio',{name:/Weekend projects/})).toBeChecked();
+ await expect(choices.getByRole('radio',{name:/Booking site crew/})).not.toBeChecked();
+ await expect(choices.getByText('Weekend projects',{exact:true})).toHaveCount(1);
+ await expect(page.getByText('Switching circles is not available here yet.')).toHaveCount(0);
+ await expect(choices.locator('select')).toHaveCount(0);
+ await expect(choices.getByRole('radio').first()).toBeEnabled();
+ await expect(choices.getByRole('radio').last()).toBeEnabled();
+});

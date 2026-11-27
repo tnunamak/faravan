@@ -1,0 +1,1 @@
+{"attrs":{"harness":"codex","outcome":"timed_out"},"duration_ms":300000,"epoch":"e-AAAAAAAAAAAAAAAAAAAZ","hour":"2026-10-21T19","kind":"span","name":"signin.run","rid":"r-AAAAAAAAAAAAAAAAAAA6","seq":6,"session":"s-AAAAAAAAAAAAAAAAAAAZ","status":"error","trace":"t-AAAAAAAAAAAAAAAAAAA6"}

@@ -1,0 +1,169 @@
+[
+  {
+    "name": "complete preview",
+    "valid": true,
+    "channel": {
+      "id": "faravan",
+      "name": "Faravan",
+      "dataFolder": "Faravan",
+      "bundleId": "com.faravan.app",
+      "helperBundleId": "com.faravan.app.notify",
+      "launchAgentLabel": "com.faravan.agent",
+      "linuxPrefix": "faravan"
+    }
+  },
+  {
+    "name": "complete stable",
+    "valid": true,
+    "channel": {
+      "id": "faravan",
+      "name": "Faravan",
+      "dataFolder": "Faravan",
+      "bundleId": "com.faravan.app",
+      "helperBundleId": "com.faravan.app.notify",
+      "launchAgentLabel": "com.faravan.agent",
+      "linuxPrefix": "faravan"
+    }
+  },
+  {
+    "name": "missing id",
+    "valid": false,
+    "channel": {
+      "name": "Preview",
+      "dataFolder": "Preview",
+      "bundleId": "preview",
+      "helperBundleId": "preview.notify",
+      "launchAgentLabel": "preview.agent",
+      "linuxPrefix": "preview"
+    }
+  },
+  {
+    "name": "trimmed id",
+    "valid": false,
+    "channel": {
+      "id": " preview ",
+      "name": "Preview",
+      "dataFolder": "Preview",
+      "bundleId": "preview",
+      "helperBundleId": "preview.notify",
+      "launchAgentLabel": "preview.agent",
+      "linuxPrefix": "preview"
+    }
+  },
+  {
+    "name": "empty id",
+    "valid": false,
+    "channel": {
+      "id": "",
+      "name": "Preview",
+      "dataFolder": "Preview",
+      "bundleId": "preview",
+      "helperBundleId": "preview.notify",
+      "launchAgentLabel": "preview.agent",
+      "linuxPrefix": "preview"
+    }
+  },
+  {
+    "name": "missing data folder",
+    "valid": false,
+    "channel": {
+      "id": "preview",
+      "name": "Preview",
+      "bundleId": "preview",
+      "helperBundleId": "preview.notify",
+      "launchAgentLabel": "preview.agent",
+      "linuxPrefix": "preview"
+    }
+  },
+  {
+    "name": "empty data folder",
+    "valid": false,
+    "channel": {
+      "id": "preview",
+      "name": "Preview",
+      "dataFolder": "",
+      "bundleId": "preview",
+      "helperBundleId": "preview.notify",
+      "launchAgentLabel": "preview.agent",
+      "linuxPrefix": "preview"
+    }
+  },
+  {
+    "name": "parent traversal",
+    "valid": false,
+    "channel": {
+      "id": "preview",
+      "name": "Preview",
+      "dataFolder": "Preview..old",
+      "bundleId": "preview",
+      "helperBundleId": "preview.notify",
+      "launchAgentLabel": "preview.agent",
+      "linuxPrefix": "preview"
+    }
+  },
+  {
+    "name": "slash path",
+    "valid": false,
+    "channel": {
+      "id": "preview",
+      "name": "Preview",
+      "dataFolder": "Preview/other",
+      "bundleId": "preview",
+      "helperBundleId": "preview.notify",
+      "launchAgentLabel": "preview.agent",
+      "linuxPrefix": "preview"
+    }
+  },
+  {
+    "name": "backslash path",
+    "valid": false,
+    "channel": {
+      "id": "preview",
+      "name": "Preview",
+      "dataFolder": "Preview\\other",
+      "bundleId": "preview",
+      "helperBundleId": "preview.notify",
+      "launchAgentLabel": "preview.agent",
+      "linuxPrefix": "preview"
+    }
+  },
+  {
+    "name": "stable identity override",
+    "valid": false,
+    "channel": {
+      "id": "faravan",
+      "name": "Preview",
+      "dataFolder": "Preview",
+      "bundleId": "preview",
+      "helperBundleId": "preview.notify",
+      "launchAgentLabel": "preview.agent",
+      "linuxPrefix": "preview"
+    }
+  },
+  {
+    "name": "embedded C0 control",
+    "valid": false,
+    "channel": {
+      "id": "preview",
+      "name": "A\u0001B",
+      "dataFolder": "Preview",
+      "bundleId": "com.example.preview",
+      "helperBundleId": "com.example.preview.notify",
+      "launchAgentLabel": "com.example.preview.agent",
+      "linuxPrefix": "preview"
+    }
+  },
+  {
+    "name": "embedded DEL control",
+    "valid": false,
+    "channel": {
+      "id": "preview",
+      "name": "AB",
+      "dataFolder": "Preview",
+      "bundleId": "com.example.preview",
+      "helperBundleId": "com.example.preview.notify",
+      "launchAgentLabel": "com.example.preview.agent",
+      "linuxPrefix": "preview"
+    }
+  }
+]

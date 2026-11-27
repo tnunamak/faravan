@@ -1,0 +1,16 @@
+.job-thread-row{min-width:0;gap:var(--s-3)}
+.job-thread-row .row-main,.job-thread-row .job-title-text{min-width:0}
+.job-thread-row .job-title-text{display:grid;gap:var(--s-1)}
+.job-thread-row .row-title{overflow-wrap:break-word}
+.job-thread-open{flex:none;white-space:nowrap}
+.job-thread-date{display:block;overflow-wrap:break-word}
+.job-thread-runs{list-style:none;margin:0;padding:0 var(--s-4) var(--s-3);font-size:var(--text-sm);overflow-wrap:break-word}
+.job-thread-runs li+li{margin-top:var(--s-1)}
+.job-thread-parent{padding-inline:var(--s-4)}
+.job-thread-actions{display:flex;flex-direction:column;align-items:stretch;gap:var(--s-2)}
+.job-thread-actions>.action{margin:0;align-self:flex-start}
+.job-thread-actions .btn-quiet{padding-inline:0;white-space:nowrap}
+.job-thread-summary>summary{min-height:var(--touch);display:flex;align-items:center;cursor:pointer;font-size:var(--text-sm);font-weight:600}
+.job-thread-summary .handoff-fields{padding-top:var(--s-3)}
+.handoff-fields dt{margin-bottom:var(--s-1)}
+.handoff-fields dd{margin:0;font-size:var(--text-body);line-height:var(--lh-body);white-space:pre-wrap;overflow-wrap:break-word}

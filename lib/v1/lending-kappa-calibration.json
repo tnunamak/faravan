@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "units": "micro-points per USD",
+  "entries": [
+    {
+      "provider": "claude",
+      "plan": "max20",
+      "window": "weekly",
+      "model": "claude-haiku-5-5",
+      "upperMicro": 534900,
+      "provenance": {
+        "method": "accepted Default calibration bound",
+        "calibration": "calibration-final/calibration.json",
+        "boundReport": "calibration-final/differential/RESULTS.json",
+        "acceptedBy": "lead decision, 2026-10-23"
+      }
+    },
+    {
+      "provider": "claude",
+      "plan": "max20",
+      "window": "five_hour",
+      "model": "claude-haiku-5-5",
+      "upperMicro": 1583100,
+      "provenance": {
+        "method": "accepted Default calibration bound",
+        "calibration": "calibration-final/calibration.json",
+        "boundReport": "calibration-final/differential/RESULTS.json",
+        "acceptedBy": "lead decision, 2026-10-23"
+      }
+    },
+    {
+      "provider": "claude",
+      "plan": "max20",
+      "window": "weekly",
+      "model": "claude-sonnet-5-5",
+      "upperMicro": 534900,
+      "provenance": {
+        "method": "accepted Default calibration bound",
+        "calibration": "calibration-final/calibration.json",
+        "boundReport": "calibration-final/differential/RESULTS.json",
+        "acceptedBy": "lead decision, 2026-10-23"
+      }
+    },
+    {
+      "provider": "claude",
+      "plan": "max20",
+      "window": "five_hour",
+      "model": "claude-sonnet-5-5",
+      "upperMicro": 1583100,
+      "provenance": {
+        "method": "accepted Default calibration bound",
+        "calibration": "calibration-final/calibration.json",
+        "boundReport": "calibration-final/differential/RESULTS.json",
+        "acceptedBy": "lead decision, 2026-10-23"
+      }
+    },
+    {
+      "provider": "claude",
+      "plan": "max20",
+      "window": "weekly",
+      "model": "claude-opus-5-5",
+      "upperMicro": 534900,
+      "provenance": {
+        "method": "accepted Default calibration bound",
+        "calibration": "calibration-final/calibration.json",
+        "boundReport": "calibration-final/differential/RESULTS.json",
+        "acceptedBy": "lead decision, 2026-10-23"
+      }
+    },
+    {
+      "provider": "claude",
+      "plan": "max20",
+      "window": "five_hour",
+      "model": "claude-opus-5-5",
+      "upperMicro": 1583100,
+      "provenance": {
+        "method": "accepted Default calibration bound",
+        "calibration": "calibration-final/calibration.json",
+        "boundReport": "calibration-final/differential/RESULTS.json",
+        "acceptedBy": "lead decision, 2026-10-23"
+      }
+    },
+    {
+      "provider": "codex",
+      "plan": "pro",
+      "window": "weekly",
+      "model": "gpt-6-sol",
+      "upperMicro": 135700,
+      "provenance": {
+        "method": "one Pro account's week of Codex logs against the provider's weekly reading, pooled over models, x1.5 on a single-week mean; this model: extrapolated: no rows for this model in the week; assumes the same percent per list USD as the measured models",
+        "calibration": "research/capacity-pooling/codex-kappa-2026-10-30/codex-kappa-measure.mjs",
+        "boundReport": "research/capacity-pooling/codex-kappa-2026-10-30/RESULTS.md",
+        "acceptedBy": "lead decision, 2026-10-30"
+      }
+    },
+    {
+      "provider": "codex",
+      "plan": "pro",
+      "window": "weekly",
+      "model": "gpt-6.1-sol",
+      "upperMicro": 135700,
+      "provenance": {
+        "method": "one Pro account's week of Codex logs against the provider's weekly reading, pooled over models, x1.5 on a single-week mean; this model: measured ($600.85 of rows)",
+        "calibration": "research/capacity-pooling/codex-kappa-2026-10-30/codex-kappa-measure.mjs",
+        "boundReport": "research/capacity-pooling/codex-kappa-2026-10-30/RESULTS.md",
+        "acceptedBy": "lead decision, 2026-10-30"
+      }
+    },
+    {
+      "provider": "codex",
+      "plan": "pro",
+      "window": "weekly",
+      "model": "gpt-6-luna",
+      "upperMicro": 135700,
+      "provenance": {
+        "method": "one Pro account's week of Codex logs against the provider's weekly reading, pooled over models, x1.5 on a single-week mean; this model: measured, small sample ($29.38 of rows)",
+        "calibration": "research/capacity-pooling/codex-kappa-2026-10-30/codex-kappa-measure.mjs",
+        "boundReport": "research/capacity-pooling/codex-kappa-2026-10-30/RESULTS.md",
+        "acceptedBy": "lead decision, 2026-10-30"
+      }
+    },
+    {
+      "provider": "codex",
+      "plan": "pro",
+      "window": "weekly",
+      "model": "gpt-5.6-terra",
+      "upperMicro": 135700,
+      "provenance": {
+        "method": "one Pro account's week of Codex logs against the provider's weekly reading, pooled over models, x1.5 on a single-week mean; this model: extrapolated: no rows for this model in the week; assumes the same percent per list USD as the measured models",
+        "calibration": "research/capacity-pooling/codex-kappa-2026-10-30/codex-kappa-measure.mjs",
+        "boundReport": "research/capacity-pooling/codex-kappa-2026-10-30/RESULTS.md",
+        "acceptedBy": "lead decision, 2026-10-30"
+      }
+    },
+    {
+      "provider": "codex",
+      "plan": "pro",
+      "window": "weekly",
+      "model": "gpt-5.5",
+      "upperMicro": 135700,
+      "provenance": {
+        "method": "one Pro account's week of Codex logs against the provider's weekly reading, pooled over models, x1.5 on a single-week mean; this model: extrapolated: no rows for this model in the week; assumes the same percent per list USD as the measured models",
+        "calibration": "research/capacity-pooling/codex-kappa-2026-10-30/codex-kappa-measure.mjs",
+        "boundReport": "research/capacity-pooling/codex-kappa-2026-10-30/RESULTS.md",
+        "acceptedBy": "lead decision, 2026-10-30"
+      }
+    }
+  ]
+}

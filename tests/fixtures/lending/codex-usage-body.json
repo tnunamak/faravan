@@ -1,0 +1,39 @@
+{
+ "account_id": "FAKE-acct",
+ "email": "FAKE-not-real@example.invalid",
+ "user_id": "FAKE-user",
+ "plan_type": "pro",
+ "rate_limit": {
+  "allowed": true,
+  "limit_reached": false,
+  "primary_window": {
+   "used_percent": 33,
+   "limit_window_seconds": 604800,
+   "reset_after_seconds": 500000,
+   "reset_at": 1793082726
+  },
+  "secondary_window": null
+ },
+ "rate_limit_reached_type": null,
+ "credits": {
+  "has_credits": false,
+  "unlimited": false,
+  "balance": "0",
+  "approx_cloud_messages": [
+   0,
+   0
+  ],
+  "approx_local_messages": [
+   0,
+   0
+  ],
+  "overage_limit_reached": false
+ },
+ "spend_control": {
+  "individual_limit": null,
+  "reached": false
+ },
+ "additional_rate_limits": null,
+ "code_review_rate_limit": null,
+ "promo": null
+}

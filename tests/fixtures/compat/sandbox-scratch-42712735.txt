@@ -1,0 +1,137 @@
+import {sandboxOwnerScope} from './sandbox-name.mjs';
+import { constants } from 'node:fs';
+import { mkdir, open, lstat, realpath, readdir, readFile, rm } from 'node:fs/promises';
+import { join, resolve, dirname, basename } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { acquireProcessLock } from './v1/lock.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const owned = info => process.getuid === undefined || info.uid === process.getuid();
+const validId = id => /^wf-[0-9a-f]{16}$/.test(id);
+async function syncDirectory(directory) {
+  const fd = await open(directory, 'r');
+  try { await fd.sync(); } finally { await fd.close(); }
+}
+async function journalDirectory(directory) {
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const info = await lstat(directory);
+  if (!info.isDirectory() || info.isSymbolicLink() || !owned(info) || (info.mode & 0o077))
+    throw new Error('Scratch journal must be an owner-private directory.');
+}
+
+/** Write ahead of mkdir: a crash cannot leave a workspace with no recovery name. */
+export async function withSandboxScratchLock(sandboxId, journal, operation) {
+  if (!validId(sandboxId)) throw new Error('Invalid scratch sandbox identity.');
+  const release = await acquireProcessLock(join(journal + '-locks', sandboxId), { timeoutMs: 30000 });
+  try { return await operation(); } finally { await release(); }
+}
+
+export async function createSandboxScratch(sandboxId, root, journal, { beforeCreate, ownerScope=sandboxOwnerScope(), home } = {}) {
+  return withSandboxScratchLock(sandboxId, journal, () => createScratch(sandboxId, root, journal, beforeCreate,ownerScope,home));
+}
+async function createScratch(sandboxId, root, journal, beforeCreate,ownerScope,home) {
+  if (!validId(sandboxId)) throw new Error('Invalid scratch sandbox identity.');
+  await mkdir(root, { recursive: true });
+  const parent = await realpath(root);
+  const scratch = join(parent, 'wf-job-' + sandboxId + '-' + randomUUID());
+  await journalDirectory(journal);
+  const record = await open(join(journal, sandboxId + '.json'), 'wx', 0o600);
+  try { await record.writeFile(JSON.stringify({ v: 1, sandboxId, parent, scratch, ownerPid: process.pid,owner_scope:ownerScope,sbx_home:home })); await record.sync(); }
+  finally { await record.close(); }
+  await syncDirectory(journal);
+  // A caller may make its own record durable first; no workspace exists yet if it fails.
+  try { await beforeCreate?.(scratch); }
+  catch (error) { await rm(join(journal, sandboxId + '.json'), { force: true }); await syncDirectory(journal); throw error; }
+  await mkdir(scratch, { mode: 0o700 });
+  return scratch;
+}
+
+/** Drop the write-ahead record once the cleanup journal holds the retry for this exact scratch,
+so a retry of the same job can create a new workspace. Another scratch's record stays. */
+export async function releaseSandboxScratchRecord(sandboxId, scratch, journal) {
+  if (!validId(sandboxId)) return;
+  await withSandboxScratchLock(sandboxId, journal, async () => {
+    const recordPath = join(journal, sandboxId + '.json');
+    const value = await readFile(recordPath, 'utf8').then(JSON.parse, () => null);
+    if (value?.scratch !== scratch) return;
+    await rm(recordPath, { force: true });
+    await syncDirectory(journal);
+  });
+}
+
+/** A missing VM is insufficient during live preparation. Only sweep records
+ * whose creating process is definitely gone; PID reuse conservatively retains. */
+export async function deadScratchOwners(journal, root, { withGeneration = false } = {}) {
+  const info = await lstat(journal).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+  if (!info || !info.isDirectory() || info.isSymbolicLink() || !owned(info) || (info.mode & 0o077)) return [];
+  const parent = await realpath(root).catch(() => null);
+  if (!parent) return [];
+  const dead = [];
+  for (const name of await readdir(journal)) {
+    if (!/^wf-[0-9a-f]{16}\.json$/.test(name)) continue;
+    let file;
+    try {
+      file = await open(join(journal,name),constants.O_RDONLY | (constants.O_NOFOLLOW || 0));
+      const stat = await file.stat();
+      if (!stat.isFile() || !owned(stat) || (stat.mode & 0o077) || stat.size > 4096) continue;
+      const generation = await file.readFile('utf8');
+      const value = JSON.parse(generation);
+      const sandboxId=name.slice(0,-5);
+      if (value.v !== 1 || value.sandboxId !== sandboxId || value.parent !== parent ||
+          typeof value.scratch !== 'string' || resolve(value.scratch) !== value.scratch || dirname(value.scratch) !== parent ||
+          !new RegExp('^wf-job-' + sandboxId + '-[0-9a-f-]{36}$').test(basename(value.scratch))) continue;
+      const scratchInfo=await lstat(value.scratch).catch(error=>{if(error.code==='ENOENT') return null; throw error;});
+      if (scratchInfo && (!scratchInfo.isDirectory() || scratchInfo.isSymbolicLink() || !owned(scratchInfo))) continue;
+      if (!Number.isSafeInteger(value.ownerPid) || value.ownerPid <= 0) continue;
+      try { process.kill(value.ownerPid,0); }
+      catch (error) { if (error.code === 'ESRCH') dead.push(withGeneration ? { id: sandboxId, generation,owner_scope:value.owner_scope,sbx_home:value.sbx_home } : sandboxId); }
+    } catch { /* Unknown or unreadable ownership must remain untouched. */ }
+    finally { await file?.close(); }
+  }
+  return dead;
+}
+
+/** Only a local, owned journal can authorize a deletion; caller paths never do. */
+export async function recoverSandboxScratch(sandboxId, root, journal) {
+  if (!validId(sandboxId)) return false;
+  const recordPath = join(journal, sandboxId + '.json');
+  try {
+    const journalInfo = await lstat(journal);
+    if (!journalInfo.isDirectory() || journalInfo.isSymbolicLink() || !owned(journalInfo) || (journalInfo.mode & 0o077)) return false;
+    let record;
+    try { record = await open(recordPath, constants.O_RDONLY | (constants.O_NOFOLLOW || 0)); }
+    catch (error) { if (error.code === 'ENOENT') return true; throw error; }
+    let value;
+    try {
+      const info = await record.stat();
+      if (!info.isFile() || !owned(info) || (info.mode & 0o077) || info.size > 4096) return false;
+      value = JSON.parse(await record.readFile('utf8'));
+    } finally { await record.close(); }
+    const parent = await realpath(root);
+    if (value.v !== 1 || value.sandboxId !== sandboxId || value.parent !== parent ||
+        typeof value.scratch !== 'string' || resolve(value.scratch) !== value.scratch || dirname(value.scratch) !== parent ||
+        !new RegExp('^wf-job-' + sandboxId + '-[0-9a-f-]{36}$').test(basename(value.scratch))) return false;
+    const info = await lstat(value.scratch).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+    if (info && (!info.isDirectory() || info.isSymbolicLink() || !owned(info))) return false;
+    await rm(value.scratch, { recursive: true, force: true });
+    try { await lstat(value.scratch); return false; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    await rm(recordPath);
+    await syncDirectory(journal);
+    return true;
+  } catch (error) {
+    // No journal at all means no workspace was created by the journaled path.
+    if (error.code === 'ENOENT') return true;
+    return false;
+  }
+}
+
+// Resolve the parent, never the leaf: a replaced scratch symlink must not grant
+// authority over its target. Aliases such as /var and /private/var share a root.
+export function canonicalScratchPath(scratch,root) {
+  if(typeof scratch!=='string'||!path.isAbsolute(scratch))return null;
+  try {
+    const parent=fs.realpathSync(path.dirname(scratch));
+    return parent===fs.realpathSync(root)?path.join(parent,path.basename(scratch)):null;
+  }catch{return null;}
+}

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Private lending error details (excluded from support exports)",
+  "type": "object",
+  "properties": {
+    "stage": {
+      "type": "string",
+      "pattern": "^[^\\r\\n]*$",
+      "maxLength": 256
+    },
+    "attemptId": {
+      "type": "string",
+      "pattern": "^[^\\r\\n]*$",
+      "maxLength": 256
+    },
+    "sandbox_command": {
+      "type": "object",
+      "properties": {
+        "subcommand": {
+          "type": "string",
+          "enum": [
+            "ls --json",
+            "daemon status",
+            "create",
+            "run"
+          ]
+        },
+        "runtime_path": {
+          "type": "string",
+          "pattern": "^[^\\r\\n]*$",
+          "maxLength": 160
+        },
+        "exit_code": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 255
+        },
+        "signal": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^SIG[A-Z0-9]{1,12}$",
+          "maxLength": 15
+        },
+        "timedOut": {
+          "type": "boolean"
+        },
+        "killed": {
+          "type": "boolean"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "daemon_status_passed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "parse",
+            "complete",
+            "stderr nonempty",
+            "exit",
+            "timeout",
+            "fence"
+          ]
+        },
+        "stderr_first_line": {
+          "type": "string",
+          "pattern": "^[^\\r\\n]*$",
+          "maxLength": 160
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        }
+      },
+      "required": [
+        "subcommand",
+        "runtime_path",
+        "exit_code",
+        "signal",
+        "timedOut",
+        "killed",
+        "truncated",
+        "duration_ms",
+        "daemon_status_passed",
+        "stage",
+        "stderr_first_line"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

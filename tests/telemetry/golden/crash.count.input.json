@@ -1,0 +1,16 @@
+{
+  "ctx": {
+    "origin": "crash",
+    "surface": "background",
+    "now": "2026-10-21T19:42:11Z"
+  },
+  "crash": {
+    "kind": "start_failed",
+    "errorClass": "TypeError",
+    "stack": [
+      "at run (file:///usr/lib/faravan/lib/v1/app.mjs:1203:9)",
+      "at Object.<anonymous> (/home/alice/work/x.js:4:1)"
+    ],
+    "uptimeMs": 4000
+  }
+}
