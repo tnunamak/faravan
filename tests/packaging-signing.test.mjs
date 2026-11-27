@@ -227,10 +227,11 @@ test('Windows: a certificate in the store is used by thumbprint, and a dry run h
   const d = await mkdtemp(join(tmpdir(), 'spk-sign-')); t.after(() => rm(d, {recursive: true, force: true}));
   const s = await stubs(d, {makeappx: '', signtool: ''});
   const dir = await layout(d);
-  const temp = join(d, 'temp');
-  await mkdir(temp);
+  const temp = join(d, 'temp'), cliHome = join(d, 'dotnet-home');
+  // pwsh's first run writes .dotnet under TMPDIR (seen on macOS runners); give it its own folder so temp stays a clean probe.
+  await Promise.all([mkdir(temp), mkdir(cliHome)]);
   const base = ['-NoProfile', '-File', winScript, '-Layout', dir, '-Version', '0.2.0', '-Out', join(d, 'o'), '-DryRun'];
-  const byThumb = await exec('pwsh', base, {PATH: s.bin + ':' + process.env.PATH, TMPDIR: temp, ...winEnv, FARAVAN_WIN_CERT_THUMBPRINT: 'AB12CD34'});
+  const byThumb = await exec('pwsh', base, {PATH: s.bin + ':' + process.env.PATH, TMPDIR: temp, DOTNET_CLI_HOME: cliHome, ...winEnv, FARAVAN_WIN_CERT_THUMBPRINT: 'AB12CD34'});
   assert.equal(byThumb.code, 0, byThumb.stderr);
   assert.deepEqual(await readdir(temp), []);
   await assert.rejects(readdir(join(d, 'o')), {code: 'ENOENT'});

@@ -545,7 +545,10 @@ async function waitFor(check, ms = 20000) {
   for (;;) { try { if (check()) return; } catch {} if (Date.now() > end) assert.fail('timed out: ' + check); await new Promise(r => setTimeout(r, 50)); }
 }
 function launch(s, args, stdio = ['pipe', 'pipe', 'pipe']) {
-  const child = spawn(process.execPath, [MODULE, ...args], {env:s.env, stdio});
+  // On macOS an unmanaged --background hands off to launchd, which starts the supervisor with --managed (macos-session.mjs).
+  // These fixtures own the supervisor's stdin, so they start that managed supervisor directly.
+  const launchArgs = process.platform === 'darwin' && args.includes('--background') && !args.includes('--managed') ? ['--managed', ...args] : args;
+  const child = spawn(process.execPath, [MODULE, ...launchArgs], {env:s.env, stdio});
   let out = ''; child.stdout?.on('data', b => { out += b; }); child.stderr?.on('data', b => { out += b; });
   child.output = () => out;
   return child;
