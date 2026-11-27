@@ -22,7 +22,8 @@ const exists = path => access(path).then(() => true, () => false);
 const result = promise => promise.then(r => ({code: 0, ...r}), e => ({code: e.code, stdout: e.stdout ?? '', stderr: e.stderr ?? ''}));
 
 async function work(t) {
-  const dir = await mkdtemp(join(tmpdir(), 'spk-macbundle-'));
+  // macOS tmpdir() is under /var, a symlink to /private/var; the scripts use physical paths (pwd -P), so the fixture does too.
+  const dir = await mkdtemp(join(await realpath(tmpdir()), 'spk-macbundle-'));
   t.after(() => rm(dir, {recursive: true, force: true}));
   const tools = await fakeAppleTools(join(dir, 'apple tools'));
   return {dir, env: {...process.env, PATH: tools + delimiter + process.env.PATH, FAKE_TOOL_LOG: join(dir, 'tools.log')}};
