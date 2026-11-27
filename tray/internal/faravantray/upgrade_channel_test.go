@@ -20,7 +20,7 @@ func TestMacPreviewUpgradeKeepsResourcesChannelDataAndCommand(t *testing.T) {
 			previewCommand := filepath.Join(contents, "MacOS", "faravan")
 			stableCommand := filepath.Join(root, "Applications", "Faravan.app", "Contents", "MacOS", "faravan")
 			bin := filepath.Join(root, "home", ".local", "bin")
-			previewData := filepath.Join(root, "home", "Library", "Application Support", "Faravan Preview")
+			previewData := filepath.Join(root, "home", "Library", "Application Support", "Faravan")
 			stableData := filepath.Join(root, "home", ".faravan")
 			for _, dir := range []string{filepath.Dir(exe), filepath.Dir(stableCommand), bin, previewData, stableData} {
 				if err := os.MkdirAll(dir, 0o755); err != nil {
