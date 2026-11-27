@@ -232,7 +232,11 @@ test('Windows: a certificate in the store is used by thumbprint, and a dry run h
   const base = ['-NoProfile', '-File', winScript, '-Layout', dir, '-Version', '0.2.0', '-Out', join(d, 'o'), '-DryRun'];
   const byThumb = await exec('pwsh', base, {PATH: s.bin + ':' + process.env.PATH, TMPDIR: temp, ...winEnv, FARAVAN_WIN_CERT_THUMBPRINT: 'AB12CD34'});
   assert.equal(byThumb.code, 0, byThumb.stderr);
-  assert.deepEqual(await readdir(temp), []);
+  // The .NET runtime under pwsh keeps its named-mutex state in TMPDIR/.dotnet (shm, lockfiles) on Unix; no setting moves it.
+  // That folder is the runtime's own. The script itself must leave nothing in TMPDIR.
+  const left = await readdir(temp);
+  assert.deepEqual(left.filter(name => name !== '.dotnet'), [], 'the dry run writes no temporary file');
+  if (left.includes('.dotnet')) for (const name of await readdir(join(temp, '.dotnet'))) assert.ok(['shm', 'lockfiles'].includes(name), 'only runtime state in .dotnet: ' + name);
   await assert.rejects(readdir(join(d, 'o')), {code: 'ENOENT'});
   assert.match(byThumb.stdout, /DRY-RUN: signtool sign .*\/sha1 AB12CD34/);
   const byPfx = await exec('pwsh', base, {PATH: s.bin + ':' + process.env.PATH, ...winEnv, FARAVAN_WIN_CERT_PFX: 'c.pfx', FARAVAN_WIN_CERT_PASSWORD: 'SECRET-PASSWORD'});
