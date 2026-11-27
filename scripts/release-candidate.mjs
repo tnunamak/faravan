@@ -76,6 +76,11 @@ async function logged(command,args,options={}) {
     child.once('error',reject);child.once('exit',(code,signal)=>code===0?accept():reject(Error(command+' failed ('+(signal??code)+')')));
   });
 }
+// ditto stores a signed script's code signature as an AppleDouble "._" entry (Contents/MacOS/._faravan). A Mac restores it as
+// extended attributes; unzip on Linux makes it a stray file that the bundle check rightly refuses. Leave those entries out.
+export async function unpackMacZip(file,directory) {
+  await output('unzip',['-q',file,'-d',directory,'-x','*/._*']);
+}
 async function macArtifact(options,scratch) {
   let file=options.macZip;
   if(!file) {
@@ -92,7 +97,7 @@ async function macArtifact(options,scratch) {
   const bytes=await readFile(file);await validateMacAppZip(bytes);
   await output('unzip',['-t',file]);
   const unpacked=join(scratch,'unpacked');await mkdir(unpacked);
-  await output('unzip',['-q',file,'-d',unpacked]);
+  await unpackMacZip(file,unpacked);
   return {file,...await verifyMacApp(join(unpacked,'Faravan.app'),options)};
 }
 export async function verifyMacApp(app,options) {

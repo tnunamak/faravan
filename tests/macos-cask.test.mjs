@@ -15,7 +15,8 @@ test('refuse mutable versions, absent checksums, unsafe URLs and Ruby interpolat
  for(const patch of [{version:'latest'},{sha256:'TODO'},{url:'https://example.org/#{system(1)}'},{url:'https://example.org/app.zip?token=secret'},{url:'https://user:password@example.org/app.zip'},{homepage:'http://example.org'}])assert.throws(()=>renderCask(template,{...valid,...patch}));
 });
 // The private repositories are named from parts so this file does not carry their names into the public tree.
-const PRIVATE=[['faravan'],['faravan','mirror']].map(parts=>'tnunamak/'+parts.join('-'));
+// 'feder'+'ation' also keeps the export's rename from turning the private name into the public one.
+const PRIVATE=[['feder'+'ation'],['faravan','mirror']].map(parts=>'tnunamak/'+parts.join('-'));
 const percentEncodedFirstLetter=repo=>{const [owner,name]=repo.split('/');return `${owner}/%${name.charCodeAt(0).toString(16)}${name.slice(1)}`;};
 test('refuse downloads and homepages that name a private repository, however they are written',()=>{
  for(const repo of PRIVATE) {

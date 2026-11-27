@@ -544,8 +544,12 @@ async function waitFor(check, ms = 20000) {
   const end = Date.now() + ms;
   for (;;) { try { if (check()) return; } catch {} if (Date.now() > end) assert.fail('timed out: ' + check); await new Promise(r => setTimeout(r, 50)); }
 }
+// On macOS an unmanaged --background hands off to launchd, which starts the supervisor with --managed (macos-session.mjs).
+// These fixtures own the supervisor's stdin, so they start that managed supervisor directly.
+const supervisorArgs = args => process.platform === 'darwin' && args.includes('--background') && !args.includes('--managed') ? ['--managed', ...args] : args;
 function launch(s, args, stdio = ['pipe', 'pipe', 'pipe']) {
-  const child = spawn(process.execPath, [MODULE, ...args], {env:s.env, stdio});
+  const launchArgs = supervisorArgs(args);
+  const child = spawn(process.execPath, [MODULE, ...launchArgs], {env:s.env, stdio});
   let out = ''; child.stdout?.on('data', b => { out += b; }); child.stderr?.on('data', b => { out += b; });
   child.output = () => out;
   return child;
@@ -698,7 +702,7 @@ test('process: Force Quit of the native launcher (SIGKILL, no handler runs) stil
   const s = scratch(t);
   // Stand-in for faravan-launch: holds the only write end of the supervisor's input, then is killed outright.
   const holder = spawn(process.execPath, ['-e', `
-    const c=require('node:child_process').spawn(process.execPath,${JSON.stringify([MODULE, '--background', '--tray', s.tray])},{stdio:['pipe','ignore','ignore']});
+    const c=require('node:child_process').spawn(process.execPath,${JSON.stringify([MODULE, ...supervisorArgs(['--background', '--tray', s.tray])])},{stdio:['pipe','ignore','ignore']});
     console.log(c.pid);setInterval(()=>{},1000);`], {env:s.env, stdio:['ignore', 'pipe', 'ignore']});
   const [pidLine] = await once(holder.stdout, 'data');
   const supervisor = Number(String(pidLine).trim());

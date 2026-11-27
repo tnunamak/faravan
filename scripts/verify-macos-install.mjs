@@ -15,9 +15,9 @@ const source=resolve(process.argv[2]??'');
 assert.ok(source.endsWith('/Faravan.app'),'Pass the built Faravan.app');
 const scratch=join(homedir(),'.tmp');await mkdir(scratch,{recursive:true});
 const work=await mkdtemp(join(scratch,'faravan-mac-acceptance-'));
-let child,ownedBackend;
+let child,ownedBackend,residentTarget;
 const alive=pid=>{try{process.kill(pid,0);return true;}catch{return false;}};
-async function waitUntil(check,label){for(let i=0;i<150;i++){if(await check())return;await new Promise(done=>setTimeout(done,100));}throw new Error(label);}
+async function waitUntil(check,label,tries=150){for(let i=0;i<tries;i++){if(await check())return;await new Promise(done=>setTimeout(done,100));}throw new Error(label);}
 try {
   const parent=join(work,'relocated app with spaces'),app=join(parent,'Faravan.app');
   await mkdir(parent);await run('ditto',[source,app]);
@@ -82,27 +82,46 @@ try {
   const shutdownProblems=gracefulShutdownProblems({exitCode,exitSignal,recordRemoved});
   if(shutdownProblems.length)throw new Error('Graceful shutdown failed: '+shutdownProblems.join('; '));
   if(process.argv.includes('--with-launcher')) {
+    // On macOS an unmanaged --background registers a session LaunchAgent and returns (lib/v1/macos-session.mjs).
+    // launchd then starts the resident launcher with --managed. That launcher owns the backend, and launchd restarts it after a crash.
     const launcher=join(app,'Contents/MacOS/faravan-launch');
-    child=spawn(launcher,['--background'],{env,stdio:'ignore'});
-    let nativeRecord;
-    await waitUntil(async()=>{nativeRecord=await readFile(join(home,'v1/app.json'),'utf8').then(JSON.parse,()=>null);return Boolean(nativeRecord);},'Native launcher did not become ready.');
-    assert.ok(Number.isSafeInteger(nativeRecord.pid)&&nativeRecord.pid>1,'native backend has a valid owned PID');
-    ownedBackend=nativeRecord.pid;
-    let trayPids=[];
-    await waitUntil(async()=>{const result=await run('pgrep',['-P',String(ownedBackend),'-f','faravan-tray']).catch(()=>({stdout:''}));trayPids=result.stdout.trim().split(/\s+/).filter(Boolean).map(Number);return trayPids.length===1;},'Native launcher did not start exactly one tray.');
+    const record=()=>readFile(join(home,'v1/app.json'),'utf8').then(JSON.parse,()=>null);
+    const trays=async backend=>(await run('pgrep',['-P',String(backend),'-f','faravan-tray']).catch(()=>({stdout:''}))).stdout.trim().split(/\s+/).filter(Boolean).map(Number);
+    const residentPid=async()=>{const result=await run('launchctl',['print',residentTarget]).catch(()=>({stdout:''}));const pid=Number(result.stdout.match(/^\s*pid = (\d+)$/m)?.[1]);return pid>1?pid:null;};
+    const parentOf=async pid=>Number((await run('ps',['-o','ppid=','-p',String(pid)]).catch(()=>({stdout:''}))).stdout.trim())||null;
+    const readyAfter=async (previous,label)=>{let found,trayPids=[];await waitUntil(async()=>{found=await record();if(!found||found.pid===previous)return false;trayPids=await trays(found.pid);return trayPids.length===1;},label,300);return {backend:found.pid,trayPids};};
+    await run(launcher,['--background'],{env,timeout:30000});
+    const label=(await readFile(join(home,'v1/resident.plist'),'utf8')).match(/<key>Label<\/key><string>([^<]+)<\/string>/)?.[1];
+    assert.ok(label,'the session LaunchAgent names its label');
+    residentTarget='gui/'+process.getuid()+'/'+label;
+    const first=await readyAfter(null,'Native launcher did not become ready with exactly one tray.');
+    assert.ok(Number.isSafeInteger(first.backend)&&first.backend>1,'native backend has a valid owned PID');
+    ownedBackend=first.backend;
+    const resident=await residentPid();
+    assert.ok(resident,'launchd runs the resident launcher');
+    assert.match((await run('ps',['-o','command=','-p',String(resident)])).stdout,/faravan-launch --background --managed/,'launchd started the launcher with --managed');
+    let ancestor=first.backend;
+    for(let i=0;i<4&&ancestor&&ancestor!==resident;i++)ancestor=await parentOf(ancestor);
+    assert.equal(ancestor,resident,'the managed launcher owns the backend');
     await run(launcher,['--background'],{env,timeout:15000});
-    const duplicateRecord=JSON.parse(await readFile(join(home,'v1/app.json'),'utf8'));
-    assert.equal(duplicateRecord.pid,ownedBackend,'duplicate native launch reused the backend');
-    const nativeExited=once(child,'exit');child.kill('SIGKILL');await nativeExited;child=null;
-    await waitUntil(async()=>!alive(ownedBackend)&&trayPids.every(pid=>!alive(pid)),'Force Quit left an owned backend or tray running.');
-    assert.equal(await readFile(join(home,'v1/app.json'),'utf8').then(()=>true,()=>false),false);
+    assert.equal((await record())?.pid,first.backend,'duplicate native launch reused the backend');
+    assert.equal(await residentPid(),resident,'duplicate native launch reused the resident launcher');
+    process.kill(resident,'SIGKILL');
+    await waitUntil(async()=>!alive(first.backend)&&first.trayPids.every(pid=>!alive(pid)),'Force Quit left an owned backend or tray running.');
+    const second=await readyAfter(first.backend,'launchd did not restart Faravan after Force Quit.');
+    ownedBackend=second.backend;
+    assert.notEqual(await residentPid(),resident,'launchd started a new resident launcher');
+    await run('launchctl',['bootout',residentTarget],{timeout:30000});residentTarget=null;
+    await waitUntil(async()=>!alive(second.backend)&&second.trayPids.every(pid=>!alive(pid)),'launchd bootout left an owned backend or tray running.');
+    assert.equal(await record(),null,'launchd bootout removed the app record');
     ownedBackend=null;
-    process.stdout.write('PASS: native background launch, duplicate reuse, Force Quit closes owner pipe and removes backend/tray.\n');
+    process.stdout.write('PASS: unmanaged background launch hands off to launchd, managed launcher owns backend/tray, duplicate reuse, Force Quit removes backend/tray and launchd restarts it, launchd bootout (the logout signal) stops it cleanly.\n');
   }
   process.stdout.write('PASS: relocated bundle, CLI without system Node, authenticated readiness, lending off, graceful shutdown.\n');
   process.stdout.write('UNPROVEN: Finder/Gatekeeper approval, notification permission/click, login/logout, sandbox VM and first borrowed job.\n');
 } finally {
   if(child&&child.exitCode===null){child.kill('SIGKILL');await once(child,'exit').catch(()=>{});}
+  if(residentTarget)await run('launchctl',['bootout',residentTarget],{timeout:30000}).catch(()=>{});
   try {
     if(ownedBackend&&alive(ownedBackend)){
       process.kill(ownedBackend,'SIGTERM');
