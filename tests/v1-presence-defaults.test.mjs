@@ -8,7 +8,8 @@ import {createLender} from '../lib/v1/lender.mjs';
 import {createLendingRuntime} from '../lib/v1/lending-runtime.mjs';
 import {normalizeLendingPolicy} from '../lib/v1/lending-policy.mjs';
 import {appFixture, api, syntheticBackend} from './helpers/v1-app-fixture.mjs';
-import {lenderFixture, until} from './helpers/v1-lender-fixture.mjs';
+import {realLenderFixture} from './helpers/v1-real-lender-fixture.mjs';
+import {lenderFixture, until, deferred} from './helpers/v1-lender-fixture.mjs';
 
 test('fresh lending defaults allow concurrent owner use', () => {
   assert.equal(APP_DEFAULTS.idleOnly, false);
@@ -30,15 +31,14 @@ test('saved presence choices are kept, durable before use, and owners can still 
   assert.equal(durableAtUse.limits.idleOnly, true);
   assert.equal(durableAtUse.limits.lendingPolicy.stopOnReturn, true);
   let view = await api(app, '/api/home');
-  assert.equal(view.lendingPolicy.migration.acknowledged, false);
-  assert.deepEqual(view.lendingPolicy.migration.reset.map(row => row.field), ['strategyParams.perJobPct']);
+  assert.equal(view.lendingPolicy.migration, undefined);
   await api(app, '/api/lending/limits', {method:'POST', body:{idleOnly:false, lendingPolicy:{stopOnReturn:false}}});
   await app.close();
   ({app} = await f.start('presence-upgrade'));
   view = await api(app, '/api/home');
   assert.equal(view.lending.limits.idleOnly, false);
   assert.equal(view.lending.limits.lendingPolicy.stopOnReturn, false);
-  assert.equal(view.lendingPolicy.migration, null);
+  assert.equal(view.lendingPolicy.migration, undefined);
 });
 
 test('Any time never samples presence even with an older saved stop-on-return value', {timeout:60000}, async t => {
@@ -47,7 +47,7 @@ test('Any time never samples presence even with an older saved stop-on-return va
     quota:() => ({provider:'codex',remaining:100,observedAt:f.clock.now()}),
     lendingPolicy:normalizeLendingPolicy({stopOnReturn:true}), userActive:() => {reads++; return true;}}});
   const controller = new AbortController();
-  const lender = createLender({client:f.client, backend:f.backend, adapters:f.adapters, policy:f.policy,
+  const lender = createLender({...f.runOptions,client:f.client, backend:f.backend, adapters:f.adapters, policy:f.policy,
     clock:f.clock, onEvent:event => f.events.push(event)});
   const running = lender.start(controller.signal);
   f.stop = async () => {controller.abort(); await running;};
@@ -79,7 +79,7 @@ test('stop-on-return remains an opt-in with the existing two-minute delay', {tim
   const stops=[];
   f.backend.requestStop=async (handle,reason) => {stops.push(reason);return {delivered:true};};
   const controller=new AbortController();
-  const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock});
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock});
   const running=lender.start(controller.signal);
   f.stop=async () => {controller.abort();await running;};
   await f.entered.promise;
@@ -91,6 +91,22 @@ test('stop-on-return remains an opt-in with the existing two-minute delay', {tim
   assert.deepEqual(stops,['owner']);
   f.execution.resolve();
   await f.stop();
+});
+
+test('a presence answer arriving after the run ends creates no owner-return timer',async t=>{
+  const answer=deferred();let delayed=false,sampling=false;
+  const f=await lenderFixture(t,{hold:true,policy:{mode:'auto',idleOnly:true,
+    lendingPolicy:normalizeLendingPolicy({stopOnReturn:true}),
+    userActive:()=>{if(!delayed)return false;delayed=false;sampling=true;return answer.promise;}}});
+  const controller=new AbortController(),worker=createLender({...f.runOptions,client:f.client,backend:f.backend,
+    adapters:f.adapters,policy:f.policy,clock:f.clock,onEvent:event=>f.events.push(event)});
+  const loop=worker.start(controller.signal);f.stop=async()=>{controller.abort();await loop;};
+  await f.entered.promise;delayed=true;f.clock.advance(5000);
+  await until(()=>sampling,'in-flight presence read');
+  f.execution.resolve();await until(()=>f.events.some(event=>event.label?.startsWith('Finished.')),'run finishes');
+  await f.stop();answer.resolve(true);
+  for(let i=0;i<20;i++)await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(f.clock.pending().includes(120000),false,'a finished run owns no return timer');
 });
 
 for (const [name,patch,expected] of [
@@ -119,7 +135,7 @@ for (const [name,patch,expected] of [
   assert.notEqual(notice?.presenceDefaultsUncertain,true);
 });
 
-test('unrelated owner edits keep both presence choices and add only the cap notice', {timeout:60000}, async t => {
+test('unrelated owner edits keep both presence choices', {timeout:60000}, async t => {
   const f=await appFixture(t),home=await f.home('presence-edited'),directory=join(home,'v1');
   await mkdir(directory,{recursive:true});
   const file=join(directory,'app-settings.json');
@@ -135,11 +151,7 @@ test('unrelated owner edits keep both presence choices and add only the cap noti
   assert.equal(atUse.limits.idleOnly,true);
   assert.equal(atUse.limits.lendingPolicy.stopOnReturn,true);
   assert.equal(atUse.presenceDefaultsVersion,2);
-  const view=await api(app,'/api/home'),notice=view.lendingPolicy.migration;
-  assert.notEqual(notice.presenceDefaultsChanged,true);
-  assert.equal(notice.perJobCapChanged,true);
-  assert.equal(notice.acknowledged,false);
-  assert.deepEqual(notice.reset,[{field:'strategyParams.perJobPct'}]);
+  assert.equal((await api(app,'/api/home')).lendingPolicy.migration,undefined);
   assert.equal(atUse.configVersion,13);
   assert.equal(atUse.activeCircle,'chosen-circle');
   assert.equal(atUse.modes['chosen-circle'],'ask');
@@ -169,11 +181,43 @@ test(`an explicit off beside an old default stays unchanged and raises no notice
   const saved=JSON.parse(await readFile(file,'utf8'));
   assert.equal(saved.limits.idleOnly,idleOnly);
   assert.equal(saved.limits.lendingPolicy.stopOnReturn,stopOnReturn);
-  assert.equal((await api(app,'/api/home')).lendingPolicy.migration,null);
+  assert.equal((await api(app,'/api/home')).lendingPolicy.migration,undefined);
   assert.equal(saved.presenceDefaultsVersion,2);
   await app.close();
   ({app}=await f.start('presence-mixed'));
   const twice=JSON.parse(await readFile(file,'utf8'));
   assert.deepEqual(twice.limits,saved.limits);
   assert.deepEqual(twice.lendingPolicyMigration,saved.lendingPolicyMigration);
+});
+
+test('stop-on-return shares owner Stop and cancels when the owner leaves',async t=>{
+  for(const leaves of [false,true])await t.test(leaves?'leaves before two minutes':'stays for two minutes',async t=>{
+    let active=false;
+    const f=await realLenderFixture(t,{hold:true,mutateJob:job=>{job.requirements.limits.wall_seconds=300;},
+      policy:{mode:'auto',idleOnly:true,lendingPolicy:normalizeLendingPolicy({stopOnReturn:true}),userActive:()=>active}});
+    const requested=[];
+    f.backend.requestStop=async(_handle,reason)=>{requested.push(reason);return {delivered:false};};
+    const controller=new AbortController();
+    const worker=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
+      onEvent:event=>f.events.push(event)});
+    const running=worker.start(controller.signal);
+    f.stop=async()=>{controller.abort();await running;};
+    const tick=async count=>{for(let i=0;i<count;i++){f.clock.advance(5000);for(let j=0;j<20;j++)await new Promise(resolve=>setImmediate(resolve));}};
+    await f.entered.promise;active=true;
+    await tick(leaves?12:25);
+    if(leaves){
+      active=false;await tick(14);
+      assert.deepEqual(requested,[],'leaving cancels the pending owner Stop');
+      assert.equal(f.calls.some(([kind])=>kind==='cancel'),false,'the run continues');
+      f.execution.resolve();await until(()=>f.realRequests.some(row=>row.url.endsWith('/complete')),'continuing run completes');
+    }else{
+      await until(()=>f.realRequests.some(row=>row.url.endsWith('/stopped')),'normal owner Stop reports cessation');
+      assert.deepEqual(requested,['owner']);
+      const view=await f.owner.getJob(f.jobDigest);
+      assert.equal(JSON.parse(view.current_attempt.reason).code,'stopped_by_lender','borrower sees the normal owner Stop reason');
+      assert.equal(view.current_attempt.compute_stopped,true);
+      assert.ok(f.events.some(event=>event.status==='stopped'&&event.reason==='stopped_by_lender'));
+    }
+    await f.stop();
+  });
 });

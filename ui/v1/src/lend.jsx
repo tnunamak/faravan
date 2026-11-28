@@ -282,7 +282,7 @@ export function LendingCard({ vm, device, circle, lending, mutate, setDialog, ap
         <span class="t-title3">{device}</span>
         {card.showSwitch && <div class="home-lending-toggle"><LendSwitch vm={vm} disabled={!circle} run={flip} size="" /></div>}
       </div>
-      <p class="t-title3">{vm.headline}</p><p class="t-sm t-2">{card.reason}</p>{vm.limitAction && <a class="btn btn-secondary limit-action" href={vm.limitAction.href}>Raise limit</a>}
+      <p class="t-title3">{vm.headline}</p><p class="t-sm t-2">{card.reason}</p>
       {fix && <div class="home-lending-fix"><BlockerAction item={fix} primary={false} api={api} agents={agents} mutate={mutate} circle={lending.circle || circle} refresh={refresh} latched={vm.latched} /></div>}
       {!fix && vm.identityHold?.target && <div class="home-lending-fix identity-signin"><SignIn api={api} target={vm.identityHold.target} agentName={vm.identityHold.name} refresh={refresh} kind="secondary" /></div>}
       {vm.exec && <div class="stack-2"><p class="t-sm">{vm.exec.stops || (vm.exec.stopping ? 'Stop requested. Confirmation is still pending.' : vm.exec.finishing ? RUNNING_JOB : 'This job uses your saved limits.')}</p>{canStop && <Button kind="danger" size="sm" onClick={stop}>Stop {vm.exec.who ? vm.exec.who + "’s" : "this"} job…</Button>}</div>}
@@ -410,7 +410,7 @@ export function Lend({ api, agents, lending, data, errors = {}, mutate, circle, 
               <span class="grow">{vm.exec.stops || (vm.exec.finishing ? RUNNING_JOB : 'This job uses your saved limits.')}</span>
               {activeJobHref && <a href={activeJobHref}>{vm.exec.stopping ? vm.headline : 'Open job'} <span aria-hidden="true">→</span></a>}
               {vm.exec.stopping && !activeJobHref && <span class="stack-2">
-                {!['cessation_unverified', 'stop_report_pending'].includes(vm.lendingProjection.admissionReason) &&
+                {vm.lendingProjection.admissionReason!=='cleanup_pending' &&
                   <span>Stop requested. Confirmation is still pending.</span>}
                 <Action className="btn btn-secondary btn-sm" run={() => refresh()}>Check stop status</Action>
               </span>}
@@ -428,7 +428,7 @@ export function Lend({ api, agents, lending, data, errors = {}, mutate, circle, 
               </div>
             </div>
           )}
-          {vm.limitAction && <a class="btn btn-secondary limit-action" href={vm.limitAction.href}>Raise limit</a>}
+
           {vm.meters.length > 0 && <Meters meters={vm.meters.filter(m => !m.of.includes('weekly quota unused'))} />}
           {(vm.canPause || vm.kind === 'paused' || circle && fix) && <div class="hero-actions wrap">
           {circle && fix && <BlockerAction surface="lend" item={fix} primary={!pendingApproval} api={api} agents={agents} mutate={mutate} circle={circle} refresh={refresh} latched={vm.latched} />}

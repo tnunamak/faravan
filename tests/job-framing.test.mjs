@@ -2,18 +2,35 @@ import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
+import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {RUN_FLAGS} from '../lib/v1/lender.mjs';
 import {HARNESS_ADAPTERS} from '../lib/harnesses/index.mjs';
 import {jobFraming, JOB_FRAMING_VERSION} from '../lib/harnesses/job-framing.mjs';
 
 const prompt = "Render an interesting zoom of the mandelbrot set, cel shaded\nKeep 'quotes', $HOME and `literal` exactly.\n";
 const workspace = "/work/project with 'quotes'";
+// The harness name is an executable basename, not necessarily a valid POSIX
+// shell function name (faravan-pi is one example). Only fixtures are on PATH.
+function captureArgv(binary, command) {
+  const bin = mkdtempSync(join(tmpdir(), 'faravan-framing-'));
+  try {
+    writeFileSync(join(bin, binary), "#!/bin/sh\nprintf '%s\\0' \"$@\"\n", {mode: 0o700});
+    // The suite's CLI tripwire admits a protected name only from a declared fake directory; this one is.
+    const output = execFileSync('/bin/sh', ['-c', command], {env: {...process.env, PATH: bin, TEST_CLI_FAKE_DIR: bin}});
+    return output.toString().split('\0').slice(0, -1);
+  } finally {
+    rmSync(bin, {recursive: true, force: true});
+  }
+}
+
 for (const adapter of HARNESS_ADAPTERS) {
   test(`${adapter.spec.harness_id}: job framing preserves the person's prompt`, () => {
     const args=RUN_FLAGS[adapter.spec.harness_id]?.({model:'test-model',effort:'medium'})??[];
     const command = adapter.jobCommand({prompt, workspace, args});
     const binary = adapter.spec.entrypoint.split(' ')[0];
-    const argv = execFileSync('sh', ['-c', `${binary}() { printf '%s\\0' "$@"; }; ${command}`]).toString().split('\0').slice(0,-1);
+    const argv = captureArgv(binary, command);
     for (const arg of args) assert.ok(argv.includes(arg), 'run flags survive framing');
     if (binary === 'gh') {
       assert.equal(argv.at(-1), prompt, 'gh is a credential utility, not a coding agent');
@@ -38,7 +55,7 @@ for (const kind of ['message', 'files']) {
     test(`${adapter.spec.harness_id}: a ${kind} job is framed to return faravan-output/, not code changes`, () => {
       const command = adapter.jobCommand({prompt, workspace, result: kind});
       const binary = adapter.spec.entrypoint.split(' ')[0];
-      const argv = execFileSync('sh', ['-c', `${binary}() { printf '%s\\0' "$@"; }; ${command}`]).toString().split('\0').slice(0,-1);
+      const argv = captureArgv(binary, command);
       const framing = jobFraming(workspace, kind);
       assert.ok(argv.some(arg => arg.includes(framing)));
       assert.ok(argv.some(arg => arg === prompt || arg.endsWith('\n\n' + prompt)), 'prompt is byte-for-byte intact');

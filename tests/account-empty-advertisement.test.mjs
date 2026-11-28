@@ -1,0 +1,33 @@
+import {lendingReasonText} from '../lib/v1/lending-reasons.mjs';
+import './helpers/no-browser.mjs';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {join} from 'node:path';
+import {createAccountStore} from '../lib/v1/accounts.mjs';
+import {appFixture,api,waitFor} from './helpers/v1-app-fixture.mjs';
+import {setSyntheticAccountSignedIn} from './helpers/synthetic-run-account.mjs';
+
+test('empty account advertisements retain sign-in, provider-reset and owner-Off facts',{timeout:120000},async t=>{
+  const f=await appFixture(t),{lender,circle}=await f.connect({syntheticAccounts:'codex'});
+  await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
+  await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
+  await setSyntheticAccountSignedIn({...lender,api,providerId:'codex',signedIn:false});
+  await waitFor(()=>lender.app.lendingAdmission()==='account_signed_out','the account sign-in fact',10000);
+  const signedOut=await waitFor(async()=>{const view=await api(lender.app,'/api/lending');return view.reason==='account_signed_out'&&view;},'the signed-out wait',10000);
+  assert.match(signedOut.label,/signed out/);
+  assert.doesNotMatch(signedOut.label,/protected workspace/);
+  await setSyntheticAccountSignedIn({...lender,api,providerId:'codex',signedIn:true});
+  const store=createAccountStore({directory:join(lender.home,'v1','accounts')}),account=Object.values(store.read().records)[0],reset=Date.now()+3600000;
+  await store.transaction(state=>Object.assign(state.records[account.id].usage,{state:'limit',limitResetAtMs:reset}));
+  let current=await api(lender.app,'/api/accounts');
+  await api(lender.app,'/api/accounts/'+account.id+'/settings',{method:'POST',body:{expectedRevision:current.revision,enabled:true}});
+  const limited=await waitFor(async()=>{const view=await api(lender.app,'/api/lending');return view.reason==='provider_limit_reached'&&view;},'the provider reset fact',10000);
+  assert.equal(limited.until,reset);
+  assert.equal(limited.label,lendingReasonText('provider_limit_reached',{until:reset}));
+  assert.doesNotMatch(limited.label,/protected workspace/);
+  current=await api(lender.app,'/api/accounts');
+  await api(lender.app,'/api/accounts/'+account.id+'/settings',{method:'POST',body:{expectedRevision:current.revision,enabled:false}});
+  await waitFor(()=>lender.app.lendingAdmission()==='lending_off','the owner lends no account',10000);
+  const off=await waitFor(async()=>{const view=await api(lender.app,'/api/lending');return view.reason==='lending_off'&&view;},'the lending-off wait',10000);
+  assert.equal(off.label,lendingReasonText('lending_off'));
+});

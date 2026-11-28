@@ -1,4 +1,5 @@
 import './helpers/no-browser.mjs';
+import {currentAdvertisement,accountHeartbeat,selectionForJob,currentReceipt} from './helpers/current-job-advertisement.mjs';
 import {invitationRevocation} from '../lib/v1/invitation-revoke.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,11 +30,11 @@ const base = origin + '/v1/circles/' + circle;
 const start = Date.parse('2026-10-09T12:00:00Z') / 1000;
 const iso = n => new Date(n * 1000).toISOString().replace('.000Z', 'Z');
 const segment = digest => digest.slice(7);
-const advertisement = {
+const advertisement = currentAdvertisement({
   harnesses: ['codex'], models: ['example-model'], capabilities: ['patch-output'],
   egress: ['provider-only'], enforced_limits: Object.keys(vectors.job.payload.requirements.limits),
   max_limits: vectors.job.payload.requirements.limits,
-};
+});
 const code = (fn, expected) => assert.throws(fn,
   error => error instanceof p.ProtocolError && error.code === expected,
   'expected ProtocolError ' + expected);
@@ -98,9 +99,18 @@ function fixture(t, extra = {}) {
       return store.publishJob(job, f.ctx(device, 'POST', '/jobs', job, overrides));
     },
     claim(digest, device = 1, lease = 120, overrides = {}, ad = advertisement) {
+      f.advertise(device);
       const body = { advertisement: ad, lease_seconds: lease };
       return store.claimJob(fp[device], digest, ad,
         f.ctx(device, 'POST', '/jobs/' + segment(digest) + '/claim', body, overrides), lease);
+    },
+    advertise(device = 1) {
+      const body = accountHeartbeat(advertisement);
+      return store.heartbeat(fp[device],body,f.ctx(device,'POST','/heartbeat',body));
+    },
+    claimNext(device, ad, context, lease) {
+      f.advertise(fp.indexOf(device));
+      return store.claimNext(device,ad,context,lease);
     },
     requestStart(attempt, device = 1, overrides = {}) {
       const body = { generation: attempt.generation };
@@ -121,7 +131,7 @@ function fixture(t, extra = {}) {
     result(job, attempt, overrides = {}, device = 1) {
       return p.signEnvelope('result', { ...vectors.result.payload,
         job_digest: p.digest(job.payload), attempt_id: attempt.attempt_id, generation: attempt.generation,
-        executor: fp[device], roster_epoch: f.epoch, submitted_at: iso(now), ...overrides }, keys[device]);
+        executor: fp[device], roster_epoch: f.epoch, submitted_at: iso(now), ...overrides, receipt:currentReceipt(overrides.receipt??vectors.result.payload.receipt,attempt.selection) }, keys[device]);
     },
     complete(result, device = 1, overrides = {}) {
       return store.complete(result, f.ctx(device, 'POST',
@@ -152,7 +162,7 @@ function fixture(t, extra = {}) {
     },
     list(limit = 2, cursor = null, device = 0) {
       const route = '/jobs?limit=' + limit + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
-      return store.listJobs(fp[device], { limit, cursor }, f.ctx(device, 'GET', route));
+      return store.listJobs(fp[device], { limit, cursor, accepts:['run_request_v1'] }, f.ctx(device, 'GET', route));
     },
   };
   return f;
@@ -346,7 +356,7 @@ test('launch fence survives a coordinator restart and is resolved only through p
 
 // The fence ends when the first run must have ended: lease end + the job's wall limit + the longest lease (300 s).
 const fenceBound=(attempt,job)=>Date.parse(attempt.lease_expires_at)/1000+job.payload.requirements.limits.wall_seconds+300;
-const claimNext3=f=>f.store.claimNext(fp[3],advertisement,f.ctx(3,'POST','/jobs/claim-next',{advertisement,lease_seconds:30}),30);
+const claimNext3=f=>f.claimNext(fp[3],advertisement,f.ctx(3,'POST','/jobs/claim-next',{advertisement,lease_seconds:30}),30);
 
 for(const how of ['lease','release','fail','revoke'])test('launch fence: a held job requeues without spending a try at its time bound, after '+how,t=>{
   const f=fixture(t);inputs(f);secondLender(f);
@@ -762,7 +772,7 @@ test('v1 capabilities, signer/author and holder bindings prevent unauthorized tr
   const wrong = p.signEnvelope('job', { ...f.job().payload, author: fp[1] }, keys[0]);
   code(() => f.publish(wrong), 'forbidden');
   const job = f.job(); f.publish(job); const digest = p.digest(job.payload);
-  code(() => f.claim(digest, 1, 120, {}, { ...advertisement, models: [] }), 'requirements_unsupported');
+  code(() => f.claim(digest, 1, 120, {}, { ...advertisement, models: [], accounts:[] }), 'requirements_unsupported');
   assert.equal(f.get(digest).attempts_started, 0);
   const a = f.claim(digest).attempt;
   code(() => f.complete(f.result(job, a, {}, 0), 0), 'forbidden');
@@ -903,6 +913,7 @@ async function raceClaims(t, f, digest, sameKey = false, terminal = null) {
       finally { store.close(); }
     })().catch(e=>{parentPort.postMessage({fatal:e.stack});process.exitCode=1;});
   `;
+  f.advertise(1);
   const count = terminal ? 2 : 8;
   for (let i = 0; i < count; i++) {
     const worker = new Worker(script, { eval: true, workerData: {
@@ -969,7 +980,7 @@ test('v1 eight simultaneous identical idempotency keys join the same committed c
 test('v1 claim-next retains no-work and selects oldest eligible immutable job', t => {
   const f = fixture(t); inputs(f);
   const body = { advertisement, lease_seconds: 120 };
-  const next = key => f.store.claimNext(fp[1], advertisement,
+  const next = key => f.claimNext(fp[1], advertisement,
     f.ctx(1, 'POST', '/jobs/claim-next', body, { idempotency_key: key }), 120);
   assert.equal(next('empty-poll'), null);
   const first = f.publish(), second = f.publish();
@@ -1176,11 +1187,11 @@ test('v1 invalid enrollment proofs never spend the valid invite budget', t => {
 test('v1 indexed claim queue skips terminal and incompatible jobs and tracks renewed leases', t => {
   const f=fixture(t);inputs(f);
   const db=new DatabaseSync(f.options.path);t.after(()=>db.close());
-  for(let i=0;i<8;i++)f.publish(f.job({requirements:{...vectors.job.payload.requirements,model:{any_of:['unavailable-model']}}}));
+  for(let i=0;i<8;i++)f.publish(f.job({runRequest:{...vectors.job.payload.runRequest,models:[{providerId:'codex',modelId:'unavailable-model'}]}}));
   const terminal=f.job();f.publish(terminal);f.cancel(terminal);
   const job=f.job(),digest=p.digest(job.payload);f.publish(job);
   const body={advertisement,lease_seconds:30};
-  const claim=f.store.claimNext(fp[1],advertisement,f.ctx(1,'POST','/jobs/claim-next',body),30);
+  const claim=f.claimNext(fp[1],advertisement,f.ctx(1,'POST','/jobs/claim-next',body),30);
   assert.equal(claim.job.job_digest,digest);
   assert.equal(db.prepare('SELECT count(*) n FROM job_queue').get().n,9);
   const plan=db.prepare('EXPLAIN QUERY PLAN SELECT id FROM job_queue WHERE egress=? AND ready<=? AND expiry>=?').all('provider-only',f.now,f.now+30);
@@ -1195,10 +1206,10 @@ test('v1 indexed claim queue skips terminal and incompatible jobs and tracks ren
   f.store.renew(fp[1],a.attempt_id,a.generation,f.ctx(1,'POST','/attempts/'+a.attempt_id+'/renew',renew),120);
   f.advance(11);
   db.exec('CREATE TABLE observed_job_writes (id TEXT); CREATE TRIGGER observe_job_writes AFTER UPDATE ON jobs BEGIN INSERT INTO observed_job_writes VALUES (NEW.id); END');
-  assert.equal(f.store.claimNext(fp[1],advertisement,f.ctx(1,'POST','/jobs/claim-next',body),30),null);
+  assert.equal(f.claimNext(fp[1],advertisement,f.ctx(1,'POST','/jobs/claim-next',body),30),null);
   assert.equal(db.prepare('SELECT count(*) n FROM observed_job_writes').get().n,0,'empty poll must not rewrite unchanged or terminal jobs');
   f.advance(110);
-  assert.equal(f.store.claimNext(fp[1],advertisement,f.ctx(1,'POST','/jobs/claim-next',body),30).job.job_digest,digest);
+  assert.equal(f.claimNext(fp[1],advertisement,f.ctx(1,'POST','/jobs/claim-next',body),30).job.job_digest,digest);
 });
 
 test('v1 circle job quota and terminal retention keep durable replay tombstones', t => {
@@ -1304,7 +1315,7 @@ test('v1 retained result and cancellation acknowledgements survive body collecti
 test('v1 job pages stop at the UTF-8 byte cap and preserve snapshot traversal', t => {
   const f = fixture(t); inputs(f);
   const requirements = { ...vectors.job.payload.requirements,
-    model: { any_of: Array.from({ length: 36 }, (_, i) => i + 'é'.repeat(2040)) } };
+    harness: Array.from({ length: 36 }, (_, i) => i + 'é'.repeat(2040)) };
   const digests = Array.from({ length: 3 }, () => f.publish(f.job({ requirements })).job_digest).sort();
   const found = []; let cursor = null, pages = 0;
   do {
@@ -1321,11 +1332,11 @@ test('v1 job pages stop at the UTF-8 byte cap and preserve snapshot traversal', 
 test('v1 oversized JobView publication rolls back before committing the job', t => {
   const f = fixture(t); inputs(f);
   const requirements = { ...vectors.job.payload.requirements,
-    model: { any_of: Array.from({ length: 64 }, (_, i) => i === 63 ? 'z' : String(i).padStart(3, '0') + 'x'.repeat(4093)) } };
+    harness: Array.from({ length: 64 }, (_, i) => i === 63 ? 'z' : String(i).padStart(3, '0') + 'x'.repeat(4093)) };
   let job = f.job({ requirements });
   const padding = 262144 - Buffer.byteLength(p.canonicalize(job));
   assert.ok(padding > 0 && padding < 4096);
-  requirements.model.any_of[63] += 'x'.repeat(padding);
+  requirements.harness[63] += 'x'.repeat(padding);
   job = p.signEnvelope('job', { ...job.payload, requirements }, keys[0]);
   assert.equal(Buffer.byteLength(p.canonicalize(job)), 262144);
   code(() => f.publish(job), 'payload_too_large');
@@ -1421,7 +1432,7 @@ test('v1 claim entry points reject malformed advertisement lists', t => {
   ]) {
     const ad = { ...advertisement, ...change }, body = { advertisement: ad, lease_seconds: 120 };
     code(() => f.claim(digest, 1, 120, {}, ad), 'requirements_unsupported');
-    code(() => f.store.claimNext(fp[1], ad, f.ctx(1, 'POST', '/jobs/claim-next', body), 120), 'requirements_unsupported');
+    code(() => f.claimNext(fp[1], ad, f.ctx(1, 'POST', '/jobs/claim-next', body), 120), 'requirements_unsupported');
     code(() => f.store.openClaimPoll(fp[1], body, f.ctx(1, 'POST', '/jobs/claim-next', body)), 'requirements_unsupported');
     assert.equal(f.get(digest).state, 'queued');
   }
@@ -1573,7 +1584,7 @@ test('v1 legacy claim entry points preserve readable JobView and page atomically
   const ctx = route => ({ ...f.ctx(1, 'POST', route, body), maxResponseBytes: cap });
   for (const invoke of [
     () => f.store.claimJob(fp[1], digest, advertisement, ctx('/jobs/' + segment(digest) + '/claim'), 120),
-    () => f.store.claimNext(fp[1], advertisement, ctx('/jobs/claim-next'), 120),
+    () => f.claimNext(fp[1], advertisement, ctx('/jobs/claim-next'), 120),
     () => f.store.openClaimPoll(fp[1], body, ctx('/jobs/claim-next')),
   ]) {
     code(invoke, 'payload_too_large');
@@ -1597,7 +1608,7 @@ test('v1 result admission caps its later readback rather than only the acknowled
 test('v1 hard response cap reserves escaped terminal reason growth at admission', t => {
   const f = fixture(t); inputs(f);
   const requirements = { ...vectors.job.payload.requirements,
-    model: { any_of: Array.from({ length: 60 }, (_, i) => String(i).padStart(3, '0') + 'x'.repeat(4093)) } };
+    harness: Array.from({ length: 60 }, (_, i) => String(i).padStart(3, '0') + 'x'.repeat(4093)) };
   const job = f.job({ requirements }), digest = p.digest(job.payload);
   const immediate = { job_digest: digest, job, state: 'queued', attempts_started: 0, current_attempt: null, result_digest: null };
   assert.ok(Buffer.byteLength(p.canonicalize(immediate)) < 262144);
@@ -1613,7 +1624,7 @@ test('v1 publication byte reservation survives maximum attempt growth and cursor
   const date = '9999-12-31T23:59:59Z', hash = 'sha256:' + '0'.repeat(64), reason = '\u0000'.repeat(4096);
   const future = { job_digest: digest, job, state: 'result-accepted', attempts_started: job.payload.max_attempts ?? 3,
     current_attempt: { attempt_id: uuid, job_digest: digest, generation: Number.MAX_SAFE_INTEGER, holder: hash, state: 'cancelled',
-      claimed_at: date, lease_expires_at: date, execution_started_at: date, reason, compute_stopped: false, stopped_at: date }, result_digest: hash };
+      claimed_at: date, lease_expires_at: date, execution_started_at: date, selection:{providerId:'codex',accountId:'\u0000'.repeat(256),modelId:'example-model',effortId:'\u0000'.repeat(256)}, reason, compute_stopped: false, stopped_at: date }, result_digest: hash };
   const cap = bytes({ items: [future], next_cursor: uuid });
   assert.equal(bytes(reason), 24578);
   const ctx = (device, method, route, body) => ({ ...f.ctx(device, method, route, body), maxResponseBytes: cap });
@@ -1629,6 +1640,7 @@ test('v1 publication byte reservation survives maximum attempt growth and cursor
     db.prepare('UPDATE jobs SET data=? WHERE id=?').run(JSON.stringify(row), digest);
   } finally { db.close(); }
   const claimBody = { advertisement, lease_seconds: 120 };
+  f.advertise(1);
   const a = f.store.claimJob(fp[1], digest, advertisement, ctx(1, 'POST', '/jobs/' + segment(digest) + '/claim', claimBody), 120).attempt;
   assert.equal(a.generation, Number.MAX_SAFE_INTEGER);
   const attemptRoute = '/attempts/' + a.attempt_id;
@@ -1643,7 +1655,7 @@ test('v1 publication byte reservation survives maximum attempt growth and cursor
   let cursor = null, count = 0;
   do {
     const route = '/jobs?limit=1' + (cursor ? '&cursor=' + cursor : '');
-    const page = f.store.listJobs(fp[0], { limit: 1, cursor }, ctx(0, 'GET', route));
+    const page = f.store.listJobs(fp[0], { limit: 1, cursor, accepts:['run_request_v1'] }, ctx(0, 'GET', route));
     assert.ok(bytes(page) <= cap); assert.equal(page.items.length, 1);
     count += page.items.length; cursor = page.next_cursor;
     if (count === 1) assert.equal(cursor.length, 36);
@@ -1912,15 +1924,15 @@ test('typed results: completion must answer the signed requested result kind', t
   const f = fixture(t); inputs(f); outputs(f);
   const tree = { digest: 'sha256:' + '5'.repeat(64), bytes: 120, media_type: 'application/gzip' };
   f.upload(tree, 1);
-  const ad = { ...advertisement, capabilities: ['patch-output', 'results_v1'] };
-  const typedReceipt = source => ({ ...vectors.result.payload.receipt, source, capabilities_applied: ['results_v1'], candidate_format: 'tree' });
+  const ad = { ...advertisement, capabilities: [...advertisement.capabilities, 'results_v1'] };
+  const typedReceipt = source => ({ ...vectors.result.payload.receipt, source, capabilities_applied: ['results_v1','run_request_v1'], candidate_format: 'tree' });
   const run = (jobOverrides, resultOverrides) => {
     const job = f.job(jobOverrides), digest = p.digest(job.payload); f.publish(job);
     const a = f.claim(digest, 1, 120, {}, ad).attempt; f.start(a);
     return { job, a, digest, result: overrides => f.result(job, a, { ...resultOverrides(job), ...overrides }) };
   };
   const message = { source: { kind: 'none' }, result: { kind: 'message' },
-    requirements: { ...vectors.job.payload.requirements, capabilities: ['results_v1'] } };
+    requirements: { ...vectors.job.payload.requirements, capabilities: ['results_v1','run_request_v1'] } };
   const typed = job => ({ candidate: tree, receipt: typedReceipt(job.payload.source) });
   const wrong = run(message, typed);
   code(() => f.complete(wrong.result({ output: { kind: 'files' } })), 'requirements_unsupported');
@@ -1932,8 +1944,7 @@ test('typed results: completion must answer the signed requested result kind', t
 });
 
 function controlHeartbeat(seq = 0) {
-  return {boot:'test-boot', seq, intent:{state:'ready'}, execution:{state:'idle'},
-    blockers:[], agents:[], capabilities:[]};
+  return {...accountHeartbeat(advertisement),boot:'test-boot',seq};
 }
 function heartbeat(f, body = controlHeartbeat(), device = 1, overrides = {}) {
   return f.store.heartbeat(fp[device], body, f.ctx(device, 'POST', '/heartbeat', body, overrides));
@@ -2006,6 +2017,7 @@ test('control-plane traffic leaves mutation quota and successful claim retention
   const body = {advertisement, lease_seconds:120}, key = 'successful-claim';
   const claim = () => f.store.claimNext(fp[1], advertisement,
     f.ctx(1, 'POST', '/jobs/claim-next', body, {idempotency_key:key}), 120);
+  f.advertise(1);
   const accepted = claim();
   assert.equal(accepted.job.job_digest, digest);
   heartbeat(f);
@@ -2014,14 +2026,15 @@ test('control-plane traffic leaves mutation quota and successful claim retention
   assert.equal(f.attempt(accepted.attempt.attempt_id).execution_started_at, null, 'rejected mutation rolls back');
   const db = new DatabaseSync(f.options.path); t.after(() => db.close());
   assert.equal(cacheUsage(db, 'idempotency').rows, 4);
-  assert.equal(cacheUsage(db, 'control_idempotency').rows, 2);
+  assert.equal(cacheUsage(db, 'control_idempotency').rows, 3);
   f.advance(601);
   assert.deepEqual(claim(), accepted, 'successful claim is a daily mutation, not a short-lived empty poll');
   assert.equal(cacheUsage(db, 'idempotency').rows, 4);
-  assert.equal(cacheUsage(db, 'control_idempotency').rows, 2);
+  assert.equal(cacheUsage(db, 'control_idempotency').rows, 3);
 });
 
 test('control-plane keys preserve nonce, payload and cross-endpoint replay fences across restart', t => {
+  assert.equal(controlHeartbeat(7).seq,7,'the fixture preserves the requested heartbeat sequence');
   const f = fixture(t); inputs(f);
   f.upload(vectors.job.payload.prompt,1);f.upload(vectors.job.payload.source.artifact,1);
   const hb = controlHeartbeat(), key = 'control-key', ctx = f.ctx(1, 'POST', '/heartbeat', hb, {idempotency_key:key});
@@ -2095,9 +2108,9 @@ test('control-plane long-poll caches only final no-work and replays before newly
   assert.equal(emptyPoll(f, key), null, 'no-work replay does not claim the later job');
   f.advance(600);
   assert.equal(emptyPoll(f,key),null,'no-work replies retain the full protocol day');
-  f.advance(85800);const next=f.job();f.publish(next);
+  f.advance(85800);const next=f.job();f.publish(next);f.advertise(1);
   assert.equal(emptyPoll(f, key).job.job_digest, p.digest(next.payload), 'expired no-work key may make a fresh claim');
-  assert.equal(cacheUsage(db, 'control_idempotency').rows, 0);
+  assert.equal(cacheUsage(db, 'control_idempotency').rows, 1, 'the fresh account advertisement remains cached');
   assert.equal(cacheUsage(db, 'idempotency').rows, 2);
 });
 
@@ -2221,7 +2234,7 @@ test('metadata tombstone quotas roll back admission and survive reopen',t=>{
 });
 test('metadata byte budget rejects an oversized roster without changing the current epoch',t=>{
   const f=fixture(t,{quotas:{circleMetadataBytes:2500}});
-  heartbeat(f,{...controlHeartbeat(),capabilities:['circle_profile_v1']});
+  heartbeat(f,{...controlHeartbeat(),capabilities:['run_request_v1','circle_profile_v1']});
   const next=p.signEnvelope('roster',{...vectors.roster.payload,epoch:8,profile:{name:'x'.repeat(256),purpose:'x'.repeat(256)}},keys[2]);
   code(()=>f.store.installRoster(next,f.ctx(0,'PUT','/roster',next,{roster_epoch:8})),'quota_exceeded');
   assert.equal(f.store.getRoster(fp[0],f.ctx(0,'GET','/roster')).payload.epoch,7);
@@ -2489,4 +2502,18 @@ test('a governed member-carried refresh keeps the chain owner and fences a moved
   assert.deepEqual(retentionFor(f, digest), [true, false, true], 'an unchanged-chain refresh keeps it across reopen');
   code(() => f.install(governed(11, memberEntry(1, { origin: 'https://moved.example' })), 1), 'conflict');
   assert.equal(f.store.getRoster(fp[0], f.ctx(0, 'GET', '/roster')).payload.epoch, 10, 'a roster that moved the member origin is not installed here');
+});
+
+for(const reason of ['cannot_run_here','readiness_changed','cleanup_pending','no_spare'])test('timed give-back has no coordinator start penalty: '+reason,t=>{
+ const f=fixture(t);inputs(f);
+ const job=f.job(),digest=p.digest(job.payload);f.publish(job);
+ const first=f.claim(digest).attempt;
+ const until=(f.now+120)*1000;
+ f.end('release',first,1,JSON.stringify({code:reason,until}));
+ const db=new DatabaseSync(f.options.path);
+ const row=JSON.parse(db.prepare('SELECT data FROM jobs WHERE id=?').get(digest).data);db.close();
+ assert.equal(row.start_failures??0,0);assert.ok(!row.declined_by?.includes(fp[1]));
+ assert.equal(f.get(digest).state,'queued');
+ assert.equal(JSON.parse(f.attempt(first.attempt_id).reason).until,until);
+ assert.notEqual(f.claim(digest).attempt.attempt_id,first.attempt_id,'same lender remains eligible at coordinator');
 });

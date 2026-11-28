@@ -7,7 +7,7 @@ import {lenderFixture,until} from './helpers/v1-lender-fixture.mjs';
 const runEvents=f=>f.events.filter(event=>event.contribution?.kind==='run');
 function launch(f) {
   const controller=new AbortController();
-  const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
     approve:async()=>true,onEvent:event=>f.events.push(event)});
   const running=lender.start(controller.signal);
   let failure;const settled=Promise.resolve(running).catch(error=>{failure=error;});

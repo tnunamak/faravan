@@ -10,23 +10,36 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 
 for (const release of ['stop', 'switch off', 'battery']) test('keep-awake releases its whole helper tree on ' + release, {skip:!['linux','darwin'].includes(process.platform),timeout:10000}, async t => {
-  const dir = await mkdtemp(join(tmpdir(), 'spk-awake-tree-')), file = join(dir, 'pids.json');
-  let enabled = true, powered = true, helper, pids;
-  t.after(async () => {
-    if (helper?.pid) { try { process.kill(-helper.pid, 'SIGKILL'); } catch {} }
-    for (const pid of [pids?.descendant, helper?.pid]) if (pid) { try { process.kill(pid, 'SIGKILL'); } catch {} }
-    await rm(dir, {recursive:true,force:true});
+  let enabled = true, powered = true, helper, pids, ready;
+  t.after(() => {
+    if (helper?.pid && helper.exitCode===null && helper.signalCode===null) {
+      try { process.kill(-helper.pid, 'SIGKILL'); } catch {}
+    }
+    if (pids?.descendant) { try { process.kill(pids.descendant,'SIGKILL'); } catch {} }
   });
   const awake = createKeepAwake({platform:process.platform, enabled:()=>enabled, power:()=>powered,
-    spawn:(_command,_args,options) => helper = nodeSpawn(process.execPath, ['-e', `
-      const {spawn}=require('node:child_process');
-      const descendant=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
-      require('node:fs').writeFileSync(process.argv[1],JSON.stringify({descendant:descendant.pid}));
-      setInterval(()=>{},1000);
-    `, file], options)});
+    spawn:(_command,_args,options) => {
+      const stdio=Array.isArray(options.stdio)?options.stdio:['ignore','ignore','ignore'];
+      helper=nodeSpawn(process.execPath, ['-e', `
+        const {spawn}=require('node:child_process');
+        const descendant=spawn(process.execPath,['-e','setInterval(()=>{},1000); process.send("ready");'],{stdio:['ignore','ignore','ignore','ipc']});
+        let terminating=false;
+        process.on('SIGTERM',()=>{terminating=true;});
+        descendant.once('message',()=>process.send({descendant:descendant.pid}));
+        descendant.once('exit',()=>process.exit(terminating?0:1));
+      `], {...options,stdio:[...stdio,'ipc']});
+      ready=new Promise((resolve,reject)=>{
+        helper.once('message',resolve);
+        helper.once('error',reject);
+        helper.once('exit',(code,signal)=>reject(new Error('helper exited before readiness: '+(signal??code))));
+        t.signal.addEventListener('abort',()=>reject(t.signal.reason),{once:true});
+      });
+      return helper;
+    }});
   awake.tick();
-  for (let i=0;i<200;i++) { try { pids=JSON.parse(await readFile(file,'utf8')); break; } catch { await delay(10); } }
+  pids=await ready;
   assert.ok(pids?.descendant, 'the helper has a real descendant before release');
+  assert.notEqual(pids.descendant,helper.pid);
   if (release === 'stop') await awake.stop();
   else { if (release === 'switch off') enabled=false; else powered=false; awake.tick(); await awake.stop(); }
   for (const pid of [helper.pid,pids.descendant]) assert.throws(()=>process.kill(pid,0),{code:'ESRCH'},'no helper or descendant remains');

@@ -18,9 +18,9 @@ const LIGHT_T0 = RESET - 3 * HOUR_MS;
 const H_HAIKU = 1_320_000;
 const decideAt = ({at = LIGHT_T0, usedW = 10 * M, usedS = 0, laterBurn = 0, requested = 3 * M, friendValue = 3,
   position = 'balanced',
-  worst = H_HAIKU, estimate = 3 * M, owner = OWNER_NONE, band = calibration(), ownerMaxJobUsd = null, gates = GATES} = {}) =>
+  worst = H_HAIKU, estimate = 3 * M, owner = OWNER_NONE, band = calibration(), gates = GATES} = {}) =>
   decideObjectiveLend({now: at, observedAt: at, windows: windows({weeklyUsedMicro: usedW, shortUsedMicro: usedS}),
-    band, position, owner, gates, laterBurnCapacityMicro: laterBurn, ownerMaxJobUsdMicro: ownerMaxJobUsd,
+    band, position, owner, gates, laterBurnCapacityMicro: laterBurn,
     job: job({friendValue, requestedUsdMicro: requested, worstCallUsdMicro: worst, estimateUsdMicro: estimate})});
 
 test('dial binds lambda and epsilon, with finite whole-week bands after 9, 3, and 1 complete weeks', () => {
@@ -219,24 +219,7 @@ for (const m of MODELS) {
   });
 }
 
-test('(c) owner cap bounds total spend; native budgets subtract each model’s worst call', () => {
-  const expected = {'claude-haiku-5-5': 10_680_000, 'claude-sonnet-5-5': 6_720_000, 'claude-opus-5-5': 1_440_000};
-  for (const m of MODELS) {
-    const d = decideObjectiveLend({now: NOW, observedAt: NOW, windows: ampleWindows(), band: calibration(), owner: OWNER_NONE,
-      gates: GATES, ownerMaxJobUsdMicro: 12 * M, job: jobFor(m)});
-    assert.equal(d.admitted, true, d.reasonCode);
-    assert.equal(d.nativeBudgetUsdMicro, expected[m.model], m.model);
-    assert.equal(spendAtCap(d.nativeBudgetUsdMicro, m.headroomUsdMicro), 12 * M);
-    assert.equal(d.exposureUsdMicro, 12 * M);
-  }
-  for (const m of MODELS) {
-    const held = decideObjectiveLend({now: NOW, observedAt: NOW, windows: ampleWindows(), band: calibration(), owner: OWNER_NONE,
-      gates: GATES, ownerMaxJobUsdMicro: M, job: jobFor(m)});
-    assert.equal(held.admitted, false, `${m.model} at a $1 total cap`);
-    assert.equal(held.reason, 'budget_too_small');
-    assert.equal(held.projection.reasonCode, 'budget_too_small');
-  }
-});
+
 
 // ---------- (d) One explanation on every read surface. MODULE for the projection; surfaces are Stage B. ----------
 

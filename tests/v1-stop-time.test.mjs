@@ -10,7 +10,7 @@ import {realLenderFixture} from './helpers/v1-real-lender-fixture.mjs';
 const runs=f=>f.calls.filter(([kind])=>kind==='run').length;
 function launch(f) {
   const controller=new AbortController();
-  const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
     approve:async()=>true,onEvent:event=>f.events.push(event)});
   const running=lender.start(controller.signal);
   let failure;const settled=Promise.resolve(running).catch(error=>{failure=error;});

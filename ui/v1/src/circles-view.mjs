@@ -4,8 +4,16 @@ import { whenLabel, whenWords, jobActivity } from './view-models.mjs';
 import { formatMembership } from './membership-projection-view.mjs';
 import {lendingProjectionOf, formatLendingProjection} from './lending-projection-view.mjs';
 
+function unavailableCircleHost(circle, now, zone) {
+  const owner = safeName(circle?.joinInfo?.ownerName);
+  const host = owner ? owner + '’s computer, which hosts this circle,' : 'The computer that hosts this circle';
+  const lastReached = whenWords(circle?.host?.lastReachedAt, now, zone);
+  return host + ' did not answer.' + (lastReached ? ' Last reached ' + lastReached + '.' : '') +
+    ' Only that computer serves this circle for now; jobs wait until it is back.';
+}
+
 // Only an explicit successful read may establish empty history.
-export function circleJobsStatus(circleId, coverage, uncheckedIds = [], readError = null) {
+export function circleJobsStatus(circleId, coverage, uncheckedIds = [], readError = null, {circle, now = Date.now(), zone} = {}) {
   const observation = Array.isArray(coverage) ? coverage.find(row => row?.circleId === circleId) : undefined;
   if (observation?.state === 'skipped') return null;
   if (readError && observation) {
@@ -16,7 +24,7 @@ export function circleJobsStatus(circleId, coverage, uncheckedIds = [], readErro
   if (observation?.state === 'verified') return null;
   if (observation?.state === 'partial') {
     // Member computers answered for the jobs they run; jobs only the circle host holds could not be checked.
-    let message = 'Could not reach the circle host. Showing jobs that member computers confirmed; other jobs could not be checked.';
+    let message = unavailableCircleHost(circle, now, zone) + ' Showing jobs that member computers confirmed; other jobs could not be checked.';
     const at = typeof observation.savedAt === 'string' ? Date.parse(observation.savedAt) : NaN;
     if (!(observation.cachedRows > 0)) return {message, warning:true};
     message += ' Saved jobs may still be shown.';
@@ -28,7 +36,7 @@ export function circleJobsStatus(circleId, coverage, uncheckedIds = [], readErro
   let message = reason === 'access' ? 'Job history is not available with your current access.'
     : reason === 'busy' ? 'The circle host is busy. Job history could not be refreshed.'
     : reason === 'missing' ? 'The circle is no longer available to check for jobs.'
-    : reason === 'unreachable' ? 'Could not reach the circle host to check job history.'
+    : reason === 'unreachable' ? unavailableCircleHost(circle, now, zone)
     : 'Job history could not be checked.';
   if (observation?.cachedRows > 0) message += ' Saved jobs may still be shown.';
   if ((reason === 'busy' || reason === 'unreachable') && Number.isInteger(observation?.cachedRows) &&

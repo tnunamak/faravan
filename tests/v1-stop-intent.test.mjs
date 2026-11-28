@@ -9,7 +9,7 @@ import {jobWatchRevision} from '../lib/v1/job-watch.mjs';
 const runs=f=>f.calls.filter(([kind])=>kind==='run').length;
 function launch(f) {
   const controller=new AbortController();
-  const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
     approve:async()=>true,onEvent:event=>f.events.push(event)});
   const running=lender.start(controller.signal);
   let failure;const settled=Promise.resolve(running).catch(error=>{failure=error;});
@@ -61,7 +61,7 @@ test('offline stop delivery survives lender restart and replays the same request
   try {
     await until(()=>runs(f)===1,'accepted fake execution starts');
     await lender.stopCurrentJob(lender.getState().current);
-    await until(()=>f.events.some(event=>event.reason==='cessation_unverified'),'local cleanup remains unconfirmed');
+    await until(()=>f.events.some(event=>event.reason==='cleanup_pending'),'local cleanup remains unconfirmed');
     const key=f.saved().pending.stopRequestKey;
     assert.ok(key,'the request key is durable before delivery');
     const attempt=f.saved().pending.attempt;

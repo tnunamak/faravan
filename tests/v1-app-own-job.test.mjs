@@ -16,7 +16,7 @@ const approvalEvents = async app => (await api(app,'/api/activity?after=0')).fil
 
 test('ask mode accepts its own signed job without a pending card and records auto: own job', {timeout:60000}, async t=>{
   const f=await appFixture(t),{lender,circle}=await f.connect();
-  const sent=await api(lender.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const sent=await api(lender.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   await lend(lender.app,circle);
   await waitFor(()=>f.jobs.get(sent.jobDigest).state==='result-accepted','own signed result',30000);
   assert.deepEqual(await api(lender.app,'/api/approvals'),[]);
@@ -32,7 +32,7 @@ test('ask mode accepts its own signed job without a pending card and records aut
 
 test('ask mode still waits for another member to be approved', {timeout:60000}, async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
-  await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   await lend(lender.app,circle);
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'other member approval');
   assert.equal(card.requester,owner.app.device.keyId);
@@ -50,7 +50,7 @@ test('own job falls back to pending review when acceptance protection is not rea
     if(context?.source&&++jobChecks>=2)return {...report,sandbox_ready:false,satisfied:false};
     return report;
   };
-  await api(lender.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  await api(lender.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   await lend(lender.app,circle);
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'unsafe own job review');
   assert.equal(card.requester,lender.app.device.keyId);
@@ -72,7 +72,7 @@ test('own job cannot auto-accept after its acceptance check outlasts the deadlin
     if(context?.source&&++jobChecks===2)offset=Date.parse([...f.jobs.values()][0].job.payload.expires_at)-Date.now()+1;
     return report;
   };
-  const original=await api(lender.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const original=await api(lender.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const payload={...f.jobs.get(original.jobDigest).job.payload,expires_at:new Date(Math.floor(Date.now()/1000)*1000+60000).toISOString().replace('.000Z','Z')};
   f.jobs.delete(original.jobDigest);
   const sent=await (await lender.app.device.client(circle.id)).submitJob(payload);
@@ -95,7 +95,7 @@ test('turning lending off during the own-job acceptance check prevents acceptanc
     if(context?.source&&++jobChecks===2){checking=true;await held;finishedCheck=true;}
     return report;
   };
-  const sent=await api(lender.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const sent=await api(lender.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   await lend(lender.app,circle);
   await waitFor(()=>checking,'held own job acceptance');
   await api(lender.app,'/api/lending/off',{method:'POST',body:{}});
@@ -118,7 +118,7 @@ for(const [name,change] of [
   const decisionLog=directory=>{const log=createDecisionLog(directory);
     return {...log,async record(row){if(row.source==='own-job'&&!row.supersedes){writing=true;await held;}return log.record(row);}};};
   const f=await appFixture(t),{lender,circle}=await f.connect({decisionLog});
-  const sent=await api(lender.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const sent=await api(lender.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   await lend(lender.app,circle);
   await waitFor(()=>writing,'own job audit write held');
   await change(lender);
@@ -139,7 +139,7 @@ for(const own of [true,false])test('running sidebar binds signed identity, not i
  lender.app.device.memberNames=async(...args)=>{const result=new Map(await names(...args));
    result.set(owner.app.device.keyId,'Maya Okafor');result.set(lender.app.device.keyId,'Maya Okafor');return result;};
  const release=()=>lender.backend.release();t.after(release);
- const sent=await api(own?lender.app:owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+ const sent=await api(own?lender.app:owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
  await lend(lender.app,circle);
  if(!own) {
    const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'foreign same-name approval');

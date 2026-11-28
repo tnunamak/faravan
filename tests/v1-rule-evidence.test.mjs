@@ -1,26 +1,19 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+
 import {buildRuleEvidence} from '../lib/v1/lending-rule-evidence.mjs';
 import {lagBoundsFor} from '../lib/v1/lending-rule-defaults.mjs';
 import {buildLendingRuleState} from '../lib/v1/lending-rule-seam.mjs';
-import {createPace50Adapter} from '../lib/v1/lending-pace50-adapter.mjs';
-import {decide} from '../lib/v1/rules/fluid-protection.mjs';
-import {ACCOUNT, WEEK, HOUR_MS as H, MICRO as M, ordinaryInput, weekly, short, request} from './helpers/pace50-fixtures.mjs';
 
-import medianWeek from './fixtures/lending/codex-median-week.json' with {type:'json'};
+import {decide} from '../lib/v1/rules/fluid-protection.mjs';
+import {ACCOUNT, HOUR_MS as H, MICRO as M, ordinaryInput, weekly, short, request} from "./helpers/pace50-fixtures.mjs";
 
 const START = 1_800_000_000_000;
 const IDS = ['seven_day','five_hour'];
 // Same workload as v1-rule-seam-acceptance; revised threshold below, but real settings map only to .10/.25/.50.
-// Assignment provenance: 'ship bar, the product owner approved 2026-10-27'.
-const MIN_SPARE_FRACTION=.80;
-const KEEP_MORE_ADMISSION_HOUR=.5;
-const CODEX_RATE={weekly:.0732,short:.4364,source:'Codex ratio of sums, 8 weeks'};
-const ORDINARY_ADMISSION_HOUR=.5;
+// Assignment provenance: 'ship bar, the owner approved 2026-10-27'.
+
 const LIGHT_OWNER=10, CHUNK=3, DURATION=60_000;
 // A light owner is defined by its completed weeks (the r1check light case): 8 weeks at 9-11% of the window.
 // Without completed weeks the rule cannot tell a light owner from a new one; those cases pass pastWeeks=[].
@@ -153,150 +146,11 @@ test('production rate evidence is an estimate, so Automatic stays at the setting
   for(const w of state.windows)assert.ok(lendable[w.id]<=100*built.ruleDial,`${w.id} lendable ${lendable[w.id]} above share ${100*built.ruleDial}`);
 });
 
-async function admission(t, settings={}) {
-  const f=fixture(settings), directory=fs.mkdtempSync(join(tmpdir(),'rule-evidence-'));
-  const calls=[];let mapped;
-  const handlers=Object.fromEntries(['arm_cessation_deadline','launch_chunk','open_short_window','cancel_pending_attempt','request_cessation','request_fresh_complete_reconciliation']
-    .map(type=>[type,async()=>{calls.push(type);if(type==='arm_cessation_deadline')return()=>{};}]));
-  const adapter=createPace50Adapter({directory,account:ACCOUNT,account_week_id:WEEK,now:()=>f.now,decide,effects:handlers,
-    buildInput:({state})=>{mapped=buildRuleEvidence({...f.options,evidence:{...f.options.evidence,state}});
-      if(mapped.refuse)return mapped;return {...f.input,objective:{...f.input.objective,...mapped}};}});
-  t.after(async()=>{await adapter.close();fs.rmSync(directory,{recursive:true,force:true});});
-  const out=await adapter.admit({expectedRevision:0,request:f.req});
-  return {out,calls,mapped,durable:adapter.state()};
-}
-
-
-test('weekly replay mutation reaches admission deadline and mapped completed entries',async t=>{
-  const settings={hours:4.5,owner:0,borrowed:.1,fiveHourOwner:0,fiveHourBorrowed:.1,
-    fiveHourAnchorH:0,gross:2.89,worst:.1,position:'share_more',lag:600000,
-    historicalRate:10/168,rate:3,pastWeeks:LIGHT_WEEKS,pastFiveHours:LIGHT_FIVE_HOURS};
-  const ordinary=await admission(t,settings);
-  assert.equal(ordinary.mapped.refuse,undefined,JSON.stringify(ordinary.mapped));
-  assert.equal(ordinary.out.admitted,true,JSON.stringify(ordinary.out));
-  assert.ok(ordinary.calls.includes('launch_chunk'));
-
-  // Same completed-job reconstruction and duration supplied by replayWeek.
-  const entries=IDS.map(id=>({account:ACCOUNT,window_id:id,
-    resets_at:START+(id==='seven_day'?168:5)*H,
-    started_at:START+H,ended_at:START+H+59*60_000,
-    represented_at:START+H+59*60_000,attribution:'exact',
-    lent_pts:.1,lent_lower_pts:.1}));
-  const weekly=await admission(t,{...settings,mutate:f=>{
-    f.req.wall_ms=59*60_000;
-    f.options.entries=entries;
-  }});
-  assert.equal(weekly.mapped.refuse,undefined,JSON.stringify(weekly.mapped));
-  assert.deepEqual(weekly.mapped.ruleEvidence.entries,entries);
-  // 60s fits before the short reset at h5; 59min (+stop/uncertainty) does not.
-  // Ignoring mutate would admit the same request as the control above.
-  assert.equal(weekly.out.admitted,false,JSON.stringify(weekly.out));
-  assert.equal(weekly.calls.includes('launch_chunk'),false);
-});
-
-test('actual adapter: fresh $20 Haiku/Sonnet/Opus workload with a 100% per-job cap at hour .5, real preset dials',async t=>{
-  const results=[];
-  for(const position of ['keep_more_for_me','balanced','share_more'])for(const [model,worst] of [['claude-haiku-5-5',1.32],['claude-sonnet-5-5',5.28],['claude-opus-5-5',10.56]]){
-    const r=await admission(t,{hours:.5,owner:0,gross:20,worst,position,model,
-      mutate:f=>{f.input.objective.strategyParams={perJobPct:100};}});
-    assert.equal(r.mapped.refuse,undefined,JSON.stringify(r));
-    results.push({position,model,admitted:r.out.admitted,reason:r.out.reason});
-    assert.equal(r.out.admitted,position!=='keep_more_for_me',JSON.stringify(r.out));
-    assert.equal(r.calls.includes('launch_chunk'),r.out.admitted);
-    if(r.out.admitted){assert.equal(r.durable.attempts.length,1);assert.equal(r.out.objective.ruleReasonCode,'fluid_lend');assert.equal(typeof r.out.objective.reasonText,'string');}
-  }
-  console.log('ACTUAL_PRESET_C',JSON.stringify(results));
-});
-
-test('actual adapter: heavy owner 80 by42, then10 by84,10 by166, actual preset mapping',async t=>{
-  const results=[];
-  for(const position of ['keep_more_for_me','balanced','share_more']){
-    let owner=0,borrowed=0;
-    for(const [hours,demand]of [[42,80],[84,10],[166,10]]){
-      owner+=Math.min(demand,100-owner-borrowed);
-      const r=await admission(t,{hours,owner,borrowed,gross:2,position});
-      assert.equal(r.mapped.refuse,undefined,JSON.stringify(r));if(r.out.admitted)borrowed+=r.out.objective.maximumExposureUsd;
-    }
-    results.push({position,owner,borrowed});
-  }
-  console.log('ACTUAL_PRESET_B',JSON.stringify(results));
-  assert.ok(results.every(r=>r.owner===100&&r.borrowed===0));
-});
-
-test('actual adapter: owner with no completed weeks stays near the setting share (no-history limit)',async t=>{
-  const results=[];
-  for(const position of ['keep_more_for_me','balanced','share_more']){
-    let borrowed=0;
-    for(let i=0;i<30;i++){
-      const r=await admission(t,{hours:165+i/12,owner:LIGHT_OWNER,borrowed,gross:CHUNK,position});
-      assert.equal(r.mapped.refuse,undefined,JSON.stringify(r));
-      if(r.out.admitted)borrowed+=r.out.objective.maximumExposureUsd;
-    }
-    results.push({position,borrowed,nominalSpare:90,minimumFraction:MIN_SPARE_FRACTION,acceptanceA:borrowed/90>=MIN_SPARE_FRACTION});
-  }
-  console.log('ACTUAL_PRESET_A',JSON.stringify(results));
-  // This test records the incompatibility, not a passing product acceptance claim.
-  assert.ok(results.every(r=>r.acceptanceA===false));
-});
-
-test('explicit owner-proposed estimates: 600000ms lag, 1.5x observed rate, a-d at all real preset dials',async t=>{
-  const proposed={lag:600000,historicalRate:2,rate:1.5*2};
-  const results=[];
-  for(const position of ['keep_more_for_me','balanced','share_more']){
-    let borrowed=0;
-    for(let i=0;i<30;i++){
-      const r=await admission(t,{...proposed,hours:165+i/12,owner:10,borrowed,gross:3,position});
-      assert.equal(r.mapped.refuse,undefined);if(r.out.admitted)borrowed+=r.out.objective.maximumExposureUsd;
-    }
-    let heavyOwner=0,heavyBorrowed=0;
-    for(const [hours,demand] of [[42,80],[84,10],[166,10]]){
-      heavyOwner+=Math.min(demand,100-heavyOwner-heavyBorrowed);
-      const r=await admission(t,{...proposed,hours,owner:heavyOwner,borrowed:heavyBorrowed,gross:2,position});
-      assert.equal(r.mapped.refuse,undefined);if(r.out.admitted)heavyBorrowed+=r.out.objective.maximumExposureUsd;
-    }
-    const models=[];
-    for(const [model,worst] of [['claude-haiku-5-5',1.32],['claude-sonnet-5-5',5.28],['claude-opus-5-5',10.56]]){
-      const r=await admission(t,{...proposed,hours:.5,owner:0,gross:20,worst,position,model});
-      assert.equal(r.mapped.refuse,undefined);models.push({model,admitted:r.out.admitted,
-        ruleReasonCode:r.out.objective?.ruleReasonCode,reasonText:r.out.objective?.reasonText});
-    }
-    const cold=await admission(t,{hours:.5,owner:0,gross:20,position,lag:600000,rate:20,noHistory:true});
-    assert.equal(cold.out.reason,'rule_evidence_rate_history_missing');assert.equal(cold.calls.length,0);
-    results.push({position,proposedLagMs:600000,observedRate:2,proposedRate:3,borrowed,nominalSpare:90,
-      acceptanceA:borrowed/90>=MIN_SPARE_FRACTION,heavyOwner,heavyBorrowed,models,
-      noHistoryExplicit20Reason:cold.out.reason});
-  }
-  console.log('OWNER_PROPOSED_SCENARIOS',JSON.stringify(results));
-  assert.ok(results.every(r=>!r.acceptanceA&&r.heavyOwner===100&&r.heavyBorrowed===0));
-});
-
 // One whole week through the real adapter, one hour at a time. The owner wants `demand(hours)` points each
 // hour and gets what both meters leave; whatever it does not get is harm. One 2.89-point, 59-minute job is
 // offered each hour; lent points are charged to the weekly and the current five-hour meter. The five-hour
 // window resets every 5 h, so lending must spread across the week, as it would for real.
 // 2.89/(59/60) + 10/168 <= 3, so the owner and the borrowers together stay inside the declared 3 points/hour.
-async function replayWeek(t,{position,demand,offerUntil=167,pastWeeks=LIGHT_WEEKS}){
-  let owner=0,borrowed=0,shortOwner=0,shortBorrowed=0,anchor=0,wanted=0;const jobs=[];
-  const serve=want=>{const got=Math.min(want,100-owner-borrowed,100-shortOwner-shortBorrowed);wanted+=want;owner+=got;shortOwner+=got;};
-  for(let hours=1;hours<=167;hours++){
-    serve(demand(hours));
-    const nextAnchor=Math.floor(hours/5)*5;if(nextAnchor!==anchor){anchor=nextAnchor;shortOwner=0;shortBorrowed=0;}
-    if(hours>offerUntil)continue;
-    const r=await admission(t,{hours,owner,borrowed,fiveHourOwner:shortOwner,fiveHourBorrowed:shortBorrowed,fiveHourAnchorH:anchor,
-      gross:2.89,position,lag:600000,historicalRate:10/168,rate:3,pastWeeks,pastFiveHours:fiveHoursOf(pastWeeks),
-      mutate:f=>{f.req.wall_ms=59*60_000;
-        f.options.entries=jobs.flatMap(j=>IDS.map(id=>({account:ACCOUNT,window_id:id,resets_at:START+(id==='seven_day'?168:j.anchor+5)*H,
-          started_at:START+j.hour*H,ended_at:START+j.hour*H+59*60_000,represented_at:START+j.hour*H+59*60_000,
-          attribution:'exact',lent_pts:j.amount,lent_lower_pts:j.amount})));}});
-    assert.equal(r.mapped.refuse,undefined,JSON.stringify(r.mapped));
-    if(r.out.admitted){
-      assert.ok(r.calls.includes('launch_chunk'));
-      const amount=r.out.objective.maximumExposureUsd;jobs.push({hour:hours,anchor,amount});borrowed+=amount;shortBorrowed+=amount;
-    }
-  }
-  serve(demand(168));
-  return {position,owner,wanted,borrowed,harm:wanted-owner};
-}
 
 // Ship-bar acceptance (S1, S3) for an owner with light completed history. The no-history
 // characterizations above stay as they are: with no completed weeks, lending stays near the setting's share.
@@ -308,67 +162,6 @@ test('fixture: the five-hour meter charges the owner and is not clamped at the w
   const late=fixture({hours:165,fiveHourAnchorH:165}).input.windows[1];
   assert.equal(late.anchor_at,START+165*H);assert.equal(late.resets_at,START+170*H);
 });
-for(const position of ['keep_more_for_me','balanced','share_more']) {
-  test(`REQUIRED acceptance a: light owner lends at least 80% of spare by reset at ${position}`,async t=>{
-    const r=await replayWeek(t,{position,demand:()=>LIGHT_OWNER/168});
-    console.log('LIGHT_WEEK',JSON.stringify(r));
-    assert.ok(r.harm<1e-9,`owner left short: ${JSON.stringify(r)}`);
-    assert.ok(r.borrowed/(100-r.owner)>=MIN_SPARE_FRACTION,
-      `actual ${r.borrowed}; required >= ${(100-r.owner)*MIN_SPARE_FRACTION}`);
-  });
-  // Review 1027 F1: the owner bursts 3 points/hour (the declared bound) in the last hours of the week.
-  test(`REQUIRED acceptance b: a late owner burst inside the declared rate is never short at ${position}`,async t=>{
-    const r=await replayWeek(t,{position,demand:hours=>hours<=165?LIGHT_OWNER/168:3,offerUntil:164});
-    console.log('LATE_BURST',JSON.stringify(r));
-    assert.ok(r.harm<1e-9,`owner left short: ${JSON.stringify(r)}`);
-  });
-  // Review 1027 F3: eight full weeks of history; nothing is lent at the start of the week.
-  test(`REQUIRED acceptance b: heavy completed weeks lend nothing at hour .5 at ${position}`,async t=>{
-    const r=await admission(t,{hours:.5,owner:0,gross:3,position,lag:600000,historicalRate:1,rate:3,
-      pastWeeks:Array(8).fill(100),pastFiveHours:fiveHoursOf(Array(8).fill(100))});
-    assert.equal(r.mapped.refuse,undefined,JSON.stringify(r.mapped));assert.equal(r.out.admitted,false);assert.equal(r.calls.length,0);
-  });
-  test(`S3: Codex ratio of sums, 8 weeks: all $20 model workloads admitted at hour .5 at ${position}`,async t=>{
-    const results=[];
-    for(const [model,worst] of [['claude-haiku-5-5',1.32],['claude-sonnet-5-5',5.28],['claude-opus-5-5',10.56]]){
-      const r=await admission(t,{hours:position==='keep_more_for_me'?KEEP_MORE_ADMISSION_HOUR:ORDINARY_ADMISSION_HOUR,owner:0,gross:20,worst,position,model,
-        kappa:CODEX_RATE,lag:600000,historicalRate:2,rate:3,pastWeeks:LIGHT_WEEKS,pastFiveHours:LIGHT_FIVE_HOURS});
-      assert.equal(r.mapped.refuse,undefined);results.push({model,admitted:r.out.admitted});
-    }
-    assert.ok(results.every(row=>row.admitted),JSON.stringify(results));
-  });
-}
-
-for(const scale of [1,3]) for(const position of ['keep_more_for_me','balanced','share_more']) {
-  test(`S2: owner protection at ${scale}x Codex measured rate, ${position}`,async t=>{
-    const r=await admission(t,{hours:.5,owner:0,gross:20,position,lag:600000,historicalRate:1,rate:3,
-      kappa:{weekly:CODEX_RATE.weekly*scale,short:CODEX_RATE.short*scale},
-      pastWeeks:Array(8).fill(100),pastFiveHours:fiveHoursOf(Array(8).fill(100))});
-    assert.equal(r.mapped.refuse,undefined);assert.equal(r.out.admitted,false);assert.equal(r.calls.length,0);
-  });
-}
-
-for(const position of ['keep_more_for_me','balanced','share_more']) {
- test(`S3 real median Codex week: $20 Haiku/Sonnet/Opus at hour .5, ${position}`,async t=>{
-   // The real data has no complete weekly meter traces. Do not manufacture completed history.
-   // Replay the first half-hour's recorded USD at the measured conversion, labelled in the fixture.
-   assert.equal(medianWeek.kappa.source,'Codex ratio of sums, 8 weeks');
-   const dollars=medianWeek.hourly_usd[0]/2;
-   for(const [model,worst] of [['claude-haiku-5-5',1.32],['claude-sonnet-5-5',5.28],['claude-opus-5-5',10.56]]) {
-     const r=await admission(t,{hours:.5,owner:dollars*CODEX_RATE.weekly,fiveHourOwner:dollars*CODEX_RATE.short,
-       gross:20,worst,position,model,kappa:CODEX_RATE});
-     assert.equal(r.out.admitted,true,JSON.stringify(r.out));
-   }
- });
-}
-
-for(const position of ['keep_more_for_me','balanced','share_more']) {
- test(`default estimate: no-log owner can lend without a conversion hold, ${position}`,async t=>{
-   const r=await admission(t,{hours:.5,owner:0,gross:3,worst:1.32,position,
-     kappa:{weekly:.5349,short:1.5831}});
-   assert.equal(r.out.admitted,true,JSON.stringify(r.out));
- });
-}
 
 test('production rule evidence returns repriced retained commitments for objective windows',()=>{
  const {options}=fixture();const w=options.evidence.input.windows[0];

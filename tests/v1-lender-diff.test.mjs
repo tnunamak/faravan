@@ -13,7 +13,7 @@ import { makeRepo, git } from './helpers/git-guest.mjs';
 
 function launch(f) {
   const controller = new AbortController();
-  const lender = createLender({ client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
+  const lender = createLender({...f.runOptions, client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
     approve: async () => true, onEvent: event => f.events.push(event) });
   let failure; const settled = Promise.resolve(lender.start(controller.signal)).catch(error => { failure = error; });
   f.stop = async () => { controller.abort(); await settled; if (failure && failure.name !== 'AbortError' && failure.code !== 'aborted') throw failure; };

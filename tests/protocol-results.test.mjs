@@ -20,7 +20,7 @@ const verifyResult = payload => p.verifyEnvelope('result',rawSign('result',paylo
 function messageJob(change={}) {
   const job=clone(obj.job.payload);
   job.source={kind:'none'};job.result={kind:'message'};
-  job.requirements.capabilities=['results_v1'];
+  job.requirements.capabilities=['results_v1','run_request_v1'];
   return {...job,...change};
 }
 function messageResult({output={kind:'message'},receipt={}}={}) {
@@ -64,10 +64,10 @@ test('a validator without results_v1 refuses these jobs as unsupported_version',
   // Old validators check the capability vocabulary before the schema (see requirements()).
   const old=p.validateRequirements(messageJob().requirements,{recognizedCapabilities:['patch-output','verify_v1']});
   assert.deepEqual(old,{ok:false,code:'unsupported_version'});
-  const lender={harnesses:['codex'],models:['example-model'],capabilities:['verify_v1'],egress:['provider-only'],
+  const lender={harnesses:['codex'],models:['example-model'],capabilities:['verify_v1','run_request_v1'],egress:['provider-only'],
     enforced_limits:Object.keys(obj.job.payload.requirements.limits),max_limits:{...obj.job.payload.requirements.limits}};
   assert.deepEqual(p.canSatisfy(messageJob().requirements,lender).unmet,['capability:results_v1']);
-  assert.equal(p.canSatisfy(messageJob().requirements,{...lender,capabilities:['verify_v1','results_v1']}).ok,true);
+  assert.equal(p.canSatisfy(messageJob().requirements,{...lender,capabilities:['verify_v1','results_v1','run_request_v1']}).ok,true);
 });
 
 test('result output names the primary output and binds a tree candidate',()=>{

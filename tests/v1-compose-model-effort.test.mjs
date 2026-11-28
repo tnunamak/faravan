@@ -2,7 +2,7 @@ import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {appFixture, api} from './helpers/v1-app-fixture.mjs';
+import {appFixture, api, browserApi} from './helpers/v1-app-fixture.mjs';
 import {json} from './helpers/v1-journey.mjs';
 import {realLenderFixture} from './helpers/v1-real-lender-fixture.mjs';
 import * as appModule from '../lib/v1/app.mjs';
@@ -88,8 +88,9 @@ test('offers read from the real store: fresh hand-built heartbeats offer their p
 test('a job sent with a chosen pair is admitted only to a hand-built advertisement that carries that pair', testOptions, async t => {
   // The composer's body goes through the app's submit path; the requirements it signs are what the store gates on.
   const app = await appFixture(t), {owner, circle} = await app.connect();
+  const ui=await browserApi(owner.app);
   const body = draftBody({id: 'draft-pair-0001', prompt: 'Synthetic pair check', sourceKind: 'none', agent: 'codex', model: 'example-model', effort: 'low'}, circle.id);
-  const sent = await api(owner.app, '/api/jobs', {method: 'POST', body});
+  const sent = await ui('/api/jobs', {method: 'POST', body});
   const signed = app.jobs.get(sent.jobDigest).job.payload;
   assert.deepEqual(signed.requirements.harness, ['codex']);
   assert.deepEqual(signed.requirements.model, {any_of: ['example-model']});

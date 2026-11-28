@@ -53,9 +53,10 @@ test('Docker signed out: one code on status, agents, agent checks, agent sign-in
   await api(app, '/api/agents/codex', { method: 'POST', body: { useForLending: true } });
   const on = await api(app, '/api/lending/on', { method: 'POST', body: { circle: circle.id } });
   assert.equal(on.enabled, true);
-  const status = await api(app, '/api/status');
-  assert.equal(status.state, 'blocked'); assert.equal(status.reason, 'docker_signed_out');
-  assert.equal(status.intent.reason, 'docker_signed_out'); assert.equal(status.intent.on, true);
+  // The lender re-proves its account after lending is turned on; until then the intent reads 'sandbox_check_pending' (app.mjs admissionChanged).
+  const status = await waitFor(async () => { const s = await api(app, '/api/status'); return s.intent.reason === 'sandbox_cannot_start' && s; }, 'the lender proves the sandbox cannot start');
+  assert.equal(status.state, 'blocked'); assert.equal(status.reason, 'sandbox_cannot_start');
+  assert.equal(status.intent.reason, 'sandbox_cannot_start'); assert.equal(status.intent.on, true);
   assert.equal(JSON.parse(await readFile(join(lender.home, 'v1', 'app-settings.json'), 'utf8')).intent, 'on');
   // The readiness report carries it too.
   assert.equal((await api(app, '/api/readiness')).code, 'docker_signed_out');

@@ -128,7 +128,8 @@ function recoveryGate(journal,home='/fake-home') {
   const source=fs.readFileSync(new URL('../lib/docker-backend.mjs',import.meta.url),'utf8');
   const start=source.indexOf('  deadlineRecoveryHold() {'),end=source.indexOf('  async inspectCleanupRemediation',start);
   assert.ok(start>0&&end>start);
-  const admitStart=source.indexOf('  async admitJob(job,{version}={}) {'),admitEnd=source.indexOf('  async prepareSignIn(',admitStart);
+  const admitStart=source.indexOf('  async admitJob(job,{version,accountBroker=false}={}) {'),admitEnd=source.indexOf('  async prepareSignIn(',admitStart);
+  assert.ok(admitStart>0&&admitEnd>admitStart,'the production admitJob method is found');
   const statusStart=source.indexOf('  cleanupStatus(options)'),statusEnd=source.indexOf('  _invalidateOwnedStartupRecovery()',statusStart);
   const methods=Function('sbxHome','daemonJobContext','deadlineRecoveryContext','recoveryHoldFor','deadlineRecoveryError','policyError','borrowedCredentialMechanismAllowed','admitDockerJob','sandboxDeadlineRemaining',
     'return new class {'+source.slice(start,end)+source.slice(admitStart,admitEnd)+source.slice(statusStart,statusEnd)+'}')(

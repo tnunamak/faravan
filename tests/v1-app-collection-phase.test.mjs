@@ -8,11 +8,11 @@ test('result collection does not reacquire agent launch authority', {timeout:600
   const start=lender.backend.start.bind(lender.backend),collection=[];
   let agentSignal;
   lender.backend.start=async (handle,options={})=>{
-    if(options.lendingBudget)agentSignal=options.signal;
+    if(options.onExecutionStarted)agentSignal=options.signal;
     if(handle._entrypoint.startsWith('mkdir -p .wf-result'))collection.push({handle,options,bookkeeping:handle._bookkeeping});
     return start(handle,options);
   };
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,
     git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Collect one result',harness:'codex'}});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});

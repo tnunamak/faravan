@@ -12,11 +12,11 @@ const claudeAgents={adapters:adapters().map(a=>({...a,spec:legacyProxyHarness('c
 const instant=()=>new Date(Math.floor(Date.now()/1000)*1000).toISOString().replace('.000Z','Z');
 
 test('O1: Run it after the sender’s own computer took the job answers job_taken with the taker, not a retryable error',{timeout:60000},async t=>{
-  const f=await appFixture(t),{owner,lender,circle}=await f.connect(claudeAgents);
+  const f=await appFixture(t),{owner,lender,circle}=await f.connect({...claudeAgents,syntheticAccounts:'claude'});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/claude-code-subscription',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Claim race',harness:'claude-code-subscription'}});
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Claim race',harness:'claude-code-subscription'}});
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'the job is offered for review',15000);
   // The sender's own computer wins the claim first.
   const view=f.jobs.get(sent.jobDigest);
@@ -33,11 +33,11 @@ test('O1: Run it after the sender’s own computer took the job answers job_take
 // Dot review P1: a job that is queued again still names its last, expired attempt's holder. A claim that fails then
 // was not lost to that computer, so the answer keeps its own reason instead of "taken".
 test('O1: a failed claim on a queued job with an old attempt is not reported as taken',{timeout:60000},async t=>{
-  const f=await appFixture(t),{owner,lender,circle}=await f.connect(claudeAgents);
+  const f=await appFixture(t),{owner,lender,circle}=await f.connect({...claudeAgents,syntheticAccounts:'claude'});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/claude-code-subscription',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Retry race',harness:'claude-code-subscription'}});
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Retry race',harness:'claude-code-subscription'}});
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'the job is offered for review',15000);
   const view=f.jobs.get(sent.jobDigest);
   // Queued again after the owner's computer let its attempt expire; the old attempt still names it. The host then

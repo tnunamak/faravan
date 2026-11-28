@@ -5,7 +5,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
-import { appFixture, api } from './helpers/v1-app-fixture.mjs';
+import { appFixture, api, browserApi } from './helpers/v1-app-fixture.mjs';
 import { createJobOperations } from '../lib/v1/cli.mjs';
 import * as p from '../lib/protocol/index.mjs';
 import { createTar } from '../lib/tar-writer.mjs';
@@ -39,7 +39,11 @@ test('received source artifacts protect every local submission path', {timeout:1
     assert.ok(bytes.includes(Buffer.from('replace-me')), label + ' retains example');
     assert.ok(result.warnings.some(line => /5 files.*not sent.*credentials/i.test(line)), label + ' disclosure');
   };
-  const send = (body, route='/api/jobs') => api(owner.app, route, {method:'POST', body:{circle:circle.id,prompt:'Check fixture',...body}, headers:{'faravan-confirm':'yes'}});
+  // The UI sends as the local browser owner; the ops route is an agent's, so it carries the confirm header.
+  const ui = await browserApi(owner.app);
+  const send = (body, route='/api/jobs') => route === '/api/jobs'
+    ? ui(route, {method:'POST', body:{circle:circle.id,prompt:'Check fixture',...body}})
+    : api(owner.app, route, {method:'POST', body:{circle:circle.id,prompt:'Check fixture',...body}, headers:{'faravan-confirm':'yes'}});
   inspect('UI repo HEAD', await send({repo:{path:repo}}));
   inspect('ops jobs.submit repo', await send({repo:{path:repo}}, '/api/ops/jobs.submit'));
   inspect('CLI --source', await ops.submit({source:repo,prompt:'CLI fixture',circle:circle.id}));

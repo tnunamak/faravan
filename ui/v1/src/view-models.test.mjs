@@ -1749,6 +1749,7 @@ test('stopping supersedes a start-failure reason and offers no resume action', (
   assert.ok(!vm.blockers.needsYou.some(item=>item.action==='Resume now'));
   assert.doesNotMatch(JSON.stringify(vm.blockers),/Lending couldn’t start/);
   const failed=page({state:'blocked',reason:'lending_not_started',lendingStartFailed:{circleName:'Weekend'}});
+  assert.equal(failed.lendingProjection.admissionReason,'conditions_unavailable');
   assert.match(failed.reason,/Lending couldn’t start/,'a real failed start keeps its explanation');
 });
 
@@ -1990,20 +1991,10 @@ test('apply preview names the submitted branch without showing commit hashes',()
 
 test('machine chip distinguishes blocked lending from a job decision that needs you', () => {
   const blocked = withLendingProjection({...status, attention:[{}]},
-    {intent:'on',intentState:'blocked',admission:'blocked',admissionReason:'sandbox_not_ready'});
+    {intent:'on',intentState:'blocked',admission:'blocked',admissionReason:'sandbox_cannot_start'});
   const context = {readiness:{ready:true,checks:[]},agents:[{id:'codex',useForLending:true,installed:true,signedIn:true}], now};
   const waiting = machineVM(blocked, {}, context);
   assert.deepEqual([waiting.line, waiting.kind, waiting.word], ['Lending is blocked', 'wait', 'Waiting']);
   const action = machineVM(blocked, {}, {...context, approvals:[card]});
   assert.deepEqual([action.line, action.kind, action.word], ['Needs you', 'need', 'Needs you']);
-});
-
-test('a proven owner per-job limit remains actionable on the machine chip', () => {
-  const blocked = withLendingProjection({...status, lendingPolicy:{accounts:[{
-    provider:'codex',decision:{availability:{admitted:false,reason:'owner_limit_too_low'}}}]}},
-    {intent:'on',intentState:'blocked',admission:'blocked',admissionReason:'owner_limit_too_low'});
-  const chip = machineVM(blocked, {}, {readiness:{ready:true,checks:[]},
-    agents:[{id:'codex',useForLending:true,installed:true,signedIn:true}],now});
-  assert.equal(chip.href, '#/lend/limits/owner-limit');
-  assert.deepEqual([chip.line, chip.kind, chip.word], ['Per-job limit too low', 'need', 'Needs you']);
 });

@@ -1,4 +1,5 @@
 import './helpers/no-browser.mjs';
+import {currentAdvertisement,accountHeartbeat,selectionForJob,currentReceipt} from './helpers/current-job-advertisement.mjs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -36,6 +37,7 @@ const ref = (bytes, media_type) => ({ digest: digestBytes(bytes), bytes: bytes.l
 const clone = value => structuredClone(value);
 const payload = () => ({
   ...clone(vectors.objects.result.envelope.payload),
+  receipt:currentReceipt(vectors.objects.result.envelope.payload.receipt,selectionForJob(job.payload,advertisement)),
   candidate: ref(candidate, 'text/x-diff'),
   transcript: ref(transcript, 'application/x-ndjson')
 });
@@ -44,17 +46,18 @@ const attempt = (overrides = {}) => ({
   job_digest: jobDigest, generation: 1, holder: ids[1], state: 'completed',
   claimed_at: '2026-10-09T12:00:10Z', lease_expires_at: '2026-10-09T12:02:10Z',
   execution_started_at: '2026-10-09T12:00:10Z',
+  selection:selectionForJob(job.payload,advertisement),
   reason: null, compute_stopped: true, stopped_at: '2026-10-09T12:01:00Z', ...overrides
 });
 const view = (overrides = {}) => ({
   job_digest: jobDigest, job, state: 'queued', attempts_started: 0,
   current_attempt: null, result_digest: null, ...overrides
 });
-const advertisement = {
+const advertisement = currentAdvertisement({
   harnesses: ['codex'], models: ['example-model'], capabilities: ['patch-output'],
   egress: ['provider-only'], enforced_limits: Object.keys(job.payload.requirements.limits),
   max_limits: job.payload.requirements.limits
-};
+});
 function json(res, value, status = 200, headers = {}) {
   const bytes = Buffer.from(canonicalize(value));
   res.writeHead(status, { 'content-type': 'application/json', 'content-length': bytes.length, ...headers });
@@ -104,7 +107,8 @@ async function fixture(t, handler, options = {}) {
       }
       const record = { req, res, body, proof, url: new URL(origin + req.url) };
       requests.push(record);
-      await handler(record, requests);
+      if(req.url===base+'/capabilities'&&options.hostCapabilities)json(res,{capabilities:options.hostCapabilities});
+      else await handler(record, requests);
     } catch (error) {
       serverErrors.push(error);
       if (!res.headersSent) problem(res, 400, 'invalid_request');
@@ -134,8 +138,13 @@ async function fixture(t, handler, options = {}) {
   return { client, requests, sleeps, saved, origin, snapshot: () => snapshot };
 }
 
+async function currentHostFixture(t,handler,options={}) {
+  const f=await fixture(t,handler,{...options,hostCapabilities:['run_request_v1']});
+  await f.client.capabilities();f.requests.length=0;f.sleeps.length=0;return f;
+}
+
 test('v1 client signs every request and submit returns at publish ACK without polling', async t => {
-  const f = await fixture(t, ({ req, res, body }) => {
+  const f = await currentHostFixture(t, ({ req, res, body }) => {
     assert.equal(req.method, 'POST'); assert.equal(req.url, base + '/jobs');
     assert.equal(req.headers['idempotency-key'], 'publish-once');
     const signed = JSON.parse(body);
@@ -158,7 +167,7 @@ test('v1 client keeps stop-request reads optional when an older host lacks the c
 });
 
 test('v1 client dropped connection retry preserves body/key and changes proof nonce', async t => {
-  const f = await fixture(t, ({ req, res }, requests) => {
+  const f = await currentHostFixture(t, ({ req, res }, requests) => {
     if (requests.length === 1) return req.socket.destroy();
     json(res, view(), 201);
   });
@@ -171,7 +180,7 @@ test('v1 client dropped connection retry preserves body/key and changes proof no
 });
 
 test('v1 client never retries 409 even when the server claims retryable', async t => {
-  const f = await fixture(t, ({ res }) => problem(res, 409, 'idempotency_conflict', {}, true));
+  const f = await currentHostFixture(t, ({ res }) => problem(res, 409, 'idempotency_conflict', {}, true));
   await assert.rejects(f.client.submitJob(clone(job.payload), { idempotencyKey: 'conflict' }), error => {
     assert.ok(error instanceof ClientError);
     assert.equal(error.status, 409); assert.equal(error.code, 'idempotency_conflict');
@@ -271,7 +280,7 @@ test('v1 client keeps normal attempts for a background write refused by a busy h
   assert.equal(f.requests.filter(r => r.req.method === 'POST').length, 2, 'a heartbeat waits for its own next beat');
 });
 test('v1 client caps retry count and preserves unknown network outcome', async t => {
-  const f = await fixture(t, ({ req }) => req.socket.destroy(), {
+  const f = await currentHostFixture(t, ({ req }) => req.socket.destroy(), {
     client: { retry: { maxAttempts: 3, baseMs: 10, capMs: 15 } }
   });
   await assert.rejects(f.client.submitJob(clone(job.payload), { idempotencyKey: 'unknown' }), error => {
@@ -286,7 +295,7 @@ test('v1 client caps retry count and preserves unknown network outcome', async t
 test('v1 client marks an unreadable successful submit acknowledgement unknown with its key', async t => {
   let accepted=false;
   const rawFetch=globalThis.fetch,key='malformed-ack-1023';
-  const f=await fixture(t,({req,res})=>{
+  const f=await currentHostFixture(t,({req,res})=>{
     assert.equal(req.method,'POST');assert.equal(req.url,base+'/jobs');
     accepted=true;json(res,view(),201);
   },{client:{retry:{maxAttempts:1},fetch:async(input,init)=>{
@@ -900,6 +909,7 @@ async function realClientFixture(t) {
         clock: () => time, retry: { maxAttempts: 1 } });
     },
     async publish(client) {
+      await f.client(1).heartbeat(accountHeartbeat(advertisement));
       const source = { kind: 'archive', artifact: await client.uploadArtifact(Buffer.from('test source'), 'application/gzip') };
       const prompt = await client.uploadArtifact(Buffer.from('test prompt'), 'text/plain');
       const payload = { ...clone(job.payload), source, prompt, roster_epoch: f.epoch, intent_id: randomUUID(),
@@ -955,6 +965,7 @@ test('v1 real HTTP client exposes expired committed claim and a fresh key reache
     assert.equal(error.committedAttempt.attempt_id, claim.attempt.attempt_id);
     assert.equal(error.committedAttempt.state, 'expired'); return true;
   });
+  await lender.heartbeat(accountHeartbeat(advertisement));
   const next = await lender.claimNext(advertisement, { idempotencyKey: 'fresh-claim', waitSeconds: 0, exclude: [first.jobDigest] });
   assert.equal(next.job_digest, second.jobDigest);
 });
@@ -1201,13 +1212,13 @@ test('a result without a check carries no check provenance notice',async t=>{
 // Typed results (results_v1): the signed output kind is bound to the signed job's requested result.
 function typedJob(change={}) {
   const payload=clone(job.payload);
-  payload.source={kind:'none'};payload.result={kind:'message'};payload.requirements.capabilities=['results_v1'];
+  payload.source={kind:'none'};payload.result={kind:'message'};payload.requirements.capabilities=['results_v1','run_request_v1'];
   Object.assign(payload,change);
   return signEnvelope('job',payload,keys[0]);
 }
 const typedResult=(output={kind:'message'})=>result=>{
   result.candidate=ref(candidate,'application/gzip');
-  result.receipt={...result.receipt,source:{kind:'none'},capabilities_applied:['results_v1'],candidate_format:'tree'};
+  result.receipt={...result.receipt,source:{kind:'none'},capabilities_applied:['results_v1','run_request_v1'],candidate_format:'tree'};
   if(output!==null)result.output=output;
 };
 test('fetchReceipt and fetchResult expose the signed output kind of a typed result',async t=>{
@@ -1235,7 +1246,7 @@ test('result kind binding refuses '+label+' via '+method,async t=>{
   assert.ok(f.requests.every(r=>!r.req.url.includes('/artifacts/')),'reject before downloading returned files');
 });
 test('submitJob sends a typed-result job only to a host that says results_v1',async t=>{
-  for(const [capabilities,code] of [[[],'host_too_old'],[['results_v1'],null]]) {
+  for(const [capabilities,code] of [[[],'host_too_old'],[['results_v1','run_request_v1'],null]]) {
     const typed=typedJob().payload;typed.roster_epoch=7;
     const f=await fixture(t,({req,res,body})=>{
       if(req.url===base+'/capabilities')return json(res,{artifact_head:false,faravan:null,min_member:null,capabilities});
@@ -1250,7 +1261,7 @@ test('submitJob sends a typed-result job only to a host that says results_v1',as
 test('v1 client reports an explicit or unknown version on reads, mutations, and retries', async t => {
   for (const clientVersion of [undefined, null, '0.12.1']) {
     const expected = clientVersion ?? 'unknown';
-    const f = await fixture(t, ({ req, res }, requests) => {
+    const f = await currentHostFixture(t, ({ req, res }, requests) => {
       assert.equal(req.headers['faravan-version'], expected);
       if (requests.length === 1) return req.socket.destroy();
       json(res, view(), req.method === 'POST' ? 201 : 200);
@@ -1292,21 +1303,6 @@ test('parent-linked jobs refuse a host without parent_link_v1 before a signed jo
  const payload=clone(job.payload);payload.parent={job_digest:'sha256:'+'a'.repeat(64),result_digest:'sha256:'+'b'.repeat(64)};payload.requirements.capabilities.push('parent_link_v1');
  await assert.rejects(f.client.submitJob(payload,{idempotencyKey:'parent-once'}),e=>e.code==='host_too_old');
  assert.equal(f.requests.length,1);assert.equal(f.requests[0].req.method,'GET');
-});
-
-test('a host that predates the automatic choice is not sent which choices a lender can make',async t=>{
- let support=false;const beats=[];
- const f=await fixture(t,({req,res,body})=>{
-   if(req.url===base+'/capabilities')return json(res,{capabilities:support?['budget_v1','model_effort_pairs_v1','auto_run_v1']:['budget_v1','model_effort_pairs_v1']});
-   if(req.url===base+'/heartbeat'){beats.push(JSON.parse(body));return json(res,{received_at:'2026-10-09T12:02:00Z',online_seconds:90});}
-   assert.fail('unexpected request '+req.url);
- });
- const body={agents:[{adapter:'codex',model_efforts:[{model:'example-model',effort:'low'}],auto_run_intents:['cheapest']}],capabilities:['model_effort_pairs_v1','auto_run_v1']};
- await f.client.heartbeat(body);
- assert.equal(Object.hasOwn(beats[0].agents[0],'auto_run_intents'),false);assert.deepEqual(beats[0].capabilities,['model_effort_pairs_v1']);
- assert.equal(beats[0].agents[0].model_efforts.length,1,'the pairs themselves still go to a host that knows them');
- support=true;await f.client.capabilities({refresh:true});await f.client.heartbeat(body);
- assert.deepEqual(beats[1],body);
 });
 
 test('skipped check context never claims the command ran',async t=>{

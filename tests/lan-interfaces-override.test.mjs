@@ -11,6 +11,18 @@ const resolve = (env, args = []) => spawnSync(process.execPath, [...args, '--inp
   `import(${JSON.stringify(host)}).then(m => console.log(m.resolveLanUrl({port: 8787})))`],
   { env: { ...process.env, FARAVAN_TEST_LAN_ADDRESS: undefined, ...env }, encoding: 'utf8' });
 
+test('the preload presents only the fixture interface through both node:os imports', () => {
+  const script = 'import os, { networkInterfaces } from "node:os"; console.log(JSON.stringify([os.networkInterfaces(),networkInterfaces()]));';
+  const run = spawnSync(process.execPath, ['--import=' + preload, '--input-type=module', '-e', script], {
+    env: {...process.env, FARAVAN_TEST_LAN_ADDRESS: '127.0.0.1'}, encoding: 'utf8'
+  });
+  assert.equal(run.status, 0, run.stderr);
+  const [fromDefault, fromNamed] = JSON.parse(run.stdout);
+  assert.deepEqual(Object.keys(fromDefault), ['test-harness-lan']);
+  assert.deepEqual(fromNamed, fromDefault);
+  assert.equal(fromDefault['test-harness-lan'][0].address, '127.0.0.1');
+});
+
 test('the harness address is the LAN URL when the preload is loaded', () => {
   const run = resolve({ FARAVAN_TEST_LAN_ADDRESS: '127.0.0.1' }, ['--import=' + preload]);
   assert.equal(run.status, 0, run.stderr);

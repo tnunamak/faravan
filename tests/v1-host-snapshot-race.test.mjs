@@ -35,7 +35,7 @@ function fixture({home=false,initial=true,refresh=false,resumeFailure=false}={})
     lender:{cessation:()=>({proven:true})},lenderAdmission:()=>hostProfiles.get('circle').reachable===false?'circle_unreachable':null,
     admissionIntent:reason=>({state:'blocked',reason,until:null}),deadlineRecovery:null,
     cleanupDisplaySummary:()=>({items:[]}),backend:{},
-    lastHomeObservation:0,agentViews:async()=>[],circleFacts:{},readQuota:async()=>{},machineHold:()=>null,
+    lastHomeObservation:0,agentViews:async()=>[],circleFacts:{},readQuota:async()=>{},machineSetupReason:()=>null,admissionChanged:noop,
     recheckBlockers:noop,dockerCheckedAt:1000,autostart:{status:async()=>({supported:false})},setupProgress:{view:async()=>({})},
     lendingPolicySnapshot:async()=>({}),lendingView:()=>state,lenderObservationGeneration:0,
     lendingSnapshotSignature:()=>'',readinessStamp:()=>JSON.stringify([revision,hostProfiles.get('circle').reachable]),

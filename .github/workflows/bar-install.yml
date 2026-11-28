@@ -1,0 +1,39 @@
+name: Candidate install
+on:
+  workflow_dispatch:
+  push:
+    branches: [ff/t1-integ-1127, 'bar-hosted-*']
+  workflow_call:
+    inputs:
+      join-borrow:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  install:
+    name: ${{ matrix.platform }} candidate install
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux
+            runner: ubuntu-latest
+          - platform: macOS
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Checkout supplies verification code, never the running app. No build is done here.
+      - run: npm ci --ignore-scripts
+      - name: Verify candidate, install package, read Home
+        env:
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: node scripts/bar-hosted-install.mjs "$RUNNER_TEMP/faravan-bar" "$CANDIDATE_SHA"
+      - name: Join and borrow with the installed app
+        if: ${{ inputs.join-borrow == true }}
+        run: node scripts/bar-hosted-borrow.mjs "$FARAVAN_BAR_INSTALL_ROOT" "$RUNNER_TEMP/faravan-bar/borrow"

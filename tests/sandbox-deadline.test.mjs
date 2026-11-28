@@ -5,7 +5,7 @@ import {EventEmitter} from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {once} from 'node:events';
 import {createSandboxDeadlineManager,deadlineProcessStart,sandboxDeadlineUnit,deadlineSupervisorPayload,deadlineBinding,SANDBOX_GUARD_BUILD_ID} from '../lib/sandbox-deadline.mjs';
 
@@ -76,6 +76,14 @@ test('invalid names, homes and deadlines never dispatch a process',async()=>{
 for(const removalMode of ['normal','first-fails','first-hangs','false-success'])test('detached guard stops a detached writer after its registering app is SIGKILLed: '+removalMode,async t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'deadline-crash-'));
   const marker=path.join(root,'removed.json'),binary=path.join(root,'fake-sbx'),inventory=path.join(root,'inventory.json'),beats=path.join(root,'beats');
+  // Observe only what the CLI fixture supplies to a child with exactly HOME, not ambient worker environment.
+  const guardNames=['PATH','NODE_OPTIONS','TEST_CLI_FAKE_DIR','TEST_CLI_GUARD_DENY_DIR'];
+  const probe=spawnSync(process.execPath,['-e',
+    'process.stdout.write(JSON.stringify(Object.fromEntries(JSON.parse(process.argv[1]).map(key=>[key,process.env[key]]))))',
+    JSON.stringify(guardNames)],{env:{HOME:root},encoding:'utf8'});
+  assert.ifError(probe.error);
+  assert.equal(probe.status,0,probe.stderr);
+  const guardEnv=JSON.parse(probe.stdout);
   const script=path.join(root,'parent.mjs'),module=process.env.DEADLINE_BASELINE_MODULE_URL??new URL('../lib/sandbox-deadline.mjs',import.meta.url).href;
   fs.writeFileSync(binary,`#!${process.execPath}
     import fs from 'node:fs';import {deadlineProcessStart} from ${JSON.stringify(module)};
@@ -91,7 +99,9 @@ for(const removalMode of ['normal','first-fails','first-hangs','false-success'])
     const until=Date.now()+2000;while(await deadlineProcessStart(record.writer.pid)&&Date.now()<until)await new Promise(r=>setTimeout(r,10));
     if(await deadlineProcessStart(record.writer.pid))throw Error('writer still exists');
     fs.writeFileSync(file,'[]');
-    fs.writeFileSync(${JSON.stringify(marker)},JSON.stringify({at:Date.now(),args:process.argv.slice(2),home:process.env.HOME,keys:Object.keys(process.env)}));
+    const guardEnv=${JSON.stringify(guardEnv)};
+    const keys=Object.keys(process.env).filter(key=>!Object.hasOwn(guardEnv,key)||process.env[key]!==guardEnv[key]);
+    fs.writeFileSync(${JSON.stringify(marker)},JSON.stringify({at:Date.now(),args:process.argv.slice(2),home:process.env.HOME,keys}));
     `,{mode:0o755});
   const payload=path.join(root,'writer.mjs'),launcher=path.join(root,'launcher.mjs');
   fs.writeFileSync(payload,`import fs from 'node:fs';const beat=()=>fs.appendFileSync(${JSON.stringify(beats)},'beat\\n');beat();setInterval(beat,25);`);
@@ -142,7 +152,7 @@ for(const removalMode of ['normal','first-fails','first-hangs','false-success'])
   assert.ok(removed.at>=killedAt);if(removalMode!=='normal')assert.ok(Number(fs.readFileSync(path.join(root,'calls'),'utf8'))>=2);
   assert.deepEqual(removed.args,['rm','--force','dl-0123456789abcdef']);
   assert.equal(removed.home,root);
-  assert.deepEqual(removed.keys,['HOME']);
+  assert.deepEqual(removed.keys,['HOME'],'ignores only the calibrated test CLI tripwire values');
   assert.deepEqual(JSON.parse(fs.readFileSync(inventory)),[]);
   const stopped=count();await new Promise(r=>setTimeout(r,100));assert.equal(count(),stopped);
 });

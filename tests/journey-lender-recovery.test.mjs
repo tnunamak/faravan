@@ -7,7 +7,7 @@ import {lenderFixture,until} from './helpers/v1-lender-fixture.mjs';
 
 function launch(f,extra={}) {
   const controller=new AbortController();
-  const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
     approve:async()=>true,onEvent:e=>f.events.push(e),...extra});
   const loop=lender.start(controller.signal);
   f.stop=async()=>{controller.abort();await loop;};
@@ -71,11 +71,17 @@ test('J5-3 restored cooldown is bounded after backward wall step',async t=>{
 
 test('J2-4 automatic quota refusal reoffers after allowance repair',async t=>{
   const f=await realLenderFixture(t,{mutateJob:job=>{job.expires_at='2026-10-09T18:00:00Z';}});let blocked=true;
-  f.policy.lendingRuntime.candidate.reserve=async()=>blocked?{ok:false,reason:'quota_reserve'}:{ok:true,reservation:{provider:'codex',model:null},decision:{effort_max:null}};
-  launch(f);await until(()=>f.events.some(e=>e.reason==='quota_reserve'));blocked=false;
+  const claimNext=f.client.claimNext.bind(f.client);
+  f.client.claimNext=(advertisement,options)=>claimNext(advertisement,{...options,waitSeconds:0});
+  const wrap=f.runOptions.accountExecution.wrap;
+  f.runOptions.accountExecution.wrap=async args=>{
+    if(blocked)throw Object.assign(new Error('quota_reserve'),{code:'quota_reserve',admissionDecline:true});
+    return wrap(args);
+  };
+  launch(f);await until(()=>f.events.some(e=>e.reason==='no_spare'));blocked=false;
   await until(()=>!f.saved().declinePending&&!f.saved().claimedPending,'capacity refusal clears');
-  f.clock.advance(TEMPORARY_HOLD_REOFFER_MS);await turn();
-  await pump(f,()=>f.events.some(e=>e.status==='finished'),'same job finishes after allowance repair');
+  f.clock.advance(TEMPORARY_HOLD_REOFFER_MS);await f.refreshAccountHeartbeat();await turn();
+  await pump(f,()=>f.events.some(e=>e.status==='finished'),'same job finishes after allowance repair').catch(e=>{throw new Error(e.message+' '+JSON.stringify({events:f.events.map(e=>[e.status,e.reason]),declined:f.saved().declined,clock:f.clock.now(),job:f.job.payload.expires_at}));});
   assert.equal((await f.owner.getJob(f.jobDigest)).state,'result-accepted');
   assert.ok(f.saves.some(s=>s.declined?.some(row=>row.expiresAt<Date.parse(f.job.payload.expires_at))));
 });
@@ -184,7 +190,7 @@ test('a borrower cancel that lands while recovered output uploads is not shown a
   await f.policy.storage.set(snapshot);f.events.length=0;launch(f);
   t.after(()=>f.stop?.().catch(()=>{}));
   await pump(f,()=>!f.saved().outputPending,'recovered output must leave the spool');
-  assert.ok(uploads>=1,'the recovered upload never ran');
+  assert.ok(uploads>=1,'the recovered upload never ran: '+JSON.stringify(f.events));
   const failed=f.events.find(e=>e.status==='failed');
   assert.equal(failed,undefined,'cancelled recovered output shown failed: '+failed?.reason);
   assert.equal(f.saved().lastResultOutcome?.code??f.saved().rejectedOutput?.code,'cancelled');

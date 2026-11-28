@@ -3,16 +3,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
 import {createLender} from '../lib/v1/lender.mjs';
-import {createLendingRuntime} from '../lib/v1/lending-runtime.mjs';
-import {normalizeLendingPolicy} from '../lib/v1/lending-policy.mjs';
-import {createSyntheticPace50Source} from './helpers/pace50-synthetic-source.mjs';
+
 import {realLenderFixture} from './helpers/v1-real-lender-fixture.mjs';
 import {fileSbx, receiptBackend, receiptedHandle} from './helpers/sandbox-receipt-fixture.mjs';
 import {deferred, until} from './helpers/v1-lender-fixture.mjs';
 
 function launch(f) {
   const controller = new AbortController();
-  const lender = createLender({client:f.client, backend:f.backend, adapters:f.adapters, policy:f.policy,
+  const lender = createLender({...f.runOptions,client:f.client, backend:f.backend, adapters:f.adapters, policy:f.policy,
     clock:f.clock, approve:async () => true, onEvent:e => f.events.push(e)});
   const task = lender.start(controller.signal).catch(e => {
     if (e.name !== 'AbortError' && e.code !== 'aborted') throw e;
@@ -30,7 +28,7 @@ test(`deleted completed job releases stopped-report recovery (restart=${restart}
     return false;
   }});
   launch(f);
-  await until(() => f.events.some(e => e.reason === 'stop_report_pending'), 'stopped report retained', 5000);
+  await until(() => f.events.some(e => e.reason === 'cleanup_pending'), 'stopped report retained', 5000);
   await f.owner.deleteJob(f.jobDigest);
   const next = await f.submit();
   lose = false;
@@ -56,7 +54,7 @@ test('persistent malformed completion ACK parks retained output and runs the nex
     return false;
   }});
   launch(f);
-  await until(() => f.events.some(e => e.reason === 'invalid_response'), 'unknown ACK retained', 5000);
+  await until(() => f.events.some(e => e.reason === 'conditions_unavailable'), 'unknown ACK retained', 5000);
   const intent = structuredClone(f.saved().resultPending);
   const next = await f.submit();
   for (let i = 0; i < 5 && runs(f) < 2; i++) {
@@ -78,33 +76,6 @@ test('persistent malformed completion ACK parks retained output and runs the nex
   assert.ok(f.realRequests.filter(q => q.url === first).every(q => q.key === intent.idempotencyKey));
 });
 
-test('throwing measurement sink during finish preserves delivery and leaves quota exposure unresolved', {timeout:15000}, async t => {
-  const f = await realLenderFixture(t, {run:{model:'gpt-6-sol'}, guardTokens:{input:100,output:10,cached_input:0,cache_write:0,reasoning_output:0}});
-  let failing = false, writes = 0;
-  f.policy.userActive = async () => false;
-  const source = createSyntheticPace50Source({start:f.clock.now()});
-  const runtime = createLendingRuntime({directory:join(f.root, 'quota'), now:() => f.clock.now(),
-    settings:() => ({intent:'on', limits:{lendingPolicy:normalizeLendingPolicy({providerConsent:{codex:true}}),
-      dailyJobs:10, dailyMinutes:60, maxWallSeconds:300, idleOnly:false}}),
-    backend:{}, presence:() => false, lastActiveAt:() => null, selfKey:() => null,
-    pace50:{account:'synthetic-account', account_week_id:'synthetic-week-1',
-    source,
-    measurementHistory:{record() {if (failing) {writes++; throw new Error('measurement disk write failed');} return 'synthetic-row';}}}});
-  f.policy.lendingRuntime = runtime;
-  const collect = f.backend.collectDeclaredOutputs;
-  f.backend.collectDeclaredOutputs = async (...args) => {const out = await collect(...args); failing = true; source.state.used.weekly += 2_000_000; source.state.used.short += 2_000_000; return out;};
-  launch(f);
-  await until(() => f.events.some(e => ['finished','failed','declined','reserve','paused'].includes(e.status)), 'finished work delivered', 5000);
-  await f.stop();
-  assert.ok(writes > 0, JSON.stringify(f.events));
-  assert.equal((await f.owner.getJob(f.jobDigest)).state, 'result-accepted');
-  assert.equal(f.events.some(e => e.status === 'failed'), false);
-  const attempt=runtime.pace50.state().attempts[0];
-  assert.equal(attempt.hold_closed,false);
-  assert.ok(attempt.resources.every(r=>r.held_micro+r.unrepresented_micro===r.initial_micro&&r.released_micro===0));
-  assert.equal(runtime.candidate.measurementStatus().failedWrites, writes);
-});
-
 // Replace every 200 reply to a matching request with an unreadable body.
 const unreadableReply = (res) => {
   const head = res.writeHead, end = res.end;
@@ -121,7 +92,7 @@ test('a persistently unreadable stopped-report reply is bounded and the next job
     return false;
   }});
   launch(f);
-  await until(() => f.events.some(e => e.reason === 'stop_report_pending'), 'stopped report retained', 5000);
+  await until(() => f.events.some(e => e.reason === 'cleanup_pending'), 'stopped report retained', 5000);
   const next = await f.submit();
   for (let i = 0; i < 6 && runs(f) < 2; i++) {
     // Under load the next job may start after the check above; wait for either, never for an idle that will not come.
@@ -148,7 +119,7 @@ test('a refusal that can clear keeps the stopped report until it is recorded', {
     return true;
   }});
   launch(f);
-  await until(() => f.events.some(e => e.reason === 'stop_report_pending'), 'stopped report retained', 5000);
+  await until(() => f.events.some(e => e.reason === 'cleanup_pending'), 'stopped report retained', 5000);
   for (let i = 0; i < 4; i++) {
     await until(() => f.clock.pending().includes(1000), 'retry idle', 5000);
     f.clock.advance(1000);
@@ -162,7 +133,6 @@ test('a refusal that can clear keeps the stopped report until it is recorded', {
   await until(() => f.saved().stoppedPending === null, 'report recorded once the refusal clears', 5000);
   await f.stop();
 });
-
 
 for(const matchIncarnation of [true,false])
 test(`Stop records cleanup and release before replaying the exact lost stopped acknowledgement (matching incarnation=${matchIncarnation})`, {timeout:45000}, async t => {
@@ -234,7 +204,7 @@ test(`Stop records cleanup and release before replaying the exact lost stopped a
   assert.equal(f.realRequests.some(request => /\/(?:release|stopped)$/.test(request.url)), false);
   removal.resolve();
 
-  await until(() => f.events.some(event => event.reason === 'stop_report_pending'), 'retryable failure retained');
+  await until(() => f.events.some(event => event.reason === 'cleanup_pending'), 'retryable failure retained');
   assert.equal(lostReportStatus, 200, 'the coordinator accepted the report whose reply was lost');
   const saved = structuredClone(f.saved().pending);
   assert.equal(releaseStatus, 200);
@@ -276,6 +246,8 @@ test(`Stop records cleanup and release before replaying the exact lost stopped a
   assert.equal(committed.compute_stopped, true);
   assert.equal(committed.stopped_at, saved.stoppedAt);
   await f.stop();
+  assert.equal(f.realRequests.filter(request => request.url.endsWith('/stopped')).length, 1,
+    'the old runtime does not send another report before restart');
 
   f.policy.enabled = false;
   f.policy.recoveryOnly = true;

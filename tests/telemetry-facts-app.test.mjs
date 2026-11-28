@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {rm,access} from 'node:fs/promises';
 import {join} from 'node:path';
-import {appFixture,api,boundedFetch,waitFor} from './helpers/v1-app-fixture.mjs';
+import {appFixture,api,boundedFetch,browserApi,waitFor} from './helpers/v1-app-fixture.mjs';
 import {call,cookieOf} from './helpers/phone-client.mjs';
 import {parseFact} from '../lib/v1/telemetry/contract.mjs';
 
@@ -126,7 +126,7 @@ test('successful plan saves emit provider-specific unverified profile properties
 });
 test('saved job submission and terminal observation keep requested and executed evidence separate', {timeout:120000},async t=>{
   const f=await appFixture(t);const {telemetry,rows}=observer();const {owner,lender,circle}=await f.connect({}, {telemetry});
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',headers:{'faravan-surface':'cli'},body:{circle:circle.id,prompt:'canary-private-prompt',noSource:true,result:{kind:'message'},harness:'codex',model:'gpt-5.4'}});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',headers:{'faravan-confirm':'yes','faravan-surface':'cli'},body:{circle:circle.id,prompt:'canary-private-prompt',noSource:true,result:{kind:'message'},harness:'codex',model:'gpt-5.4'}});
   await waitFor(()=>rows.some(r=>r.name==='job_requested'),'submission observation');
   const requested=rows.find(r=>r.name==='job_requested');assert.ok(requested);assert.equal(requested.properties.requested_model,'gpt-5.4');
   const raw=f.jobs.get(jobDigest);const at=new Date(Math.floor(Date.now()/1000)*1000).toISOString().replace('.000Z','Z');
@@ -140,7 +140,8 @@ test('saved job submission and terminal observation keep requested and executed 
 
 test('borrower completion reads the verified execution receipt outside the operation response', {timeout:120000},async t=>{
   const f=await appFixture(t);const {telemetry,rows}=observer();const {owner,circle}=await f.connect({}, {telemetry});
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',headers:{'faravan-surface':'ui'},body:{circle:circle.id,prompt:'private-prompt',noSource:true,result:{kind:'message'},harness:'codex',model:'gpt-5.4'}});
+  const ui=await browserApi(owner.app);
+  const {jobDigest}=await ui('/api/jobs',{method:'POST',body:{circle:circle.id,prompt:'private-prompt',noSource:true,result:{kind:'message'},harness:'codex',model:'gpt-5.4'}});
   await f.complete(jobDigest,'owner',{output:{kind:'message'},receipt:{model:'gpt-5.4',harness:'codex',candidate_format:'tree'}});
   await api(owner.app,'/api/jobs/'+encodeURIComponent(jobDigest)+'/receipt?circle='+circle.id);
   await waitFor(()=>rows.find(r=>r.name==='job_execution_finished'),'verified terminal model');
@@ -161,7 +162,7 @@ for(const restriction of ['off','gpc','reset'])test('deferred setup completion r
 test('a provisional expired claim does not hide a later successful borrower result', {timeout:120000},async t=>{
   const f=await appFixture(t);const {telemetry,rows}=observer();const seen=[];telemetry.observe=(kind,data)=>{if(kind==='event:job')seen.push(data.state);};
   const {owner,lender,circle}=await f.connect({}, {telemetry});
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,prompt:'private',noSource:true,result:{kind:'message'},harness:'codex',model:'gpt-5.4'}});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,prompt:'private',noSource:true,result:{kind:'message'},harness:'codex',model:'gpt-5.4'}});
   await f.complete(jobDigest,'owner',{output:{kind:'message'},receipt:{model:'gpt-5.4',harness:'codex',candidate_format:'tree'}});
   const raw=f.jobs.get(jobDigest),completedAttempt=structuredClone(raw.current_attempt);
   raw.state='failed';raw.current_attempt={...completedAttempt,state:'released',reason:'lease_expired'};
@@ -192,7 +193,7 @@ async function heldSubmission(t,{start}) {
   rows.length=0;held=true;
   const refresh=api(owner.app,'/api/agents/refresh',{method:'POST',body:{}});
   await waitFor(()=>gate,'the mutation lane is held');
-  const submit=api(owner.app,'/api/jobs',{method:'POST',headers:{'faravan-surface':'cli'},body:{circle:circle.id,prompt:'private',noSource:true,result:{kind:'message'},harness:'codex',model:'gpt-5.4'}});
+  const submit=api(owner.app,'/api/jobs',{method:'POST',headers:{'faravan-confirm':'yes','faravan-surface':'cli'},body:{circle:circle.id,prompt:'private',noSource:true,result:{kind:'message'},harness:'codex',model:'gpt-5.4'}});
   await new Promise(resolve=>setTimeout(resolve,100));
   return {owner,rows,release:async()=>{held=false;gate();await refresh;return submit;}};
 }

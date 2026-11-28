@@ -53,7 +53,7 @@ test('signed manifests bind the archive digest and require an upgraded lender ca
  const tar=createTar([{name:'note.txt',type:'0',mode:0o644,data:Buffer.from('test')}]);
  const manifest=buildSourceManifest(tar),job=structuredClone(vectors.objects.job.envelope.payload);
  job.source={kind:'archive',artifact:{digest:manifest.archive_digest,bytes:manifest.packed_bytes,media_type:'application/gzip'}};
- job.source_manifest=manifest;job.requirements.capabilities=['source_manifest_v1'];
+ job.source_manifest=manifest;job.requirements.capabilities=['source_manifest_v1','run_request_v1'];
  assert.doesNotThrow(()=>p.signEnvelope('job',job,key));
  assert.equal(p.validateRequirements(job.requirements,{recognizedCapabilities:['patch-output','verify_v1']}).ok,false);
  job.source_manifest={...manifest,archive_digest:'sha256:'+'0'.repeat(64)};assert.throws(()=>p.signEnvelope('job',job,key));
@@ -69,7 +69,7 @@ test('signing refuses a preview manifest containing excluded names',async()=>{
  const manifest=buildSourceManifest(tar,{omitted:[{path:'private/.env',reason:'credentials'}],includeOmittedPaths:true});
  const job=structuredClone(vectors.objects.job.envelope.payload);
  job.source={kind:'archive',artifact:{digest:manifest.archive_digest,bytes:manifest.packed_bytes,media_type:'application/gzip'}};
- job.source_manifest=manifest;job.requirements.capabilities=['source_manifest_v1'];
+ job.source_manifest=manifest;job.requirements.capabilities=['source_manifest_v1','run_request_v1'];
  assert.throws(()=>p.signEnvelope('job',job,key));
 });
 
@@ -82,12 +82,12 @@ test('a project label is signed, bounded and hidden from validators without its 
  const job=structuredClone(vectors.objects.job.envelope.payload);
  job.source={kind:'archive',artifact:{digest:manifest.archive_digest,bytes:manifest.packed_bytes,media_type:'application/gzip'}};
  job.source_manifest={...manifest,project_name:'booking-site'};
- job.requirements.capabilities=['source_manifest_v1','source_project_name_v1'];
+ job.requirements.capabilities=['source_manifest_v1','source_project_name_v1','run_request_v1'];
  assert.doesNotThrow(()=>p.signEnvelope('job',job,key));
  assert.equal(p.validateRequirements(job.requirements,{recognizedCapabilities:['source_manifest_v1']}).ok,false);
  for(const name of ['/home/sam/booking-site','C:\\Users\\sam','a'.repeat(161),'','bad\nname']){
   job.source_manifest.project_name=name;assert.throws(()=>p.signEnvelope('job',job,key));
  }
- job.source_manifest.project_name='booking-site';job.requirements.capabilities=['source_manifest_v1'];
+ job.source_manifest.project_name='booking-site';job.requirements.capabilities=['source_manifest_v1','run_request_v1'];
  assert.throws(()=>p.signEnvelope('job',job,key));
 });

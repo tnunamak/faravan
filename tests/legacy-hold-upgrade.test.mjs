@@ -3,8 +3,8 @@ import test,{beforeEach,afterEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,rm,readdir,stat} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
-import {createHash,randomUUID} from 'node:crypto';
+
+import {randomUUID} from "node:crypto";
 import {DockerSbxBackend,_internal} from '../lib/docker-backend.mjs';
 import {seedSandboxOwner} from './helpers/sandbox-owner.mjs';
 import {hostDefaultSbxRuntime,describeSbxRuntime} from '../lib/sbx-runtime.mjs';
@@ -101,7 +101,7 @@ test('lender recovery of an old pending attempt through the real backend: '+caus
   lf.backend.isSandboxHomeCurrent=home=>real.isSandboxHomeCurrent(home);
   await lf.policy.storage.set({day:'2026-10-09',jobs:1,milliseconds:120000,
     pending:{attemptId:attempt.attempt_id,attempt,jobId:f.jobId,reservedMs:120000,executionStartRequested:false,sandboxId:f.name,scratchDir:f.scratch,sbx_runtime:f.pending.sbx_runtime}});
-  const controller=new AbortController(),lender=createLender({client:lf.client,backend:lf.backend,adapters:lf.adapters,policy:lf.policy,clock:lf.clock});
+  const controller=new AbortController(),lender=createLender({...lf.runOptions,client:lf.client,backend:lf.backend,adapters:lf.adapters,policy:lf.policy,clock:lf.clock});
   const proofs=[];
   lf.backend.reconcilePending=async(row,o)=>{const proof=await real.reconcilePending(row,o);proofs.push(proof);return proof;};
   let failure=null;

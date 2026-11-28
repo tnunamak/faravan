@@ -96,8 +96,6 @@ test('unconfirmed MCP sends stay in the server working repository',async t=>{
   assert.equal((await send(b.dir,true)).result.isError,undefined);
 });
 
-
-
 test('MCP exposes the existing requested budget and forwards effort without inventing USD',async t=>{
   const calls=[],peer=server(t,{opsClient:{call:async(id,input)=>{
     if(id==='circles.list')return CIRCLES;
@@ -106,15 +104,15 @@ test('MCP exposes the existing requested budget and forwards effort without inve
   await peer.init({});
   const listed=await peer.request('tools/list');
   const schema=listed.result.tools.find(tool=>tool.name==='jobs_submit').inputSchema;
-  assert.ok(schema.properties.budget_v1.properties.effort.enum.includes('high'));
+  assert.ok(schema.properties.effort);
   const args={circle:'Friends',prompt:'Think carefully',noSource:true,result:{kind:'message'},model:'synthetic-model',confirm:true};
-  const result=await peer.request('tools/call',{name:'jobs_submit',arguments:{...args,budget_v1:{effort:'high'}}});
+  const result=await peer.request('tools/call',{name:'jobs_submit',arguments:{...args,effort:'high'}});
   assert.notEqual(result.result.isError,true);
   assert.equal(calls[0].input.model,'synthetic-model');
-  assert.deepEqual(calls[0].input.budget_v1,{effort:'high'});
+  assert.equal(calls[0].input.effort,'high');
   const omitted=await peer.request('tools/call',{name:'jobs_submit',arguments:args});
   assert.notEqual(omitted.result.isError,true);
-  assert.equal(calls[1].input.budget_v1,undefined);
+  assert.equal(calls[1].input.effort,undefined);
   for(const budget_v1 of [{effort:'ultra'},{effort:null},{max_list_usd:0},{max_list_usd:100001},{effort:'high',unknown:true},null]) {
     const refused=await peer.request('tools/call',{name:'jobs_submit',arguments:{...args,budget_v1}});
     assert.equal(refused.result.isError,true);
@@ -302,11 +300,11 @@ test('folders.list accepts a plain parent within roots while preserving root and
  assert.equal(calls.length,1,'refused paths never reach the app');
 });
 
-test('MCP release requires explicit confirmation before dispatch',async t=>{
+test('MCP Stop requires explicit confirmation before dispatch',async t=>{
   const calls=[];
   const peer=server(t,{opsClient:{call:async(...args)=>{calls.push(args);return {applied:true};}}});
   await peer.init({});
-  const call=confirm=>peer.request('tools/call',{name:'lending_release_hold',arguments:{attemptId:'dead',...(confirm===undefined?{}:{confirm})}});
+  const call=confirm=>peer.request('tools/call',{name:'lending_stop_job',arguments:{attemptId:'dead',...(confirm===undefined?{}:{confirm})}});
   assert.equal((await call()).result.structuredContent.code,'confirmation_required');
   assert.equal(calls.length,0);
   assert.equal((await call(true)).result.isError,undefined);

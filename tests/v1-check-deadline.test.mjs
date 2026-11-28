@@ -14,7 +14,7 @@ test('the check budget uses the earlier lender wall timer, including time alread
   f.backend.verify=async()=>({exit:0,timed_out:false,stdout:''});
   const prepare=f.backend.prepareCheck;let remaining;
   f.backend.prepareCheck=(agent,options)=>{remaining=options.remainingMs;return prepare(agent,options);};
-  const controller=new AbortController(),lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,
+  const controller=new AbortController(),lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,
     policy:f.policy,clock:f.clock,approve:async()=>true,onEvent:e=>f.events.push(e)});
   const running=lender.start(controller.signal).catch(e=>{if(!controller.signal.aborted)throw e;});
   f.stop=async()=>{controller.abort();await running;};

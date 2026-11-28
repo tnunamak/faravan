@@ -1,8 +1,7 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DIALS, EXPLAINER, LIMIT, LINES, REASON_LINE, STRATEGY_COPY, CHOOSER_DIALS, CHOOSER_EXPLAINER, lendingStatus, retainedJobStatus} from '../lib/v1/lending-status-copy.mjs';
-import {SEAM_UNKNOWN} from '../lib/v1/lender-pace50.mjs';
+import {DIALS, EXPLAINER, LIMIT, LINES, STRATEGY_COPY, CHOOSER_DIALS, CHOOSER_EXPLAINER, lendingStatus, retainedJobStatus} from "../lib/v1/lending-status-copy.mjs";
 
 // The reviewed lending copy (evidence/ui-copy-1024/LENDING-COPY.md) and its binding wording rules. Synthetic only.
 const BANNED = /guarantee|\bsafe|insurance|won['’]t need|finish/i;
@@ -39,24 +38,14 @@ test('the protection dial and its explanation call each figure a risk target, ne
     + 'reset. Faravan holds new jobs when it cannot confirm stop support.');
 });
 
-test('every hold reason the engine, the candidate and the quote path can name has one status line', () => {
-  const engineAndQuote = ['owner_band', 'owner_harm', 'owner_reserve', 'defer', 'reset', 'budget_too_small', 'usage_unknown',
-    'demand_model_unavailable', 'demand_model_invalid', 'demand_model_coupling_unknown', 'demand_model_exact_usage_required',
-    'history_unknown', 'strategy_config_unknown', 'gate_closed', 'stopped', 'no_value', 'chunk_value_unknown',
-    'owner_present', 'paused', 'objective_evidence_invalid', 'exceeds_spare', 'request_too_large', 'strategy_limit'];
-  for (const code of [...SEAM_UNKNOWN, ...engineAndQuote]) {
-    assert.ok(LINES[REASON_LINE[code]], code + ' has a line');
-  }
-});
-
 test('each named cause says whether the owner must act or the next read clears it', () => {
-  for (const id of ['identity', 'funding', 'executor_failed', 'queue', 'controls', 'owner_settings',
+  for (const id of ['identity', 'funding', 'executor', 'executor_failed', 'queue', 'controls',
     'model_unavailable', 'model_evidence']) {
     assert.match(LINES[id], /This needs you:|clears on its own/, id);
   }
   assert.equal(LINES.paused, 'Paused for new jobs; running jobs continue within their saved limits.');
   assert.equal(LINES.stopped, 'Stopped for new jobs; running jobs continue within their saved limits.');
-  for(const id of ['executor','stop_bound','evidence','invalid_evidence','history','conversion']) {
+  for(const id of ['stop_bound','evidence','invalid_evidence','history','conversion']) {
     assert.match(LINES[id],/Usage estimate:/);
     assert.doesNotMatch(LINES[id],/Holding|waiting|This needs you/i);
   }
@@ -121,7 +110,6 @@ test('missing model-window calibration permits a starting estimate without a rep
   }
 });
 
-
 test('retained job copy safely names failure class and does not invent unknown times', async () => {
   const {retainedJobStatus} = await import('../lib/v1/lending-status-copy.mjs');
   const status = lendingStatus({reason:'refresh_failed'});
@@ -182,9 +170,6 @@ test('fixed share describes the protected balance without promising unused capac
 test('budget holds identify who can change each limit', async () => {
   const {budgetLimitCopy} = await import('../lib/v1/lending-status-copy.mjs');
   const base = {model:'claude-sonnet-5-5', minimumUsd:5.29, limitUsd:2};
-  const owner = lendingStatus({reason:'budget_too_small', detail:{...base,source:'owner'}});
-  assert.equal(owner.line, 'Your per-job limit of $2.00 is below what one Claude Sonnet 5.5 call can cost ($5.29). Raise it to at least $5.29.');
-  assert.equal(owner.recovery.who, 'owner');
   for (const limitUsd of [2,4]) {
     const detail = {...base,source:'borrower',limitUsd};
     const lender = lendingStatus({reason:'budget_too_small',detail});
@@ -197,7 +182,7 @@ test('budget holds identify who can change each limit', async () => {
   assert.match(strategy.line, /limit you set for this lending strategy allows \$2\.00 for this job/);
   assert.doesNotMatch(strategy.line, /per-job limit/);
   assert.equal(strategy.recovery.who, 'owner');
-  for (const copy of [owner, strategy]) assert.doesNotMatch(copy.line + copy.recovery.action, /clear/);
+  for (const copy of [strategy]) assert.doesNotMatch(copy.line + copy.recovery.action, /clear/);
   const spare = lendingStatus({reason:'budget_too_small',detail:{...base,source:'spare'}});
   assert.match(spare.line,/spare allowance cannot cover one Claude Sonnet 5.5 call right now \(\$5.29\)/);
   assert.equal(spare.recovery.who, 'automatic');

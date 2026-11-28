@@ -71,7 +71,7 @@ const beginning=lenderSource.indexOf('      let foreignSeen=startupForeignDiagno
 const end=lenderSource.indexOf('      while(!signal?.aborted) {',beginning);
 assert.ok(beginning>0&&end>beginning);
 const startup=new Function('backend','signal','idle','emit','diagnose',
-  'const startupForeignDiagnostics=new WeakMap(),DECLINE_BACKOFF_MS=0;return (async()=>{'+lenderSource.slice(beginning,end)+'return true;})();');
+  'const startupForeignDiagnostics=new WeakMap(),DECLINE_BACKOFF_MS=0,availability=async()=>({reason:"cleanup_pending",until:120000});return (async()=>{'+lenderSource.slice(beginning,end)+'return true;})();');
 test('lender accepts current per-target admission without converting debt to removed proof',async()=>{
   const proof={removed:false,admission_allowed:true,cleanup_debt:[{status:'foreign_locked'}]};let observed=0;
   assert.equal(await startup({reconcileOwnedSandboxes:async()=>proof,isOwnedSandboxAdmissionCurrent:value=>{observed++;return value===proof;},

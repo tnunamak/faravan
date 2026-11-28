@@ -252,7 +252,7 @@ for(const requested of [false,true])test('restart settles old fenced cleanup onc
   f.client.release=async()=>({state:'released'});
   const stoppedCalls=[];
   f.client.stopped=async(...args)=>{stoppedCalls.push(args[0].attempt_id);return {state:'stopped'};};
-  const controller=new AbortController(),lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,onEvent:e=>f.events.push(e)});
+  const controller=new AbortController(),lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,onEvent:e=>f.events.push(e)});
   const running=lender.start(controller.signal);running.catch(()=>{});
   try {
     await until(()=>f.saved()?.pending===null&&f.saved()?.lastRecovery?.attemptId===attemptId,'pending released');
@@ -317,14 +317,14 @@ test('the lender is never held in stopping by a watched row, before or after the
   const backend=f0.make();
   f.backend.reconcileOwnedSandboxes=options=>backend.reconcileOwnedSandboxes(options);
   f.backend.isOwnedSandboxAdmissionCurrent=proof=>backend.isOwnedSandboxAdmissionCurrent(proof);
-  const controller=new AbortController(),lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,approve:async()=>true,onEvent:e=>f.events.push(e)});
+  const controller=new AbortController(),lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,approve:async()=>true,onEvent:e=>f.events.push(e)});
   const running=lender.start(controller.signal);running.catch(()=>{});
   try {
     const claimed=()=>f.requests.some(r=>r.route==='/jobs/claim-next');
     // Admission after recovery is shown by the lender asking for work, not by "some event, not stopping".
     await until(()=>{if(!claimed()&&f.clock.pending().includes(3000))f.clock.advance(3000);return claimed();},'the lender asks for work after recovery');
     assert.notEqual(lender.getState().status,'stopping');
-    assert.equal(f.events.some(e=>e.status==='stopping'&&e.reason==='cessation_unverified'),false,'no hold is raised for the watched row');
+    assert.equal(f.events.some(e=>e.status==='stopping'&&e.reason==='cleanup_pending'),false,'no hold is raised for the watched row');
     assert.equal((await records(f0.directory)).length,1,'the obligation is not discharged');
     f0.clock.at+=2*READY;
     const before=f.requests.filter(r=>r.route==='/jobs/claim-next').length;
@@ -390,7 +390,7 @@ async function watchedLender(t) {
     prepare_contract:'create-only',attempt:{attempt_id:attemptId,job_digest:f.jobDigest,generation:1}});
   // One lender run, ended as soon as the condition holds (a restart is the next run).
   const run=async done=>{
-    const controller=new AbortController(),lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,onEvent:e=>f.events.push(e)});
+    const controller=new AbortController(),lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,onEvent:e=>f.events.push(e)});
     const running=lender.start(controller.signal);running.catch(()=>{});
     try {
       for(let i=0;i<300&&!done();i++){f.clock.advance(3000);await new Promise(r=>setTimeout(r,20));}

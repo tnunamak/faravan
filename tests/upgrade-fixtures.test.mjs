@@ -13,6 +13,9 @@ import {syntheticBackend,api,waitFor} from './helpers/v1-app-fixture.mjs';
 const fixtures=new URL('./fixtures/upgrade/',import.meta.url);
 function env(t,key,value){const old=process.env[key];process.env[key]=value;t.after(()=>{if(old===undefined)delete process.env[key];else process.env[key]=old;});}
 const json=async file=>JSON.parse(await readFile(file,'utf8'));
+// 71f83df88: lending is authorized from the agent toggles. A saved policy's providerConsent is still accepted on load, but it
+// authorizes nothing and is neither kept in the loaded policy nor written back. Every other saved field must survive.
+const withoutProviderConsent=policy=>{const {providerConsent:_retired,...rest}=policy;return rest;};
 async function copyFixture(t,version) {
  const root=await mkdtemp('/tmp/u'+version+'-');
  const apps=[];
@@ -52,9 +55,12 @@ for(const version of ['59','60','61','62']) {
    }
    const loaded=(await api(app,'/api/lending')).limits,after=await json(f.settings);
    for(const [field,value] of Object.entries(before.limits)) {
-    assert.deepEqual(loaded[field],value,'.'+version+' '+cycle+' loaded settings.limits.'+field);
-    assert.deepEqual(after.limits[field],value,'.'+version+' '+cycle+' saved settings.limits.'+field);
+    const kept=field==='lendingPolicy'?withoutProviderConsent(value):value;
+    assert.deepEqual(loaded[field],kept,'.'+version+' '+cycle+' loaded settings.limits.'+field);
+    assert.deepEqual(after.limits[field],kept,'.'+version+' '+cycle+' saved settings.limits.'+field);
    }
+   assert.equal(Object.hasOwn(loaded.lendingPolicy,'providerConsent'),false,'.'+version+' '+cycle+' the retired consent is not loaded');
+   assert.equal(Object.hasOwn(after.limits.lendingPolicy,'providerConsent'),false,'.'+version+' '+cycle+' the retired consent is not written back');
    for(const field of ['name','intent','enabled'])assert.deepEqual(after[field],before[field],'.'+version+' '+cycle+' settings.'+field);
    const phones=await api(app,'/api/phone');
    assert.ok(JSON.stringify(phones).includes('Fixture device'),'.'+version+' paired device survives '+cycle);
@@ -64,24 +70,27 @@ for(const version of ['59','60','61','62']) {
   // Restart once more after the supported save and compare the loaded values again.
   app=await boot(t,f);
   const loaded=(await api(app,'/api/lending')).limits;
-  for(const [field,value] of Object.entries(before.limits))assert.deepEqual(loaded[field],value,'.'+version+' restart after save loaded settings.limits.'+field);
+  for(const [field,value] of Object.entries(before.limits))assert.deepEqual(loaded[field],field==='lendingPolicy'?withoutProviderConsent(value):value,'.'+version+' restart after save loaded settings.limits.'+field);
  });
  for(const variant of ['','-false','-mixed']) test('.'+version+' U5: rejected policy preserves consent and every valid field'+(variant?' ('+variant.slice(1)+' consent)':''),{timeout:30000},async t=>{
   const f=await copyFixture(t,version);await cp(join(f.home,'invalid-policy'+variant+'.json'),f.settings);
   const before=await json(f.settings);let app=await boot(t,f);
   const consent=before.limits.lendingPolicy.providerConsent,label='.'+version+(variant||'')+' ';
+  assert.ok(consent&&typeof consent==='object','fixture '+label+'holds the retired saved consent');
   for(const cycle of ['load','save/load']) {
    const after=await json(f.settings),old=before.limits.lendingPolicy;
    for(const [field,value] of Object.entries(old))if(!['warningPct','providerConsent'].includes(field))assert.deepEqual(after.limits.lendingPolicy[field],value,label+cycle+' policy.'+field);
-   // Migration may withhold consent (the owner confirms again) but never grants one, and the saved choice stays on record.
+   // 71f83df88: the saved consent authorizes nothing. Neither the saved file, the loaded policy nor the notice carries it, so
+   // migration can never grant one; the repair holds lending off until the owner turns it on again.
    const loadedPolicy=(await api(app,'/api/lending')).limits.lendingPolicy,notice=after.lendingPolicyMigration,loadedConsent=loadedPolicy.providerConsent;
    // The only invalid field is warningPct=150; it is repaired to the default 10, in the saved file and in the loaded policy.
    assert.equal(after.limits.lendingPolicy.warningPct,10,label+cycle+' saved policy.warningPct is repaired');
    assert.equal(loadedPolicy.warningPct,10,label+cycle+' loaded policy.warningPct is repaired');
    for(const [field,value] of Object.entries(old))if(!['warningPct','providerConsent'].includes(field))assert.deepEqual(loadedPolicy[field],value,label+cycle+' loaded policy.'+field);
    for(const [where,active] of [['saved',after.limits.lendingPolicy.providerConsent],['loaded',loadedConsent]])
-    for(const [provider,value] of Object.entries(active))assert.ok(value===false||consent[provider]===true,label+cycle+' '+where+' provider consent for '+provider+' was granted by migration');
-   assert.deepEqual(Object.keys(after.limits.lendingPolicy.providerConsent).length?after.limits.lendingPolicy.providerConsent:notice?.consentWas,consent,label+cycle+' saved provider consent is kept, active or in the notice');
+    assert.equal(active,undefined,label+cycle+' '+where+' policy carries no provider consent, so migration granted none');
+   assert.equal(Object.hasOwn(notice??{},'consentWas'),false,label+cycle+' the notice keeps no retired consent');
+   assert.equal(after.intent,'off',label+cycle+' a repaired policy holds lending off');
    assert.equal(notice?.acknowledged,false,label+'rejected warningPct has an unacknowledged notice');
    assert.ok(notice?.reset?.some(row=>row.field==='warningPct'&&row.was===150),label+'notice preserves warningPct=150');
    await app.close();if(cycle==='load')app=await boot(t,f);

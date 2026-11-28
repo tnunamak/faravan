@@ -2,7 +2,7 @@ import './helpers/no-browser.mjs';
 import {tempDir} from './helpers/temp-dir.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MEASUREMENT_MAX_AGE_MS, measureKappa} from '../lib/v1/lending-kappa-measure.mjs';
+import {MEASUREMENT_MAX_AGE_MS, certifiedKappa, measureKappa} from '../lib/v1/lending-kappa-measure.mjs';
 import {emptyTokens} from '../lib/v1/lending-meter.mjs';
 const now = 1_800_000_000_000, day = 86400_000, ACCOUNT = 'a1b2c3d4e5f60718';
 const attribution = {account_sha256_16:ACCOUNT, since:now - 60*day};
@@ -87,20 +87,6 @@ test('duplicate spans and other accounts do not contribute',()=>{
   const x=base();x.meterPeriods.push(span(0));x.usage.push(row(now-.5*day,100,'other'));
   assert.equal(measureKappa(x).upper_micro,4_000_000);
   assert.equal(measureKappa(x).provenance.spans,4);
-});
-
-test('real source converts only by the verified account\'s own measurement',async()=>{
- const {createRealPace50Source}=await import('../lib/v1/lending-pace50-source.mjs');
- const readings=async()=>({windows:[{window_id:'seven_day',window_minutes:10080,used_pct:0,
-   resets_at:now+86400_000,observed_at:now,state:'open'}]});
- const args={provider:'claude',plan:'max20',model:'claude-haiku-5-5'};
- // No verified identity here, so no measurement is asked for and the plan label never supplies a rate.
- const asked=[];
- const source=createRealPace50Source({readings,kappaForUsage:q=>{asked.push(q);return null;}});
- const out=await source.observe(args);
- assert.equal(out.resources[0].kappa_micro,null);
- assert.equal(out.resources[0].kappa_provenance,null);
- assert.deepEqual(asked,[]);
 });
 
 test('history importer publishes the measured conversion before pricing imported history',async()=>{
@@ -222,4 +208,12 @@ test('a non-finite now cannot produce a measurement',()=>{
     assert.equal(measureKappa({...completed,now:invalidNow}),null,String(invalidNow));
     assert.equal(measureKappa({...current,now:invalidNow}),null,String(invalidNow));
   }
+});
+
+
+test('shipped calibration retains its provenance after the source is removed',()=>{
+ const bound=certifiedKappa({provider:'claude',plan:'max20',window:'weekly',model:'claude-haiku-5-5'});
+ assert.equal(bound.upper_micro,534900);
+ assert.equal(typeof bound.provenance.acceptedBy,'string');
+ assert.equal(certifiedKappa({provider:'missing'}),null);
 });

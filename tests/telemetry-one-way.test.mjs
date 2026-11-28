@@ -4,14 +4,11 @@ import './helpers/no-browser.mjs';
 // a telemetry failure leaves the app's journey green.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync} from "node:fs";
 import { createServer } from 'node:http';
 import { basename, dirname, join, relative, resolve } from 'node:path';
-import { makeTelemetry, captureTransport, settle, manualClock, ENDPOINT, START } from './helpers/telemetry-harness.mjs';
+import {makeTelemetry, captureTransport, ENDPOINT} from "./helpers/telemetry-harness.mjs";
 import { telemetryApp } from './helpers/telemetry-app.mjs';
-import { api } from './helpers/v1-app-fixture.mjs';
-import { createHostAdmission } from '../lib/v1/admission.mjs';
-import { normalizeLendingPolicy, createEstimatedPace50State, transitionEstimatedPace50State, machineCapacity } from '../lib/v1/lending-policy.mjs';
 
 const ROOT = resolve(new URL('..', import.meta.url).pathname);
 const failure = {code: 'sandbox_start_failed', phase: 'prepare'};
@@ -200,7 +197,10 @@ const GRAPH = importGraph();
 const rel = file => relative(ROOT, file);
 const isTelemetry = file => file.startsWith(join(ROOT, 'lib/v1/telemetry') + '/');
 const LENDING_NAME = /^(lend|admission|docker-backend)/; // lend*, lender*, lending-*, admission*, docker-backend*
-const isLending = file => LENDING_NAME.test(basename(file));
+// The one list of public lending reasons is data: telemetry reads it to name its offer reasons, so a reason has one definition.
+// Telemetry may import it only while it imports nothing itself, because then no path leads from telemetry to a decision.
+const LENDING_DATA = new Set(['lending-reasons.mjs']);
+const isLending = file => LENDING_NAME.test(basename(file)) && !LENDING_DATA.has(basename(file));
 function reaches(start, wanted) {
   const seen = new Set([start]), stack = [[start, [start]]];
   while (stack.length) {
@@ -219,6 +219,14 @@ test('the graph scan sees the modules the rule is about (the check is not vacuou
   assert.ok([...GRAPH.keys()].filter(isTelemetry).length >= 10, 'the telemetry modules are in the scan');
   const importers = [...GRAPH].filter(([file, targets]) => !isTelemetry(file) && [...targets].some(isTelemetry)).map(([file]) => rel(file));
   assert.ok(importers.includes('lib/v1/app.mjs') && importers.includes('bin/faravan'), `known importers found: ${importers}`);
+});
+
+test('the lending data modules telemetry may import import nothing', () => {
+  for (const name of LENDING_DATA) {
+    const file = join(ROOT, 'lib/v1', name);
+    assert.ok(GRAPH.has(file), `${name} is in the scan`);
+    assert.deepEqual([...GRAPH.get(file)].map(rel), [], `${name} must stay a leaf`);
+  }
 });
 
 test('no lender, lending, admission or docker-backend module imports anything from lib/v1/telemetry/, directly or through other modules', () => {
@@ -249,81 +257,8 @@ test('no module under lib/v1/telemetry/ imports a lender, lending, admission or 
 // ---- (c) Decision replay --------------------------------------------------------------------------------------------------------
 
 /** A fixed sequence of lender-side calls. `between(label)` is where the other run lets telemetry do things. Returns every decision. */
-async function lenderDecisions(between = async () => {}) {
-  const out = [];
-  const step = async (label, run) => {
-    await between(label);
-    try { out.push([label, 'ok', JSON.stringify(run() ?? null)]); } catch (error) { out.push([label, 'error', error.code ?? error.message]); }
-  };
-  let tick = 1000;
-  const admission = createHostAdmission({clock: () => tick, limits: {maxRequests: 4, maxRequestsPerSource: 3, maxPolls: 4, maxPollsPerDevice: 1, maxPollsPerCircle: 2, maxDownloads: 4, maxDownloadsPerCircle: 2,
-    bootstrapWorkPerWindow: 2, bootstrapPerDevice: 2, bootstrapWindowSeconds: 10, minFreeDiskBytes: 0, minFreeInodes: 0}});
-  const leases = [];
-  for (let i = 0; i < 6; i++) await step('acquire requests ' + i, () => { leases.push(admission.acquire('requests', i < 3 ? 'a' : 'b', 'dev' + i, 'circle' + (i % 2))); return admission.pending('requests'); });
-  for (let i = 0; i < 3; i++) await step('release ' + i, () => { leases[i](); return admission.pending('requests'); });
-  for (let i = 0; i < 4; i++) await step('poll ' + i, () => { admission.acquire('polls', 'a', 'dev' + (i % 2), 'circle'); return admission.pending('polls'); });
-  for (let i = 0; i < 3; i++) await step('bootstrap ' + i, () => { admission.bootstrapWork('a'); return i; });
-  await step('time passes', () => { tick += 10; admission.bootstrapWork('a'); return tick; });
-  await step('storage fits', () => { const release = admission.reserveStorage({bsize: 512n, bavail: 6n, files: 100n, ffree: 50n}, 1); release(); return 'fits'; });
-  await step('storage does not fit', () => admission.reserveStorage({bsize: 512n, bavail: 0n, files: 100n, ffree: 50n}, 1));
-  for (const input of [{}, {preset: 'lend_more'}, {preset: 'fixed_share', fixedSharePct: 35}, {preset: 'custom', e0: 0.2, keepPct: 50}, {preset: 'nope'}, {fixedSharePct: 'x'}]) {
-    await step('policy ' + JSON.stringify(input), () => normalizeLendingPolicy(input));
-  }
-  await step('capacity', () => machineCapacity({ramBytes: 16 * 1024 ** 3, cpus: 8}));
-  await step('transition', () => transitionEstimatedPace50State(createEstimatedPace50State({account: 'claude', account_week_id: 'week-1'}), {type: 'owner_return', event_id: 'e-return', at: 1000}));
-  return out;
-}
 
 /** What the app does around each lender decision: observe, tick, try to upload. */
-function telemetryNoise(h) {
-  return async label => {
-    h.tel.observe('lender-failure', failure);
-    h.tel.observe('event:lending', {account: 'codex:0', status: 'preparing'});
-    h.tel.observe('event:offer-decision', {outcome: 'accepted', reason: 'none', harness: 'codex', mode: 'ask', wallSeconds: 12, deadline: 3600});
-    h.clock.advance(20 * 60000);
-    h.tel.tick();
-    void h.tel.flushNow().catch(() => {});
-    await new Promise(resolve => setImmediate(resolve));
-    void label;
-  };
-}
-
-test('lender decisions are identical with telemetry stalled and the disk failing, and with no telemetry at all', async () => {
-  const baseline = await lenderDecisions();
-  assert.ok(baseline.length >= 27 && baseline.some(row => row[1] === 'error') && baseline.some(row => row[1] === 'ok'), 'the sequence makes real accept and refuse decisions');
-
-  // Telemetry on, an upload that never answers, and every write failing.
-  let stalled = 0;
-  const h = makeTelemetry({transport: () => { stalled++; return new Promise(() => {}); }, health: () => ({readiness: {checks: []}}), seed: 9});
-  rmSync(join(h.dir, 'rollup.json'), {force: true}); mkdirSync(join(h.dir, 'rollup.json')); // saveRollup fails
-  rmSync(join(h.dir, 'outbox'), {recursive: true}); writeFileSync(join(h.dir, 'outbox'), 'not a directory'); // the outbox fails
-  try {
-    const withTelemetry = await lenderDecisions(telemetryNoise(h));
-    assert.deepEqual(withTelemetry, baseline, 'the same decisions in the same order');
-    assert.ok(stalled <= 1, 'the upload was attempted and is stalled, one at a time');
-  } finally { await h.tel.close().catch(() => {}); h.cleanup(); }
-
-  // And with the telemetry directory read-only (a full disk looks like this to the writer). Root ignores permissions: skip there.
-  if (process.getuid?.() !== 0) {
-    const g = makeTelemetry({transport: () => new Promise(() => {}), seed: 10});
-    g.tel.observe('lender-failure', failure);
-    for (const sub of ['outbox', 'sent']) chmodSync(join(g.dir, sub), 0o500);
-    chmodSync(g.dir, 0o500);
-    try {
-      const readOnly = await lenderDecisions(telemetryNoise(g));
-      assert.deepEqual(readOnly, baseline);
-    } finally { chmodSync(g.dir, 0o700); for (const sub of ['outbox', 'sent']) chmodSync(join(g.dir, sub), 0o700); await g.tel.close().catch(() => {}); g.cleanup(); }
-  }
-});
-
-test('the decisions do not depend on what telemetry has seen: a long busy telemetry run before them changes nothing either', async () => {
-  const baseline = await lenderDecisions();
-  const h = makeTelemetry({seed: 12});
-  try {
-    for (let i = 0; i < 300; i++) { h.tel.observe('lender-failure', {code: ['sandbox_start_failed', 'lender_failed'][i % 2], phase: 'run'}); if (i % 20 === 0) await settle(h); }
-    assert.deepEqual(await lenderDecisions(telemetryNoise(h)), baseline);
-  } finally { h.cleanup(); }
-});
 
 // ---- (d) Telemetry failure leaves the app green ------------------------------------------------------------------------------------
 

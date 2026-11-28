@@ -7,9 +7,7 @@ import * as p from '../../lib/protocol/index.mjs';
 import {barrier} from './crash-process.mjs';
 import {openDevice} from '../../lib/v1/device.mjs';
 import {startApp} from '../../lib/v1/app.mjs';
-import {createLendingRuntime} from '../../lib/v1/lending-runtime.mjs';
-import {normalizeLendingPolicy} from '../../lib/v1/lending-policy.mjs';
-import {createSyntheticPace50Source} from './pace50-synthetic-source.mjs';
+import {createAccountStore} from '../../lib/v1/accounts.mjs';
 
 const [directory,selected,mode]=process.argv.slice(2);
 const config=JSON.parse(fs.readFileSync(join(directory,'crash-config.json'),'utf8'));
@@ -34,14 +32,15 @@ if(mode==='run') {
   fs.writeFileSync(join(stateDir,'app-settings.json'),JSON.stringify({version:1,intent:config.intent==='paused'?'on':'off',
     paused:config.intent==='paused',enabled:false,activeCircle:roster.payload.circle,agents:{},modes:{},limits:{}}));
 }
-// The app restart must recover the same durable candidate used by the original
-// run; a fake admission with no ledger cannot stand in for unknown usage.
-const quotaSource=createSyntheticPace50Source({start:config.now});
+// The original synthetic account remains available to the real app's scoped transcript scanner after restart.
+if(mode==='run')await createAccountStore({directory:join(stateDir,'accounts')}).transaction(state=>{
+  state.records['fixture-account']={schemaVersion:1,id:'fixture-account',providerId:'codex',label:'Synthetic recovery account',
+    authState:'signed_in',generation:0,expiresAtMs:null,enabled:true,modelOrder:[],subjectId:'synthetic-recovery',
+    secret:{key:'SYNTHETIC_RECOVERY_KEY'},refreshIntent:null};
+  state.accountOrder=['fixture-account'];
+});
+// Recovery uses the persisted attempt selection from the original account run.
 fixture.policy.userActive=async()=>false;
-if(mode!=='app-recover')fixture.policy.lendingRuntime=createLendingRuntime({directory:stateDir,
-  settings:()=>({intent:'on',limits:{lendingPolicy:normalizeLendingPolicy({providerConsent:{codex:true}})}}),
-  backend:fixture.backend,presence:()=>false,lastActiveAt:()=>null,selfKey:()=>null,now:clock.now,
-  pace50:{account:vectors.keys[1].fingerprint,account_week_id:'synthetic-week-1',source:quotaSource}});
 const storage=createLenderCounterStorage(join(stateDir,'app-counters.json'),{decorate:value=>({...value,circle:roster.payload.circle})});
 const collect=fixture.backend.collectDeclaredOutputs;
 fixture.backend.collectDeclaredOutputs=async(...args)=>{
@@ -96,7 +95,7 @@ client.stopped=async(...args)=>{
 const controller=new AbortController();
 if(mode==='app-recover') {
   const device=await openDevice({home,origin:null,ensureDefault:false,clock:()=>Math.floor(config.now/1000),clientOptions:{retry:{maxAttempts:1}}});
-  const app=await startApp({home,sessionHomeDir:home,device,origin:null,freshLending:'off',lendingPace50:{source:quotaSource,account_week_id:'synthetic-week-1'},port:0,openBrowser:false,clock,backendFactory:()=>fixture.backend,adapters:[],autoApprove:false,joinWaitMs:0,quotaReader:async()=>({remaining:100,observedAt:config.now}),idleReader:async()=>false,signInProbe:async()=>({signedIn:null}),identityProbe:async()=>({providers:[]}),pollMs:20,blockerRecheckMs:50});
+  const app=await startApp({home,sessionHomeDir:home,device,origin:null,freshLending:'off',port:0,openBrowser:false,clock,backendFactory:()=>fixture.backend,adapters:[],autoApprove:false,joinWaitMs:0,quotaReader:async()=>({remaining:100,observedAt:config.now}),idleReader:async()=>false,signInProbe:async()=>({signedIn:null}),identityProbe:async()=>({providers:[]}),pollMs:20,blockerRecheckMs:50});
   // Read only: startup and the app's resident worker must drive every recovery action.
   const poll=setInterval(async()=>{
     const saved=await storage.get();
@@ -107,11 +106,11 @@ if(mode==='app-recover') {
     }
   },30);
 } else {
-const lender=createLender({client,backend:fixture.backend,adapters:mode==='recover'?[]:fixture.adapters,
+const lender=createLender({...fixture.runOptions,client,backend:fixture.backend,adapters:mode==='recover'?[]:fixture.adapters,
   policy:{...fixture.policy,...(config.liveStop?{renewMs:100}:{}),enabled:mode!=='recover',storage},clock,approve:async()=>true,credentialValues:async()=>[],
   onDiagnostic:event=>process.stderr.write(JSON.stringify(event)+'\n'),
   onEvent:async event=>{
-    if(mode==='recover'&&['finished','paused'].includes(event.status)){
+    if(mode==='recover'&&(['finished','paused'].includes(event.status)||event.status==='waiting_for_sandbox'&&event.reason==='lending_off')){
       const saved=await storage.get();
       if(!saved.pending&&!saved.resultPending&&!saved.declinePending&&!saved.stoppedPending&&!saved.outputPending){
         fs.writeFileSync(join(directory,'recovered.json'),JSON.stringify(saved));

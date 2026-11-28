@@ -16,7 +16,7 @@ test('a real HTTP lender relays live redacted prose and command activity to its 
     return original(handle,opts);
   };
   const controller=new AbortController();
-  const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
     approve:async()=>true,credentialValues:async()=>[],onEvent:e=>f.events.push(e)});
   const running=lender.start(controller.signal);
   f.stop=async()=>{f.execution.resolve();controller.abort();await running;};

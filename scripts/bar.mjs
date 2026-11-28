@@ -9,6 +9,13 @@ import {main as realJobs} from './bar-real-jobs.mjs';
 const execute=promisify(execFile);
 const cwd=fileURLToPath(new URL('../',import.meta.url));
 export const runCommand=(command,args,options={})=>execute(command,args,{cwd,timeout:300_000,maxBuffer:4*1024*1024,...options});
+export async function repositoryName(run=runCommand) {
+  const {stdout}=await run('git',['remote','get-url','origin']);
+  const match=stdout.trim().match(/^(?:git@github\.com:|https:\/\/github\.com\/|ssh:\/\/git@github\.com\/)([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/);
+  if(!match)throw Error('Hosted checks require a GitHub origin remote');
+  return match[1];
+}
+const repository=await repositoryName();
 async function requireFiles(files,root=cwd) {
   for(const file of files) {
     try {await access(resolve(root,file));} catch {throw Error('not built: '+file);}
@@ -37,33 +44,37 @@ export function ownerOfflineCheck({run=runCommand,real=()=>realJobs(['--member-h
     return {pass:tests.pass&&jobs.pass,reason:`${tests.reason}; ${jobs.reason.startsWith('real:')?jobs.reason:'real: '+jobs.reason}`};
   };
 }
-async function trunkHead() {
-  const {stdout}=await runCommand('git',['ls-remote','origin','refs/heads/faravan/integ-fold-1120']);
-  const sha=stdout.trim().split(/\s/)[0];
-  if(!/^[a-f0-9]{40}$/.test(sha))throw Error('Could not read trunk head');
+export async function trunkHead({run=runCommand,branch=process.env.FARAVAN_BAR_BRANCH||'ff/t1-integ-1127'}={}) {
+  const ref='refs/heads/'+branch;
+  const {stdout}=await run('git',['ls-remote','origin',ref]);
+  const [sha,observedRef]=stdout.trim().split(/\s+/);
+  if(!/^[a-f0-9]{40}$/.test(sha)||observedRef!==ref)throw Error('Could not read configured branch head');
   return sha;
 }
 async function hostedCheck(workflow,{install=false}={}) {
   await requireFiles(['.github/workflows/'+workflow,...(install?['docs/install.md']:[])]);
   const sha=await trunkHead();
-  const {stdout}=await runCommand('gh',['run','list','--repo','tnunamak/faravan','--workflow',workflow,'--commit',sha,'--json','conclusion,databaseId','--limit','1']);
+  const {stdout}=await runCommand('gh',['run','list','--repo',repository,'--workflow',workflow,'--commit',sha,'--json','conclusion,databaseId','--limit','1']);
   const newest=JSON.parse(stdout)[0];
   if(!newest||newest.conclusion!=='success')return {pass:false,reason:`${workflow}: newest run for ${sha} ${newest?.conclusion||'has not succeeded'}`};
-  const {stdout:detail}=await runCommand('gh',['run','view',String(newest.databaseId),'--repo','tnunamak/faravan','--json','jobs']);
+  const {stdout:detail}=await runCommand('gh',['run','view',String(newest.databaseId),'--repo',repository,'--json','jobs']);
   const jobs=JSON.parse(detail).jobs;
   const platforms=[/macos|darwin|\bmac\b/i,/linux|ubuntu/i];
   const pass=platforms.every(pattern=>jobs.some(job=>pattern.test(job.name)&&job.conclusion==='success'))&&jobs.every(job=>job.conclusion==='success');
   return {pass,reason:`${workflow} run ${newest.databaseId}: ${pass?'macOS and Linux succeeded':'macOS and Linux success not confirmed'}`};
 }
-async function candidateCheck() {
-  const manifest=await readManifest(candidateURL);
-  const sha=await trunkHead();
-  if(manifestCommit(manifest)!==sha)return {pass:false,reason:'candidate commit differs from trunk '+sha};
+export async function candidateCheck({read=readManifest,head=trunkHead,headFile=fetch}={}) {
+  const manifest=await read(candidateURL);
+  if(typeof manifest.privateHead!=='string'||!/^[a-f0-9]{40}$/i.test(manifest.privateHead))
+    return {pass:false,reason:'candidate lacks signed privateHead'};
+  const sha=await head();
+  if(manifest.privateHead.toLowerCase()!==sha)
+    return {pass:false,reason:'candidate privateHead differs from configured branch head '+sha};
   const files=[{url:manifest.tarball,size:manifest.size},...(manifest.assets??[])];
   if(!manifest.deb||!files.some(file=>file.platform==='darwin'))return {pass:false,reason:'candidate lacks Linux .deb or macOS app'};
   files.push({url:new URL(manifest.deb.file,manifest.tarball).href,size:manifest.deb.size});
   for(const file of files) {
-    const response=await fetch(new URL(file.url,candidateURL),{method:'HEAD',cache:'no-store',signal:AbortSignal.timeout(30000)});
+    const response=await headFile(new URL(file.url,candidateURL),{method:'HEAD',cache:'no-store',signal:AbortSignal.timeout(30000)});
     if(!response.ok||response.headers.get('content-length')!==String(file.size))throw Error('File unavailable or size differs: '+file.url);
   }
   return {pass:true,reason:`signed candidate ${sha}; ${files.length} file sizes match`};
@@ -73,7 +84,7 @@ export function createRows() {
     {id:'R1',userCan:'get the build',check:candidateCheck},
     {id:'R2',userCan:'install without a terminal',check:()=>hostedCheck('bar-install.yml',{install:true})},
     {id:'R3',userCan:'join and borrow from another network',check:()=>hostedCheck('bar-join-borrow.yml')},
-    {id:'R4',userCan:'lend the first job offered',check:testCheck(['tests/availability.test.mjs','tests/admission-tombstone.test.mjs'])},
+    {id:'R4',userCan:'lend the first job offered',check:testCheck(['tests/availability.test.mjs','tests/admission-tombstone.test.mjs'],{timeout:900_000})},
     {id:'R5',userCan:'use two accounts of one provider, one sign-in each',check:testCheck(['tests/account-claim-time-admission.test.mjs','tests/run-request.test.mjs','tests/second-account-one-signin.test.mjs'])},
     {id:'R6',userCan:'know the one next step when held',check:testCheck(['tests/reason-codes-closed.test.mjs','tests/abandoned-request-log.test.mjs'])},
     {id:'R7',userCan:"work with the owner's machine off",check:ownerOfflineCheck()},
@@ -85,7 +96,7 @@ export function createRows() {
       });
       return JSON.parse(stdout);
     }},
-    {id:'R9',userCan:'(the owner) see it',check:async()=>{
+    {id:'R9',userCan:'(owner) see it',check:async()=>{
       const candidate=manifestCommit(await readManifest(candidateURL));
       const latest=manifestCommit(await readManifest(latestURL));
       return {pass:candidate===latest,reason:candidate===latest?'latest names candidate commit '+candidate:'latest and candidate commits differ'};

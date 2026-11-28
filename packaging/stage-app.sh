@@ -22,6 +22,8 @@ install_data() {
   install -m 0644 "$1" "$2"
 }
 mkdir -p "$dest/bin" "$dest/lib" "$dest/public"
+# npm ci under a symlinked prefix (macOS /var/folders) names the root by its folder and fails the lock check.
+dest="$(cd "$dest" && pwd -P)"
 # Keep the package scope explicit: only Faravan entry points and their Node
 # modules are staged, never the rest of the Waspflow control plane.
 # A read loop rather than `xargs -r`, which BSD xargs on macOS does not document.

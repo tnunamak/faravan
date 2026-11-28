@@ -728,10 +728,12 @@ test('doctor never starts a workspace after failed preflight and reports workspa
 test('runtime health repairs a stopped daemon and verifies readiness, without stopping a service', async () => {
   const stub = identityCommandStub({ daemonReady: false });
   const backend = new DockerSbxBackend({home:testHome});
-  backend._verifiedIdentityPolicy = { daemon: 'previous' };
+  const previousPolicies = backend._verifiedIdentityPolicies;
+  previousPolicies.set('old-daemon-policy', { verification: {} });
   const report = await backend.recoverHealth({ runCommand: stub.runCommand, platformName: 'linux' });
   assert.equal(report.recovered, true);
-  assert.equal(backend._verifiedIdentityPolicy, null, 'a restarted daemon must repeat identity-policy checks');
+  assert.notEqual(backend._verifiedIdentityPolicies, previousPolicies, 'in-flight old-daemon proofs must not populate the new cache');
+  assert.equal(backend._verifiedIdentityPolicies.size, 0, 'a restarted daemon must repeat identity-policy checks');
   assert.equal(report.preflight.checks.find(c => c.name === 'sbx_daemon').ok, true);
   assert.equal(stub.calls.filter(c => c.args.join(' ') === 'daemon start --detach').length, 1);
   assert.equal(stub.calls.some(c => c.args.join(' ') === 'daemon stop'), false);

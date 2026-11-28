@@ -4,6 +4,7 @@ import {MemberAddress, MemberOrigins} from './member-address.jsx';
 import { Button, Icon, Card, Avatar, Row, Field, Switch, Tabs } from './ds/index.mjs';
 import { circleJobsStatus, circlesListVM, joinOutcomeVM, circlePerson, memberAvailability, deviceUsage, circleHostingVM, devicesListVM, hostedHere, invitationExpiryLabel } from './circles-view.mjs';
 import { useState, useRef, useEffect } from 'preact/hooks';
+import {formatDayTime} from './dates.mjs';
 import {
   safeName,
   createJoinReview,
@@ -142,12 +143,12 @@ export function JoinOutcome({outcome}) {
   return <p role="status" class={(outcome.joined ? 'join-outcome' : 'join-outcome t-2') + ' ph-no-capture'} data-telemetry-private="circles">{outcome.message}{outcome.joined && <> · <a href="#/new" onClick={composeIn(outcome.circleId)}>Send your first job</a> · <Link page="circle" id={outcome.circleId}>View circle</Link></>}</p>;
 }
 
-function CircleJobsNotice({id, data, readError, selected = false}) {
+function CircleJobsNotice({id, circle, data, readError, selected = false}) {
   const coverage = selected && readError && !data.jobCircleCoverage
     ? [{circleId:id,state:'unavailable'}] : data.jobCircleCoverage;
-  const status = circleJobsStatus(id, coverage, data.uncheckedJobCircles ?? [], readError);
+  const status = circleJobsStatus(id, coverage, data.uncheckedJobCircles ?? [], readError, {circle});
   return status ? <span class="t-xs t-2" role={status.warning ? 'status' : undefined}>{status.message}
-    {status.savedAt && <> Last synced: <time dateTime={status.savedAt}>{new Date(status.savedAt).toLocaleString()}</time>.</>}
+    {status.savedAt && <> Last synced: <time dateTime={status.savedAt}>{formatDayTime(status.savedAt)}</time>.</>}
   </span> : null;
 }
 
@@ -198,7 +199,7 @@ export function Circles({ circles, data, mutate, api, takeJoinLink, revision, re
       {errors.devices && <Card pad><p role="alert">Could not refresh members. Any counts shown are last-known information. {memberReadMessage(errors.devices)}</p><Action className="btn btn-secondary" run={refresh} success="">Retry members</Action></Card>}
       {!errors.devices && staleCircles.size > 0 && <Card pad><p role="alert">Could not refresh members{staleCircleNames.length ? ' in ' + staleCircleNames.join(', ') : ' in an affected circle'}. Counts for affected circles are last-known information.</p><Action className="btn btn-secondary" run={refresh} success="">Retry members</Action></Card>}
       {data.circles === undefined ? errors.circles ? null : <CircleSkeleton /> : rows.length ? (
-        <ul class="list card" aria-label="Your circles">{rows.map(row => <li class="circle-list-row" key={row.id}><Row href={row.href} avatar={<Avatar groupName={row.name} id={row.id} />} title={row.name} meta={<><span class="row-purpose">{row.purpose || 'No description'}</span>{row.meta}<CircleJobsNotice id={row.id} data={data} readError={errors.jobs} /></>} />{row.hostingAction && <a class="btn btn-secondary" href={row.hostingAction.href}>{row.hostingAction.label}</a>}</li>)}</ul>
+        <ul class="list card" aria-label="Your circles">{rows.map(row => <li class="circle-list-row" key={row.id}><Row href={row.href} avatar={<Avatar groupName={row.name} id={row.id} />} title={row.name} meta={<><span class="row-purpose">{row.purpose || 'No description'}</span>{row.meta}{' '}<CircleJobsNotice id={row.id} circle={circles.find(circle => circle.id === row.id)} data={data} readError={errors.jobs} /></>} />{row.hostingAction && <a class="btn btn-secondary" href={row.hostingAction.href}>{row.hostingAction.label}</a>}</li>)}</ul>
       ) : errors.circles ? null : <div class="empty"><Icon name="circles" size="lg" /><h2 class="t-title3">Work with people you trust.</h2><p class="t-sm t-2">Start a circle to share spare agent time, or join with an invitation.</p></div>}
       {data.circles !== undefined && <div class={'hstack-2 wrap' + (!rows.length ? ' circle-empty-actions' : '')}><Button href="#/circles/new">Start a circle</Button><Button kind="quiet" onClick={() => setJoiningOpen(!joiningOpen)} aria-expanded={joiningOpen}>Join with an invitation</Button></div>}
       <p class="t-sm t-2">A circle is a group of people who share agent time with each other.</p>
@@ -422,7 +423,7 @@ export function Circle({ id, circles, data, lending = {}, mutate, api, revision,
     {errors.circles && <Card pad><p role="alert">Could not refresh circles. Circle details shown are last-known information. {errorMessage(errors.circles)}</p><Action className="btn btn-secondary" run={refresh} success="">Retry circles</Action></Card>}
     {(errors.devices || memberGroup?.membersLastKnown === true) && <Card pad><p role="alert">Could not refresh members. Any rows and counts shown are last-known information. {errors.devices ? memberReadMessage(errors.devices) : ''}</p><Action className="btn btn-secondary" run={refresh} success="">Retry members</Action></Card>}
     <MemberHostNotices items={hostNotices} />
-    {canReadJobs && <CircleJobsNotice id={id} selected data={selectedJobs ? {jobCircleCoverage:selectedJobs.circleCoverage} : data} readError={taskJobs.error ?? (selectedJobs ? null : errors.jobs)} />}
+    {canReadJobs && <CircleJobsNotice id={id} circle={circle} selected data={selectedJobs ? {jobCircleCoverage:selectedJobs.circleCoverage} : data} readError={taskJobs.error ?? (selectedJobs ? null : errors.jobs)} />}
     {!joining && <div><a class={'btn ' + (inviteFirst ? 'btn-secondary' : 'btn-primary')} href="#/new" onClick={leaveFor('#/new', composeIn(id))}>Send a job</a></div>}
     {joining && <Card pad><p>{joiningMessage}</p>{joining.code && <p>Match code <strong>{joining.code}</strong>.{!needsOwnerApproval && ' The owner sees the same code beside this computer’s name.'}</p>}{joining.waiting && <Action run={async () => {setCheckingJoin(true);try{await mutate('circles/' + enc(id) + '/check', {});}finally{setCheckingJoin(false);}focusOutcome();}} success="Checked.">Check approval</Action>}</Card>}
     {inviting && <Card pad class="stack-4">

@@ -135,7 +135,7 @@ const rows = {
   paused:['Paused','Lending is paused. No new jobs will start.','Resume lending'],
   user_active:["Waiting until you're away",'Automatic lending is waiting for this computer to be idle.','Edit limits'],
   daily_limit:['Daily limit reached',"Today's lending limit is reached.",'Edit limits'],
-  quota_reserve:['Keeping allowance for you','Your remaining allowance is being kept for you.','View allowance'],
+  no_spare:['Keeping allowance for you','Your remaining allowance is being kept for you.','View allowance'],
   model_not_lendable:['No lender can take this model now','The lenders here cannot take this model right now. Try another model, or try again later.','Choose another model'],
   quota_unknown:["Can't read your allowance",'Automatic jobs start once Faravan can read your remaining allowance.','Use ask-each-time'],
   action_needed:['Sign-in needed','New jobs using this account are paused.','Choose another agent'],
@@ -164,7 +164,7 @@ const rows = {
   connection_lost:['Connection lost','It may still be running','Check status'],
   stopping:['Stopping','Waiting for sandbox removal. Lending remains paused.','Check status'],
   stopped_by_lender:['Stopped','The job was stopped on this computer. Lending remains paused.','Open the job'],
-  stop_report_pending:['Stop report pending','The sandbox was removed. Waiting for the queue to acknowledge the stop.','Check status'],
+  cleanup_pending:['Finishing cleanup','This computer is finishing sandbox cleanup.','Wait for cleanup'],
   cessation_unverified:['Stop requested','Waiting for confirmation','Check status'],
   expired:['Expired','This job has expired. Review its history before submitting again.','Submit again'],
   agent_not_chosen:['Choose an agent to lend','A ready agent is available. Choose which one may help.','Choose an agent'],
@@ -220,7 +220,7 @@ export function statusView(value, facts = {}) {
   if (missing) return {label:missing.line, message:missing.line, remedy:missing.action};
   // A lending wait follows its reason: a signed-out or unchosen agent is not a protected workspace problem.
   if (key === 'waiting_for_sandbox' && facts.reason) {
-    const wait = waitView(facts.reason, {agent: facts.agentName ? safeName(facts.agentName, '') : ''});
+    const wait = waitView(facts.reason, {until:facts.until,nextAction:facts.nextAction,detail:facts.detail});
     return {label:wait.headline, message:wait.message, remedy:wait.remedy};
   }
   const [label, message, remedy] = rows[key] || ['Status unavailable','We could not recognize this status.','Refresh status'];
@@ -365,7 +365,7 @@ export function routeFromHash(hash='') {
     if(page==='settings'&&parts.length===2&&['all','profile','appearance','notifications','updates','phone','data','account'].includes(parts[1]))return {page,id:parts[1]};
     if(page==='setup'&&parts.length===2&&parts[1]==='details')return {page,id:'details'};
     if((page==='jobs'&&parts[1]==='new'&&parts.length===2)||(page==='new-job'&&parts.length===1))return {page:'borrow',id:null};
-    if(page==='lend'&&parts[1]==='limits'&&(parts.length===2 || parts.length===3 && parts[2]==='owner-limit'))return {page:'limits',id:null};
+    if(page==='lend'&&parts[1]==='limits'&&parts.length===2)return {page:'limits',id:null};
     if(page==='circles'&&parts[1]==='host'&&parts.length===2)return {page:'host',id:null};
     if(page==='circles'&&parts[1]==='new'&&parts.length===2)return {page:'host',id:'new'};
     if(page==='person')return parts.length===3?{page,id:parts[1],circle:parts[2]}:{page:'not-found',id:null};
@@ -379,7 +379,7 @@ export function routeFromHash(hash='') {
 // The service also reports paused on a never-enabled device; do not present it as a user pause.
 export function lendingView(lending={}) {
   const projection=lendingProjectionOf(lending&&typeof lending==='object'&&Object.hasOwn(lending,'lendingProjection') ? lending : {lending});
-  const view=formatLendingProjection(projection,{agentName:projection.admissionReason==='agent_signed_out'?agentLabel(lending.agent):''});
+  const view=formatLendingProjection(projection,{agentName:projection.admissionReason==='account_signed_out'?agentLabel(lending.agent):'',until:lending.until??lending.lending?.until,nextAction:lending.nextAction??lending.lending?.nextAction,detail:lending.detail??lending.lending?.detail});
   return {label:view.label,message:view.reason,remedy:view.remedy};
 }
 export function lendingBadge(lending={},attention=[]) {

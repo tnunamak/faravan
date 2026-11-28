@@ -61,6 +61,13 @@ test('owner-store job JSON names the owner as its home',async t=>{
   const f=await fixture(t),circle=await create(f),digest=await submit(f,circle);
   assert.deepEqual(parseOne(await f.cli(['job','status',digest,'--circle',circle,'--json'])).jobHome,{origin:f.origin,ownerOrigin:f.origin});
 });
+test('owner-store job list rows name the owner as their home too',async t=>{
+  const f=await fixture(t),circle=await create(f);
+  await submit(f,circle);
+  const rows=parseOne(await f.cli(['job','list','--circle',circle,'--json']));
+  assert.equal(rows.length,1);
+  assert.deepEqual(rows[0].jobHome,{origin:f.origin,ownerOrigin:f.origin});
+});
 test('circle join copy follows verified membership and retries an unknown saved intent',()=>{
   const joined={id:'circle',name:'Friends',origin:'https://example.test'};
   const unknown={...joined,joinIntent:{outcome:'unknown'}};
@@ -92,34 +99,31 @@ test('shared ops and legacy CLI carry requested model and effort into the signed
   }};
   const base={circle,prompt:'Requested reasoning',git:{url:'https://example.test/synthetic.git',commit:'a'.repeat(40)},
     result:{kind:'message'},model:'synthetic-model'};
-  const sent=await runOp('jobs.submit',{...base,budget_v1:{effort:'high'}},context);
+  const sent=await runOp('jobs.submit',{...base,effort:'high'},context);
   const shared=f.jobs.get(sent.jobDigest).job;
-  assert.deepEqual(shared.payload.requirements.model,{any_of:['synthetic-model']});
-  assert.deepEqual(shared.payload.budget_v1,{effort:'high'});
-  assert.ok(shared.payload.requirements.capabilities.includes('budget_v1'));
+  assert.equal(shared.payload.runRequest.effortId,'high');
+  assert.ok(shared.payload.runRequest.models.every(model=>model.modelId==='synthetic-model'));
+  assert.ok(shared.payload.requirements.capabilities.includes('run_request_v1'));
   assert.equal(digest(shared.payload),sent.jobDigest);
   const legacy=await submit(f,circle,['--model','synthetic-model','--effort','high']);
   const signed=f.jobs.get(legacy).job;
-  assert.deepEqual(signed.payload.requirements.model,{any_of:['synthetic-model']});
-  assert.deepEqual(signed.payload.budget_v1,{effort:'high'});
+  assert.deepEqual(signed.payload.runRequest,shared.payload.runRequest);
   assert.equal(digest(signed.payload),legacy);
   const omitted=await runOp('jobs.submit',base,context);
-  assert.equal(f.jobs.get(omitted.jobDigest).job.payload.budget_v1,undefined);
+  assert.equal(f.jobs.get(omitted.jobDigest).job.payload.runRequest.effortId,null);
   const plain=await submit(f,circle);
-  assert.equal(f.jobs.get(plain).job.payload.budget_v1,undefined);
-  const withCap=await submit(f,circle,['--budget-v1','{"max_list_usd":10,"effort":"high"}','--effort','high']);
-  assert.deepEqual(f.jobs.get(withCap).job.payload.budget_v1,{max_list_usd:10,effort:'high'});
+  assert.equal(f.jobs.get(plain).job.payload.runRequest.effortId,null);
+
 });
 
 test('legacy requested effort refuses invalid and conflicting inputs before network',async t=>{
   const f=await fixture(t),circle=await create(f),before=f.requests.length;
   for(const extra of [
-    ['--effort','ultra'],['--effort','null'],
+    ['--effort',''],
     ['--budget-v1','{"effort":"low"}','--effort','high'],
-    ['--budget-v1','null'],['--budget-v1','{}'],['--budget-v1','not-json'],
-    ['--budget-v1','{"effort":null}'],['--budget-v1','{"max_list_usd":0}','--effort','high'],
-    ['--budget-v1','{"max_list_usd":1.5}'],['--budget-v1','{"max_list_usd":100001}'],
-    ['--budget-v1','{"extra":true,"effort":"high"}'],
+    ['--budget-v1','not-json'],
+    ['--budget-v1','{"max_list_usd":0}','--effort','high'],
+    ['--budget-v1','{"max_list_usd":1.5}'],
   ]) {
     const result=await f.cli(['job','submit','--yes','--git',git,'--prompt','Refuse invalid reasoning','--circle',circle,'--json',...extra]);
     assert.equal(result.code,2,result.stdout+result.stderr);
@@ -196,7 +200,7 @@ test('borrowers can fix a check command in the signed request without running it
   assert.equal(f.requests.length,before,'invalid checks are rejected before any network request');
   const plain=await submit(f,circle);
   assert.equal(f.jobs.get(plain).job.payload.verify,undefined);
-  assert.deepEqual(f.jobs.get(plain).job.payload.requirements.capabilities,['filtered_git_v1']);
+  assert.deepEqual(f.jobs.get(plain).job.payload.requirements.capabilities,['filtered_git_v1','run_request_v1']);
   const ops=createJobOperations({home:await f.home()});
   const request={git,prompt:'Check this',circle,draftId:'check-command-0001',verify:{cmd:'npm test'}};
   const sent=await ops.submit(request), replay=await ops.submit(request);

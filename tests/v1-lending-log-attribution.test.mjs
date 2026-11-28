@@ -7,7 +7,7 @@ import {chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync,
 import {join} from 'node:path';
 import {createLogAttributionStore, localLogRoots, measurementExpired, measurementFor} from '../lib/v1/lending-log-attribution.mjs';
 import {importLendingHistory, readLocalAgentSessionLogsInWorker} from '../lib/v1/lending-history-import.mjs';
-import {liveReservationSpent} from '../lib/v1/lender-pace50.mjs';
+
 import {calibrationMissingCopy, learningCopy, learningCreatorUnknownLine, learningExpiredLine, learningLine, LEARNING_OFF_LINE} from '../lib/v1/lending-status-copy.mjs';
 
 const hx = value => createHash('sha256').update(String(value).trim().toLowerCase()).digest('hex').slice(0, 16);
@@ -178,24 +178,6 @@ test('a message copied into a resumed session file is priced once', t => {
     currentWindows:[{account:'claude', resource:'claude:seven_day', start_at:now - 4 * day, observed_at:now, meter_points:2,
       account_week_id:'w', week_start:now - 4 * day}]});
   assert.equal(estimates[0].estimate.upper_micro, 3_000_000, '$1 of use, not $2');
-});
-
-test('a guard reading stops a lent job once a reserved window rose by the whole reservation', () => {
-  const resources = [{id:'seven_day', baseline_used_micro:20_000_000, initial_micro:3_000_000},
-    {id:'five_hour', baseline_used_micro:40_000_000, initial_micro:9_000_000}];
-  assert.equal(liveReservationSpent(resources, [{window_id:'seven_day', used_pct:22.999}, {window_id:'five_hour', used_pct:48}]), false);
-  assert.equal(liveReservationSpent(resources, [{window_id:'seven_day', used_pct:23}]), true);
-  assert.equal(liveReservationSpent(resources, [{window_id:'five_hour', used_pct:49}]), true);
-  assert.equal(liveReservationSpent(resources, [{window_id:'seven_day', used_pct:5}]), false, 'a window reset is not a rise');
-  assert.equal(liveReservationSpent(resources, []), false);
-  assert.equal(liveReservationSpent(resources, undefined), false);
-  assert.equal(liveReservationSpent(undefined, [{window_id:'seven_day', used_pct:99}]), false);
-  // A later window instance counts from zero; jitter in the reset time does not.
-  const reset = Date.UTC(2026, 10, 3);
-  const reserved = [{id:'seven_day', resets_at:reset, baseline_used_micro:20_000_000, initial_micro:3_000_000}];
-  assert.equal(liveReservationSpent(reserved, [{window_id:'seven_day', used_pct:3, resets_at:new Date(reset + 7 * 86_400_000).toISOString()}]), true);
-  assert.equal(liveReservationSpent(reserved, [{window_id:'seven_day', used_pct:2.5, resets_at:new Date(reset + 7 * 86_400_000).toISOString()}]), false);
-  assert.equal(liveReservationSpent(reserved, [{window_id:'seven_day', used_pct:3, resets_at:new Date(reset + 900).toISOString()}]), false);
 });
 
 // Was the measuring hold's copy; no history now lends natively, so the copy says it lends in points until local logs measure a rate.

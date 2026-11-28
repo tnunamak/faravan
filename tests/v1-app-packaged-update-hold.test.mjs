@@ -62,11 +62,14 @@ test('On already awaiting circle selection cannot start a lender across preparat
 });
 
 
-test('late durable resume completes a live pool while preparation still fences admission',{timeout:45000},async root=>{
-  for(let offset=-1;offset<8;offset++)await root.test('microtask offset '+offset,{timeout:8000},async t=>{
+// Each offset starts two apps and a circle. Measured 2026-11-27 at load 13-21: 7.9 to 12.9 s per offset, 88 to 94 s for all nine;
+// the three single-case tests above use the same fixture and take 9.8 to 12.4 s. With the old 8 s and 45 s bounds every run failed. Nine
+// of them run in sequence. A hang is much longer (a missed trigger waited past 60 s), so these bounds still end one.
+test('late durable resume completes a live pool while preparation still fences admission',{timeout:200000},async root=>{
+  for(let offset=-1;offset<8;offset++)await root.test('microtask offset '+offset,{timeout:20000},async t=>{
     const c=preparation(t),{lender,circle}=await configured(t,c);
-    const original=lender.app.device.client.bind(lender.app.device);let once=true;
-    lender.app.device.client=async(...args)=>{
+    const original=lender.app.device.lendingClient.bind(lender.app.device);let once=true;
+    lender.app.device.lendingClient=async(...args)=>{
       const client=await original(...args);
       if(offset>=0&&once){once=false;let remaining=offset;const fire=()=>{if(remaining-->0)queueMicrotask(fire);else c.trigger();};fire();}
       return client;

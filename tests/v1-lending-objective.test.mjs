@@ -155,7 +155,7 @@ function lendInput({remaining = 100, reserve = 10, later = 0} = {}) {
       {id: 'short', kind: 'short', remainingMicro: 100 * M, resetAtMs: 105, pointsPerUsdMicro: M,
         pointsPerUsdLowerMicro: M, known: true, fresh: true, compatible: true},
     ],
-    weeklyResource: 'weekly', now: 100, stopMarginMs: 1, laterBurnCapacityMicro: later * M, ownerMaxJobUsdMicro: null,
+    weeklyResource: 'weekly', now: 100, stopMarginMs: 1, laterBurnCapacityMicro: later * M,
     band: bandInput(9, reserve), position: 'keep_more_for_me', gates,
     actions: [{id: 'use-spare', costMicro: {weekly: spare, short: spare}, usdMicro: spare, worstCallUsdMicro: 0,
       usefulValue: remaining - reserve, permitted: true, finishMs: 103}],
@@ -206,14 +206,13 @@ test('legacy discrete model carry uses only the latest persisted reserve', () =>
   assert.equal(decision.protectedOwnerPoints.weekly, 40);
 });
 
-test('revision: an unresolved direct band holds; stop/reset/USD limits remain hard gates', () => {
+test('revision: an unresolved direct band holds; stop, reset and resource limits remain hard gates', () => {
   const input = lendInput();
   input.band = bandInput(0);
   assert.equal(chooseLendingAction(input).choice, 'none');
   for (const alter of [
     x => { x.gates = {...gates, stopping: false}; },
     x => { x.actions[0].finishMs = 104; },
-    x => { x.ownerMaxJobUsdMicro = 5 * M; },
     x => { x.actions[0].costMicro.short = 91 * M; },
   ]) {
     const x = lendInput(); alter(x);

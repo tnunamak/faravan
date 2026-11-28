@@ -33,24 +33,23 @@ async function freshAutomaticOwner(t, {jobModel, injectIdentity = true}) {
   await api(lender.app, '/api/lending/mode', {method: 'POST', body: {circle: circle.id, mode: 'auto'}});
   await api(lender.app, '/api/lending/on', {method: 'POST', body: {circle: circle.id}});
   assert.deepEqual(probes, [], 'no job is waiting, so no reading is taken yet');
-  await api(owner.app, '/api/jobs', {method: 'POST', body: {circle: circle.id,
+  await api(owner.app, '/api/jobs', {headers:{'faravan-confirm':'yes'},method: 'POST', body: {circle: circle.id,
     git: {url: 'https://github.com/example/synthetic.git', commit: '1'.repeat(40)},
     prompt: 'Synthetic Claude admission: no external execution.', harness: 'claude-code-subscription',
-    ...(jobModel ? {model: jobModel} : {}), budget_v1: {max_list_usd: 2}}});
+    ...(jobModel ? {model: jobModel} : {})}});
   return {lender, probes, backend, root: f.root};
 }
 
-test('a fresh Automatic owner takes its first quota reading when a job that names the owner\'s model waits', {timeout: 180000}, async t => {
+test('a fresh owner takes its first native usage reading on explicit refresh', {timeout: 180000}, async t => {
   const {lender, probes, backend} = await freshAutomaticOwner(t, {jobModel: 'claude-haiku-5-5'});
   const agent = (await api(lender.app, '/api/agents')).find(row => row.id === 'claude-code-subscription');
   assert.deepEqual(agent.models, ['claude-haiku-5-5'], 'the chosen run model is the model this computer offers');
-  await waitFor(() => probes.length > 0, 'the waiting job to reach the quota gate, which takes the first reading', 60000);
+  await api(lender.app,'/api/agents/refresh',{method:'POST',body:{agents:['claude-code-subscription']}});
+  assert.equal(probes.length,1);
   const decision = await waitFor(async () => {
-    const view = await api(lender.app, '/api/lending');
-    const row = view.objective?.accounts?.find(account => account.provider === 'claude')?.decision;
-    return row?.reason && row.reason !== 'objective_evidence_unknown' ? row : null;
+    return (await api(lender.app,'/api/lending/readiness')).agents.find(row=>row.id==='claude-code-subscription'&&row.hasReading);
   }, 'a specific decision from the reading', 60000);
-  assert.notEqual(decision.reason, 'objective_evidence_unknown');
+  assert.equal(decision.hasReading,true);
   assert.equal(backend.calls.some(([kind]) => kind === 'run'), false, 'the test never runs an agent');
 });
 
@@ -63,11 +62,10 @@ test('a job that names a model the owner does not run still never reaches the qu
 test('a fresh owner whose Claude status names no e-mail pins the account its first reading verifies', {timeout: 180000}, async t => {
   // The real sandbox status has no e-mail, so nothing but the reading itself can say which account is enrolled.
   const {lender, probes} = await freshAutomaticOwner(t, {jobModel: 'claude-haiku-5-5', injectIdentity: false});
-  await waitFor(() => probes.length > 0, 'the waiting job to reach the quota gate', 60000);
+  await api(lender.app,'/api/agents/refresh',{method:'POST',body:{agents:['claude-code-subscription']}});
+  assert.equal(probes.length,1);
   const decision = await waitFor(async () => {
-    const view = await api(lender.app, '/api/lending');
-    const row = view.objective?.accounts?.find(account => account.provider === 'claude')?.decision;
-    return row?.reason && row.reason !== 'objective_evidence_unknown' ? row : null;
+    return (await api(lender.app,'/api/lending/readiness')).agents.find(row=>row.id==='claude-code-subscription'&&row.hasReading);
   }, 'a specific decision from the reading', 60000);
-  assert.notEqual(decision.reason, 'identity_unknown', 'the account the reading verified is the enrolled one');
+  assert.equal(decision.checks.find(check=>check.id==='account').state,'pass','the first explicit reading pins the verified identity');
 });

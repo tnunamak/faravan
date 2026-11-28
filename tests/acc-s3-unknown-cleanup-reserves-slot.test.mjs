@@ -1,3 +1,4 @@
+import {poolFactCache} from './helpers/pool-fact-cache.mjs';
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -35,9 +36,10 @@ test('a failed cleanup with an unknown account reserves one machine slot: no wor
  const f=fixture(t,{count:1,kit:false,live:true}),workers=[];
  let disk={jobs:0,milliseconds:0,accounts:{}};
  const controller=new AbortController();
- const pool=createLendingPool({backend:f.backend,storage:{get:async()=>disk,set:async v=>{disk=v;},acquire:async()=>()=>{}},capacity:1,policy:{enabled:true,dailyJobs:null,dailyMinutes:null},adapters:[{spec:{harness_id:'claude-code-subscription'}},{spec:{harness_id:'codex'}}],createLender:opts=>{const worker={start:signal=>new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true})),getState:()=>({status:'idle',reason:null,current:null}),admits:()=>opts.policy.hold(null),cessation:()=>({proven:true})};workers.push(worker);return worker;}});
+ const pool=createLendingPool({backend:f.backend,storage:{get:async()=>disk,set:async v=>{disk=v;},acquire:async()=>()=>{}},capacity:1,policy:{enabled:true,dailyJobs:null,dailyMinutes:null},adapters:[{spec:{harness_id:'claude-code-subscription'}},{spec:{harness_id:'codex'}}],createLender:opts=>{const facts=poolFactCache(opts.policy);const worker={start:async signal=>{await facts.refresh();if(!signal.aborted)await new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));},refreshAdmission:()=>facts.refresh(),getState:()=>({status:'idle',reason:null,current:null}),admits:()=>facts.reason,cessation:()=>({proven:true})};workers.push(worker);return worker;}});
  const running=pool.start(controller.signal);t.after(async()=>{controller.abort();await running;});
  while(workers.length<2)await new Promise(resolve=>setImmediate(resolve));
+ await pool.refreshAdmission();
  const reasons=workers.map(w=>w.admits());
  assert.ok(reasons.every(r=>r!==null),'every worker is held while the unknown-account cleanup holds the machine slot: '+JSON.stringify(reasons));
  assert.notEqual(pool.admits(),null,'the pool admits no new job');

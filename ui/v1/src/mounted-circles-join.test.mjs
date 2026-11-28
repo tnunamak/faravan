@@ -38,3 +38,21 @@ test('automatic preview timeout stays a review error without a creation fallback
   assert.match(view.text(),/You haven’t submitted a join request from this review/);
   assert.doesNotMatch(view.text(),/invitation was made|create another one|Invitations tab/);
 });
+
+// Screen check 11-28: a circle row ran its meta line into the job-history notice ("2 computersCould not reach…").
+test('an unreachable host notice is separated from the circle row meta line',async()=>{
+  const circle={id:'c1',name:'Weekend projects',origin:'http://host',personCount:2,joinInfo:{ownerName:'Maya'}};
+  const api=createFakeApi({hosting:{hosted:false}});
+  const view=await mount(h(Circles,{
+    circles:[circle],api,revision:0,takeJoinLink:()=> '',refresh:async()=>{},mutate:async()=>({}),
+    data:{circles:[circle],devices:{circles:[{circle:'c1',members:[{key_id:'a'},{key_id:'b'}]}]},
+      jobCircleCoverage:[{circleId:'c1',state:'unavailable',reason:'unreachable'}],uncheckedJobCircles:[]},
+  }));
+  const row=document.querySelector('ul[aria-label="Your circles"] li').textContent;
+  assert.match(row,/2 computers /,'the row shows its computer count');
+  assert.match(row,/did not answer/,'the unreachable-host notice is in the row');
+  const at=row.indexOf('Maya’s computer, which hosts this circle');
+  assert.ok(at>0,'the notice names the host');
+  assert.match(row[at-1],/\s/,'a space separates the meta line from the notice');
+  assert.ok(view.text().includes('Weekend projects'));
+});

@@ -153,26 +153,45 @@ test('unknown cessation retains capsule and reports ownership_unknown',async t=>
   assert.match(control.nonce,/^[a-f0-9]{64}$/);
 });
 
-test('parent exit disconnects the child without cancelling or deleting its capsule',async t=>{
-  const f=await fixture(t), marker=join(f.root,'disconnected'), driver=join(f.root,'driver.mjs');
+test('parent exit disconnects the child without cancelling or deleting its capsule',{timeout:20000},async t=>{
+  const f=await fixture(t), driver=join(f.root,'driver.mjs');
   await writeFile(join(f.sourceRoot,'helper.mjs'), `
-    import {writeFileSync} from 'node:fs';
-    let spec;
-    process.on('message', m => { if(m.type==='prepare'){spec=m.spec;process.send({protocol:m.protocol,type:'ready',nonce:m.nonce});} if(m.type==='cancel')process.exit(4); });
-    process.on('disconnect',()=>{writeFileSync(spec.marker,String(process.pid));process.exit(0);});
+    import {writeSync} from 'node:fs';
+    let prepared=false;
+    process.on('message', m => {
+      if(m.type==='prepare'){prepared=true;process.send({protocol:m.protocol,type:'ready',nonce:m.nonce});}
+      if(m.type==='cancel')process.exit(4);
+    });
+    process.on('disconnect',()=>{
+      if(!prepared)process.exit(5);
+      writeSync(4, 'disconnected\\n');
+      process.exit(0);
+    });
   `);
-  const options={...f.options,spec:{marker}}; delete options.exclusive; delete options.spawnProcess;
+  const options={...f.options,spec:{}}; delete options.exclusive; delete options.spawnProcess;
   const bridgeUrl=new URL('../lib/v1/macos-update-helper-bridge.mjs',import.meta.url).href;
-  await writeFile(driver, `import {prepareMacUpdateHelper} from ${JSON.stringify(bridgeUrl)};\nconst ticket=await prepareMacUpdateHelper({...${JSON.stringify(options)},exclusive:async()=>()=>{}});\nif(!ticket.ready)process.exit(2);\nprocess.exit(0);\n`);
-  const child=spawn(process.execPath,[driver],{stdio:'ignore'});
-  const result=await new Promise(resolve=>child.once('exit',code=>resolve(code)));
+  await writeFile(driver, `import {spawn} from 'node:child_process';
+import {prepareMacUpdateHelper} from ${JSON.stringify(bridgeUrl)};
+// The driver shares its dedicated completion pipe with the helper, but the
+// real IPC channel retains its ordinary shutdown behavior.
+const spawnProcess=(cmd,args,opts)=>spawn(cmd,args,{...opts,stdio:[...opts.stdio,3]});
+const ticket=await prepareMacUpdateHelper({...${JSON.stringify(options)},spawnProcess,exclusive:async()=>()=>{}});
+if(!ticket.ready)process.exit(2);
+process.exit(0);
+`);
+  const child=spawn(process.execPath,[driver],{stdio:['ignore','ignore','ignore','pipe']});
+  t.after(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill();});
+  const driverExit=new Promise((resolve,reject)=>{child.once('exit',resolve);child.once('error',reject);});
+  const witness=child.stdio[3];
+  const chunks=[];
+  witness.setEncoding('utf8');
+  witness.on('data',chunk=>chunks.push(chunk));
+  const helperExit=new Promise((resolve,reject)=>{witness.once('end',()=>resolve(chunks.join('')));witness.once('error',reject);});
+  const [result,ack]=await Promise.all([driverExit,helperExit]);
   assert.equal(result,0);
-  let value;
-  for(let i=0;i<100;i++) {try {value=await stat(marker);break;} catch {await new Promise(r=>setTimeout(r,20));}}
-  assert.ok(value); assert.equal((await readdir(f.capsuleRoot)).length,1);
-  const pid=Number(await readFile(marker,'utf8')); let gone=false;
-  for(let i=0;i<100;i++) {try {process.kill(pid,0);} catch(e) {if(e.code==='ESRCH'){gone=true;break;} throw e;} await new Promise(r=>setTimeout(r,20));}
-  assert.equal(gone,true,'owned helper must exit before fixture cleanup');
+  // EOF needs both process copies closed; a kernel zombie no longer owns one.
+  assert.equal(ack,'disconnected\n');
+  assert.equal((await readdir(f.capsuleRoot)).length,1);
 });
 
 

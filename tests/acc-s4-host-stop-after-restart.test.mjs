@@ -16,7 +16,7 @@ test('owner stop after an app restart does not answer launcher_unverified', asyn
   t.after(() => rm(home, {recursive: true, force: true}));
   const port = await new Promise(r => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const {port} = s.address(); s.close(() => r(port)); }); });
   await writeFile(join(home, 'host.json'), JSON.stringify({protocol_version: 1, host_wanted: true, circle_id: 'c1',
-    port, stop_generation: 'g1', reachability: {mode: 'lan'}, status_path: join(home, 'status.json')}));
+    port, stop_generation: 'g1', reachability: {kind: 'lan'}, status_path: join(home, 'status.json')}));
   await writeFile(join(home, 'status.json'), JSON.stringify({protocol_version: 1, status: 'stopped'}));
   let outcome;
   try { outcome = {ok: await hostCommand({home, coordinatorHome: home}, ['--stop'], 'host_stopped')}; }

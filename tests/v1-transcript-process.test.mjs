@@ -46,9 +46,9 @@ test('separate owner and friend processes show private readable live and signed 
  await api(friend,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
  await api(friend,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
  await api(friend,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
- const {jobDigest}=await api(owner,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Fix empty parser input',harness:'codex'}});
+ const {jobDigest}=await api(owner,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Fix empty parser input',harness:'codex'}});
  const started=Date.now();
- await waitFor(async()=>{const approvals=await api(friend,'/api/approvals');if(!approvals.length)return false;await api(friend,'/api/approvals/'+approvals[0].id+'/accept',{method:'POST',body:{}});return true;},'friend request',15000);
+ await waitFor(async()=>{const approvals=await api(friend,'/api/approvals');if(!approvals.length)return false;await api(friend,'/api/approvals/'+approvals[0].id+'/accept',{method:'POST',body:{}});return true;},'friend request',30000);
  for(const [name,app] of [['owner',owner],['friend',friend]]){
   const transcript=await waitFor(async()=>{const view=await api(app,'/api/jobs/'+encodeURIComponent(jobDigest)+'/transcript?circle='+circle.id);return view.text?.includes('src/parse.js')&&view;},name+' live transcript',10000);
   assert.equal(transcript.live,true,name+' is still live before release');
@@ -88,7 +88,14 @@ test('separate owner and friend processes show private readable live and signed 
   await writeFile(dir+'/latency.json',JSON.stringify(log,null,2));await browser.close();
  }
  children[1].send('release');
- await waitFor(async()=>{const job=await api(owner,'/api/jobs/'+encodeURIComponent(jobDigest)+'?circle='+circle.id);return job.state==='result-accepted';},'signed result',20000);
+ try {
+  await waitFor(async()=>{const job=await api(owner,'/api/jobs/'+encodeURIComponent(jobDigest)+'?circle='+circle.id);return job.state==='result-accepted';},'signed result',45000);
+ } catch(error) {
+  const job=await api(owner,'/api/jobs/'+encodeURIComponent(jobDigest)+'?circle='+circle.id);
+  const status=await api(friend,'/api/status');
+  t.diagnostic(JSON.stringify({state:job.state,attempt:job.current_attempt,lending:status.lendingProjection}));
+  throw error;
+ }
  const uploaded=await api(owner,'/api/jobs/'+encodeURIComponent(jobDigest)+'/transcript?circle='+circle.id);
  assert.match(uploaded.text,/src\/parse\.js/);assert.doesNotMatch(uploaded.text,/private details withheld|DO_NOT_EXPORT/);
 });

@@ -187,7 +187,7 @@ test('a closed legacy pending record retains its full charge despite zero-start 
   f.policy.enabled=false;f.policy.recoveryOnly=true;f.policy.lendingRuntime={reconcileAttempt:async()=>{}};
   await f.policy.storage.set({day:'2026-10-09',jobs:1,milliseconds:120000,pending:{ ...testSbxRuntimeFields(root),attemptId:attempt.attempt_id,attempt,jobId:'legacy',reservedMs:120000,executionStartRequested:false,actualUse:{attemptId:attempt.attempt_id,ms:0}}});
   f.backend.reconcilePending=async row=>({removed:true,full_charge:true,attemptId:row.attemptId});
-  const controller=new AbortController(),lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock});
+  const controller=new AbortController(),lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock});
   const running=lender.start(controller.signal);running.catch(()=>{});
   try {await until(()=>f.saved().pending===null,'legacy record closes');assert.equal(f.saved().jobs,1);assert.equal(f.saved().milliseconds,120000);}
   finally {controller.abort();await running.catch(()=>{});}

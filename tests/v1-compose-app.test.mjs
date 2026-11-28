@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { makeRepo, git } from './helpers/git-guest.mjs';
-import { appFixture, api } from './helpers/v1-app-fixture.mjs';
+import { appFixture, api, browserApi } from './helpers/v1-app-fixture.mjs';
 import { json } from './helpers/v1-journey.mjs';
 import { inspectRepo, RepoError, REPO_STATES, repoStateOf } from '../lib/v1/repo-source.mjs';
 import { createJobOperations } from '../lib/v1/cli.mjs';
@@ -46,8 +46,9 @@ test('repository inspection offers npm test only when package.json has a test sc
 
 test('the app sends a repository folder once per draft, with or without uncommitted changes', testOptions, async t => {
   const f = await appFixture(t), {owner, circle} = await f.connect();
+  const ui=await browserApi(owner.app);
   const repo = await makeRepo(); t.after(() => rm(repo.dir, {recursive: true, force: true}));
-  const post = (body, status) => api(owner.app, '/api/jobs', {method: 'POST', body: {circle: circle.id, prompt: 'Make it better.', harness: 'codex', ...body}, status});
+  const post = (body, status) => ui('/api/jobs', {method: 'POST', body: {circle: circle.id, prompt: 'Make it better.', harness: 'codex', ...body}, status});
   // the folder is read first, and a refusal is a 409 with its own state and no git text
   const refused = await api(owner.app, '/api/repo/inspect', {method: 'POST', body: {path: join(repo.dir, 'gone')}});
   assert.deepEqual([refused.refusal.code, refused.refusal.state], ['repo_missing', 'compose.repo-missing'], 'a folder that cannot be sent is an answer (200), not a failure');
@@ -110,25 +111,26 @@ test('a failed presence read leaves lenders unknown and does not refresh when th
 
 for (const includeUncommitted of [false, true]) test('a lost send answer freezes the draft before source changes: uncommitted=' + includeUncommitted, testOptions, async t => {
   const f = await appFixture(t), {owner, circle} = await f.connect();
+  const ui=await browserApi(owner.app);
   const repo = await makeRepo(); t.after(() => rm(repo.dir, {recursive: true, force: true}));
   await writeFile(join(repo.dir, 'new.txt'), 'original draft\n');
   const body = {circle:circle.id, prompt:'Original prompt', repo:{path:repo.dir, includeUncommitted}, draft_id:'frozen-draft-0001'};
   // The host accepts this send, but the caller treats its answer as lost.
-  const first = await api(owner.app, '/api/jobs', {method:'POST', body});
+  const first = await ui('/api/jobs', {method:'POST', body});
   const original = f.jobs.get(first.jobDigest).job;
   const artifacts = new Map(f.artifacts);
   await writeFile(join(repo.dir, 'new.txt'), 'different working tree\n');
   git(repo.dir, 'add', '-A'); git(repo.dir, 'commit', '-qm', 'new HEAD');
   await writeFile(join(repo.dir, 'new.txt'), 'another uncommitted edit\n');
-  const changed = await api(owner.app, '/api/jobs', {method:'POST', body:{...body, prompt:'Changed prompt'}, status:409});
+  const changed = await ui('/api/jobs', {method:'POST', body:{...body, prompt:'Changed prompt'}, status:409});
   assert.equal(changed.code,'draft_changed','a changed request needs a new draft id');
-  const replay = await api(owner.app, '/api/jobs', {method:'POST', body});
+  const replay = await ui('/api/jobs', {method:'POST', body});
   assert.equal(replay.jobDigest, first.jobDigest, 'same draft must resolve the original accepted job');
   assert.equal(f.jobs.size, 1);
   assert.deepEqual(f.jobs.get(replay.jobDigest).job, original);
   assert.deepEqual(f.artifacts, artifacts, 'no replacement artifacts are uploaded');
   await rm(repo.dir, {recursive:true, force:true});
-  const gone = await api(owner.app, '/api/jobs', {method:'POST', body});
+  const gone = await ui('/api/jobs', {method:'POST', body});
   assert.equal(gone.jobDigest, first.jobDigest, 'retry resolves before inspecting a vanished folder');
 });
 
@@ -163,14 +165,15 @@ test('an ambiguous draft replays its persisted artifacts after restart without r
 
 test('an uncertain draft from an older version resolves its original job before inspecting source', testOptions, async t => {
   const f = await appFixture(t), {owner,circle} = await f.connect();
+  const ui=await browserApi(owner.app);
   const body = {circle:circle.id,prompt:'Old draft',git:{url:'https://example.test/old.git',commit:'a'.repeat(40)},draft_id:'legacy-draft-0001'};
-  const first = await api(owner.app,'/api/jobs',{method:'POST',body});
+  const first = await ui('/api/jobs',{method:'POST',body});
   const store = owner.app.device.intentStore(circle.id), slot = 'submit:draft:'+body.draft_id;
   const {artifacts,warnings,draftRequest,...saved} = await store.get(slot), legacySlot = slot+':old-fingerprint';
   await store.set(legacySlot,{...saved,state:'pending'});
   await store.set('job:'+first.jobDigest,{jobDigest:first.jobDigest,circle:circle.id,slot:legacySlot});
   await store.delete(slot);
-  const replay = await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,prompt:'Changed',repo:{path:'/missing/old-project'},draft_id:body.draft_id}});
+  const replay = await ui('/api/jobs',{method:'POST',body:{circle:circle.id,prompt:'Changed',repo:{path:'/missing/old-project'},draft_id:body.draft_id}});
   assert.equal(replay.jobDigest,first.jobDigest);
   assert.equal(f.jobs.size,1);
   assert.equal((await store.get(slot)).state,'complete');
@@ -200,8 +203,9 @@ test('composer lists other online lenders by agent adapter and readiness only', 
 
 test('a submitted repository names its project in the signed manifest without sharing its local path', testOptions, async t => {
  const f=await appFixture(t),{owner,circle}=await f.connect();
+ const ui=await browserApi(owner.app);
  const repo=await makeRepo();t.after(()=>rm(repo.dir,{recursive:true,force:true}));
- const sent=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,prompt:'Name this project',repo:{path:repo.dir}}});
+ const sent=await ui('/api/jobs',{method:'POST',body:{circle:circle.id,prompt:'Name this project',repo:{path:repo.dir}}});
  const manifest=f.jobs.get(sent.jobDigest).job.payload.source_manifest;
  assert.equal(manifest.project_name,repo.dir.split('/').pop());
  assert.doesNotMatch(manifest.project_name,/[/\\]/);
@@ -210,9 +214,10 @@ test('a submitted repository names its project in the signed manifest without sh
 
 test('older hosts still receive the existing manifest without the optional project name', testOptions, async t => {
  const f=await appFixture(t),{owner,circle}=await f.connect();
- f.hostCapabilities={capabilities:['source_manifest_v1','working_directory_v1','results_v1']};
+ const ui=await browserApi(owner.app);
+ f.hostCapabilities={capabilities:['source_manifest_v1','working_directory_v1','results_v1','run_request_v1']};
  const repo=await makeRepo();t.after(()=>rm(repo.dir,{recursive:true,force:true}));
- const sent=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,prompt:'Compatible project',repo:{path:repo.dir}}});
+ const sent=await ui('/api/jobs',{method:'POST',body:{circle:circle.id,prompt:'Compatible project',repo:{path:repo.dir}}});
  const job=f.jobs.get(sent.jobDigest).job.payload;
  assert.equal(job.source_manifest.project_name,undefined);
  assert.ok(!job.requirements.capabilities.includes('source_project_name_v1'));

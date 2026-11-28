@@ -17,9 +17,6 @@ test('plain folder picker, send, lender approval and changed-files download acro
  expect(ownIdentity.name).toBe('sandpiper');expect(ownIdentity.ownerName).toBe('Alex Example');expect(peerIdentity.name).toBe('kestrel');expect(peerIdentity.ownerName).toBe('Maya Okafor');
  console.log('Result process setup',JSON.stringify({owner:{pid:owner.app.pid,device:ownIdentity.name,person:ownIdentity.ownerName},lender:{pid:lender.app.pid,device:peerIdentity.name,person:peerIdentity.ownerName},coordinatorPid:harness.coordinatorPid}));
  await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:null,dailyMinutes:null,maxWallSeconds:null,idleOnly:false}});
- const ownerSettings=await api(lender.app,'/api/lending/owner-settings');
- const engineMinimum=Math.max(ownerSettings.defaultMaxJobUsd,...ownerSettings.minimums.map(row=>row.minimumMaxJobUsd));
- await api(lender.app,'/api/lending/owner-settings',{method:'POST',body:{maxJobUsd:engineMinimum,reason:'Synthetic result journey needs room for one worst-case call.'}});
  await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
  await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
  await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});

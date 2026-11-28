@@ -37,12 +37,34 @@ test('Codex signs in with a device code by default: link and code shown, then co
   await waitFor(()=>signin.get(flow.flowId).status==='complete');
 });
 
-test('a device code flow stays open past the normal sign-in window',skip,async t=>{
-  const {signin}=await setup(t,{waitMs:1500},{timeoutMs:300});
-  const flow=await signin.start(CODEX_HARNESS.harness_id);
-  await new Promise(r=>setTimeout(r,800));
-  assert.equal(signin.get(flow.flowId).status,'awaiting_browser','still waiting after the short window');
-  await waitFor(()=>signin.get(flow.flowId).status==='complete');
+test('a device code flow stays open past the normal sign-in window', { timeout: 10000 }, async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
+  let releaseProvider, observeCompletion;
+  const providerCompletion = new Promise(resolve => { releaseProvider = resolve; });
+  const completed = new Promise(resolve => { observeCompletion = resolve; });
+  const signin = createSignin({
+    adapters: async () => [{ spec: CODEX_HARNESS }],
+    backend: () => ({}),
+    onComplete: async () => {},
+    onChange: event => { if (event.status === 'complete') observeCompletion(event); },
+    now: () => Date.now(),
+    timeoutMs: 300,
+    startProvider: async () => ({
+      url: 'https://auth.openai.com/codex/device',
+      code: DEVICE_CODE,
+      expiresAt: 15 * 60_000,
+      waitForCompletion: () => providerCompletion,
+      cancel: () => releaseProvider({ status: 'cancelled' }),
+    }),
+  });
+  t.after(() => signin.close());
+  const flow = await signin.start(CODEX_HARNESS.harness_id);
+  t.mock.timers.tick(800);
+  assert.equal(signin.get(flow.flowId).status, 'awaiting_browser', 'still waiting after the short window');
+  assert.equal(signin.get(flow.flowId).expiresInMs, 15 * 60_000 - 800);
+  releaseProvider({ status: 'complete' });
+  assert.equal((await completed).flowId, flow.flowId);
+  assert.equal(signin.get(flow.flowId).status, 'complete');
 });
 
 test('the provider handle waits for both the link and the code',skip,async t=>{

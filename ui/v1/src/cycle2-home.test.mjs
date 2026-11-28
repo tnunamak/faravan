@@ -15,9 +15,9 @@ const agent={id:'claude-code-subscription',installed:true,signedIn:true,useForLe
 const circle={id:'friends',name:'Friends',origin:'http://fixture',owned:true};
 const lending={enabled:true,circle:circle.id,mode:'ask',status:'idle',limits:{timeZone:'UTC'}};
 const readiness={ready:true,checks:[{name:'sbx_install',ok:true},{name:'sbx_daemon',ok:true},{name:'docker_login',ok:true}]};
-const home=withLendingProjection({intent:{on:true,state:'blocked',reason:'sandbox_not_ready'},lending},
-  {intent:'on',intentState:'blocked',admission:'blocked',admissionReason:'sandbox_not_ready'});
-const data={home,readiness,agents:[agent],circles:[circle],jobs:[],approvals:[],activity:[],devices:{name:'Laptop',ownerName:'Tessa',fingerprint:'self',circles:[]}};
+const home=withLendingProjection({intent:{on:true,state:'blocked',reason:'sandbox_cannot_start'},lending},
+  {intent:'on',intentState:'blocked',admission:'blocked',admissionReason:'sandbox_cannot_start'});
+const data={home,readiness,agents:[agent],circles:[circle],jobs:[],approvals:[],activity:[],devices:{name:'Laptop',ownerName:'Sam',fingerprint:'self',circles:[]}};
 const props={data,agents:[agent],circles:[circle],circle:circle.id,selected:circle,lending,members:[],api:{get:async()=>[]},mutate:async()=>({}),refresh(){},setDialog(){},setCircle(){}};
 
 test('rendered Home, Lending and Setup never expose raw harness ids, including old saved failures',()=>{
@@ -34,7 +34,7 @@ test('the projected reason owns the headline explanation while blocker details s
   const first={key:'isolation_check',status:'blocked',detail:'Failed: Claude Code sign-in.',action:'Resume lending'};
   const vm=lendingVerdictVM(home,{first,items:[first],byAgent:{}});
   assert.equal(vm.headline,'Lending can’t start here');
-  assert.equal(vm.reason,'Set up the protected workspace to lend on this computer. You can still send jobs to another lender.');
+  assert.equal(vm.reason,'The sandbox cannot start on this computer.');
   assert.match(vm.headline,/lending can’t start here/i);
   assert.equal(vm.on,true);
   const checking=withLendingProjection({...home,lendingProjection:undefined},{intent:'on',intentState:'blocked',admission:'unknown',admissionReason:null});
@@ -56,7 +56,7 @@ test('first circle form keeps an empty name and a visible disabled primary until
   const html=renderFixture(HostChoose,{choice:{method:'tailscale',address:'',domain:'',name:''},onChoice(){},onStart(){}});
   assert.match(html,/<input[^>]*aria-label="Circle name"[^>]*placeholder="For example, Weekend projects"/);
   assert.match(html,/<button[^>]*class="btn btn-primary"[^>]*disabled[^>]*>Start circle/);
-  assert.doesNotMatch(html,/Tessa/);
+  assert.doesNotMatch(html,/Sam/);
 });
 
 test('not-git refusal uses the designed explanation and recovery, never a raw path error',()=>{

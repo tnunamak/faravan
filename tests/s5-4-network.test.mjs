@@ -1,4 +1,5 @@
 import './helpers/no-browser.mjs';
+import {borrowerRunRequest} from '../lib/v1/run-request.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -52,6 +53,7 @@ test('optional signed registry requirements fail closed for unsupported lenders'
     source: { kind: 'archive', artifact: { digest, bytes: 0, media_type: 'application/gzip' } },
     prompt: { digest, bytes: 0, media_type: 'text/plain' }, requirements: req,
     input_protection: 'none', max_attempts: 1 };
+  payload.runRequest=borrowerRunRequest({});payload.requirements.capabilities.push('run_request_v1');
   const envelope = signEnvelope('job', payload, key);
   assert.equal(verifyEnvelope('job', envelope, publicKey).ok, true);
   envelope.payload.requirements.registries = ['pypi'];

@@ -15,7 +15,7 @@ function rig(sound) {
     bounds:() => sound ? nativeOvershootBound({q:0, L:1, P:4, T:2, R:1, B:0}) : null,
     read:() => {readCount++; return new Promise(resolve => {complete = resolve;});},
     stop:(id, reason) => {stops.push({id, reason, at:time, spend:ledger.length}); return backend.requestStop();}});
-  const resource = {id:'weekly', instance:'w1', resets_at:1000, baseline_used_micro:0, initial_micro:12};
+  const resource = {id:'weekly', instance:'w1', resets_at:1_000_000_000, baseline_used_micro:0, initial_micro:12};
   const watch = guard.watch({attemptId:'one', provider:'claude', accountId:'account', epoch:'epoch',
     resources:[resource], lastFreshAt:0});
   const observation = () => ({refresh_succeeded:true, complete:true, observed_at:time,
@@ -40,18 +40,26 @@ function rig(sound) {
     finishRead:() => complete(observation()), reads:() => readCount};
 }
 
-for (const sound of [true, false]) test(`hung poll -> stale Stop -> late result -> actual cessation (${sound ? 'sound bounds' : 'uncertified'})`, async t => {
+for (const sound of [true, false]) test(`hung poll -> measured Stop -> late result -> actual cessation (${sound ? 'sound bounds' : 'uncertified'})`, async t => {
   const f = rig(sound);
   t.after(() => f.guard.unwatch('one'));
-  await f.advance(2); // PollStart, Hang
+  assert.equal(f.timers.size, 1, 'watch arms its provider poll, not a stale-age stop deadline');
+  const [{at:pollAt}] = f.timers.values();
+  await f.advance(pollAt);
   assert.equal(f.reads(), 1);
   assert.equal(f.watch.reading, true);
   assert.equal(f.stops.length, 0);
-  await f.advance(3); // InbandMeter: forged low use must not buy more time
-  f.guard.offerInband('one', [{window_id:'weekly', used_pct:0, resets_at:1000}], 3);
+  const stopAt = pollAt + 4;
+  await f.advance(stopAt);
+  // Reading age and a low in-band value are not evidence of overuse.
+  f.guard.offerInband('one', [{window_id:'weekly', used_pct:0, resets_at:1_000_000_000}], stopAt);
   assert.equal(f.guard.status('one').last_fresh_at, 0);
-  await f.advance(4); // TimerFire, RequestStop while read is unresolved
-  assert.deepEqual(f.stops.map(({reason, at}) => ({reason, at})), [{reason:'meter_stale', at:4}]);
+  assert.equal(f.stops.length, 0, 'a hung read alone is not a Stop');
+  // A positive threshold breach may stop even while the host poll is hung.
+  const threshold = sound ? 5 : 12;
+  f.guard.offerInband('one', [{window_id:'weekly', used_pct:(threshold + 0.25)/1_000_000, resets_at:1_000_000_000}], stopAt);
+  await f.flush();
+  assert.deepEqual(f.stops.map(({reason, at}) => ({reason, at})), [{reason:'allowance_reached', at:stopAt}]);
   assert.equal(f.watch.reading, true);
   assert.equal(f.backend.delivered, true);
   assert.equal(f.backend.running, true, 'acknowledgement leaves actual exposure alive');
@@ -63,9 +71,9 @@ for (const sound of [true, false]) test(`hung poll -> stale Stop -> late result 
   assert.equal(f.watch.reading, false);
   assert.equal(f.guard.status('one').last_fresh_at, 0);
   assert.equal(f.timers.size, 0, 'late result arms neither poll nor stale timer');
-  await f.advance(9);
+  await f.advance(stopAt + 5);
   assert.equal(f.backend.running, false);
-  assert.equal(f.backend.ceasedAt, sound ? 6 : 9);
+  assert.equal(f.backend.ceasedAt, stopAt + (sound ? 2 : 5));
   assert.equal(f.reads(), 1);
   const residual = f.ledger.length - f.stops[0].spend;
   assert.equal(residual, sound ? 2 : 15);

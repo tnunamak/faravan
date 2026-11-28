@@ -39,8 +39,8 @@ test('the default choices send the same body as before and both selects start on
 
 test('the body Send posts carries the chosen pair in the fields the job submit takes', () => {
   const body = draftBody(draft({agent:'codex', model:'example-model', effort:'low'}), 'c1');
-  assert.deepEqual({harness:body.harness, model:body.model, budget_v1:body.budget_v1},
-    {harness:'codex', model:'example-model', budget_v1:{effort:'low'}});
+  assert.deepEqual({harness:body.harness, model:body.model, effort:body.effort},
+    {harness:'codex', model:'example-model', effort:'low'});
   assert.equal(draftBody(draft({agent:'', model:'example-model', effort:'low'}), 'c1').model, undefined, 'a pair belongs to one agent');
 });
 

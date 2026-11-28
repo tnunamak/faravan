@@ -136,8 +136,8 @@ test('missing objective data explains the starting estimate without inventing an
 });
 
 test('legacy migration notice appears once from the server marker and has no old-setting action', () => {
-  const pending = page({lendingPolicy:{...mockFixture(), migration:{fromLegacyPolicy:true, acknowledged:false}}});
-  const acknowledged = page({lendingPolicy:{...mockFixture(), migration:{fromLegacyPolicy:true, acknowledged:true}}});
+  const pending = page({lending:{...lending,migration:{fromLegacyPolicy:true, acknowledged:false}},lendingPolicy:mockFixture()});
+  const acknowledged = page({lending:{...lending,migration:{fromLegacyPolicy:true, acknowledged:true}},lendingPolicy:mockFixture()});
   assert.match(renderedText(pending), /Your saved lending strategy was migrated\. Review the strategy below; your consent and lending rules were preserved\./);
   assert.doesNotMatch(pending, /Keep my old|quotaReserve/);
   assert.doesNotMatch(renderedText(acknowledged), /settings were migrated/);
@@ -160,7 +160,7 @@ test('startup repair notice survives app restart and refused saves until a polic
   const off = /Lending was turned off\. Turn it on again and choose the agents to lend\./;
   const view = home => h(LimitsPage, {data:{home}, lending:home.lending, now:NOW});
   const first = await readHome();
-  assert.deepEqual(first.lendingPolicy.migration.reset, [{field:'warningPct', was:150}]);
+  assert.deepEqual(first.lending.migration.reset, [{field:'warningPct', was:150}]);
   assert.equal(first.lending.limits.lendingPolicy.providerConsent, undefined);
   assert.equal(first.lending.enabled, false);
   const initial = await mount(view(first));
@@ -171,7 +171,7 @@ test('startup repair notice survives app restart and refused saves until a polic
   ({app} = await f.start('owner'));
 
   const reloaded = await readHome();
-  assert.deepEqual(reloaded.lendingPolicy.migration, first.lendingPolicy.migration);
+  assert.deepEqual(reloaded.lending.migration, first.lending.migration);
   assert.equal(reloaded.lending.enabled, false);
   assert.equal(reloaded.lending.limits.lendingPolicy.providerConsent, undefined);
   const page = await mount(view(reloaded));
@@ -181,7 +181,7 @@ test('startup repair notice survives app restart and refused saves until a polic
   }});
   await assert.rejects(() => save(reloaded.lending.configVersion + 1));
   const refused = await readHome();
-  assert.equal(refused.lendingPolicy.migration.acknowledged, false);
+  assert.equal(refused.lending.migration.acknowledged, false);
   assert.equal(refused.lending.configVersion, reloaded.lending.configVersion);
   await page.rerender(view(refused));
   assert.match(page.text(), notice);
@@ -189,7 +189,7 @@ test('startup repair notice survives app restart and refused saves until a polic
 
   await save(refused.lending.configVersion);
   const acknowledged = await readHome();
-  assert.equal(acknowledged.lendingPolicy.migration, null);
+  assert.equal(acknowledged.lending.migration, null);
   assert.equal(acknowledged.lending.enabled, false, 'acknowledgement does not turn lending back on');
   assert.equal(acknowledged.lending.limits.lendingPolicy.providerConsent, undefined);
   await page.rerender(view(acknowledged));
@@ -198,7 +198,7 @@ test('startup repair notice survives app restart and refused saves until a polic
   await app.close();
   ({app} = await f.start('owner'));
   const restarted = await readHome();
-  assert.equal(restarted.lendingPolicy.migration, null);
+  assert.equal(restarted.lending.migration, null);
   assert.equal(restarted.lending.enabled, false);
   assert.equal(restarted.lending.limits.lendingPolicy.providerConsent, undefined);
   await page.rerender(view(restarted));
@@ -308,15 +308,7 @@ test('P1 ambiguous saves explain uncertainty and keep the check action without a
   assert.match(definite,/Nothing was saved/);
 });
 
-test('P1 every owner-limit ambiguous branch keeps the same uncertainty warning',()=>{
-  const source=readFileSync(new URL('./limits.jsx',import.meta.url),'utf8');
-  const warning='We could not confirm whether your changes were saved. Check the saved settings before you change anything else.';
-  assert.equal(source.split(warning).length-1,5);
-  assert.ok(source.includes('setUncertain(ambiguous)'));
-  assert.ok(source.includes('limitsSaveAmbiguous(error)'));
-  assert.ok(source.includes('>Check saved limit</button>'));
-  assert.doesNotMatch(source,/No limit has been saved yet/);
-});
+
 
 test('fresh presence switches are opt-ins and show their delays', () => {
   const out=page({lendingPolicy:mockFixture()}, {limits:{idleOnly:false}});

@@ -6,6 +6,7 @@ import {lendPageVM,needsYouItems} from './view-models.mjs';
 import {LendingCard} from './lend.jsx';
 import {renderFixture,renderedText} from './render.test-helper.mjs';
 import {withLendingProjection} from './lending-projection.fixture.mjs';
+import {effectiveState} from '../../../lib/v1/lending-state.mjs';
 const agents=[{id:'codex',installed:true,signedIn:true,useForLending:true}];
 const lending={enabled:false,circle:'shared',status:'idle'};
 const vm=(isolationFailure)=>lendPageVM(withLendingProjection({intent:{on:false,state:'off'},lending,isolationFailure:typeof isolationFailure==='string'?isolationFailure:undefined},
@@ -44,6 +45,28 @@ test('start failure offers Resume now on Lending, Home and one attention item',(
  const out=renderFixture(LendingCard,{vm:page,device:'Ana’s computer',circle:'shared',lending:home.lending,agents,api:{},mutate:async()=>({}),refresh(){}});
  assert.match(withoutMaskMarkers(out),/class="card home-lending-card recovery"/);
  assert.match(out,/<button[^>]*>Resume now<\/button>/);
+});
+
+// The server's own output for a failed start: the public reason says only `conditions_unavailable`, which many holds share.
+// The cause stays in status.blockers, and that is what keeps Resume now and the start-failure sentence.
+test('a failed start still offers Resume now when the public reason is conditions_unavailable',()=>{
+ const start=blockReason=>{
+  const effective=effectiveState({intent:'on',blockReason,agents:[{id:'codex',enabled:true,installed:true,signedIn:true}]});
+  assert.equal(effective.intent.reason,'conditions_unavailable');
+  return withLendingProjection({...effective,lending:{...lending,enabled:false}},
+   {intent:'on',intentState:'blocked',admission:'blocked',admissionReason:effective.intent.reason});
+ };
+ const home=start('lending_not_started');
+ assert.deepEqual(home.blockers.map(blocker=>blocker.kind),['lending_not_started']);
+ const page=lendPageVM(home,{agents,readiness:{ready:true,checks:[]}}),card=homeLendingCardVM(page);
+ assert.equal(page.heroAction.action,'Resume now');
+ assert.equal(page.reason,'Lending couldn’t start. Check lending for what is blocking it.');
+ assert.equal(card.action.action,'Resume now');
+ assert.deepEqual(needsYouItems({home,agents,readiness:{ready:true,checks:[]}}).filter(item=>item.kind==='blocker').map(item=>item.item.action),['Resume now']);
+ // The same public reason with another cause is not a failed start: no Resume now, and the generic sentence.
+ const other=lendPageVM(start('quota_unknown'),{agents,readiness:{ready:true,checks:[]}});
+ assert.notEqual(other.heroAction?.action,'Resume now');
+ assert.equal(other.reason,'Lending on this computer waits for the blocked step. You can still send jobs to another lender.');
 });
 
 test('Lending and Home share the unchecked-agent reason and the hero groups two checks',()=>{

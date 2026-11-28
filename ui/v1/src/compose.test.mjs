@@ -524,7 +524,7 @@ test('a folder refusal opens Project so its message and recovery buttons are vis
 
 test('Model and Effort edits after an agent refusal take the same new-draft transition as Agent edits', () => {
   const source = readFileSync(new URL('./compose.jsx', import.meta.url), 'utf8');
-  assert.match(source, /onModel=\{\(value\) => \{[^\n]*\{auto: '', model: value\}[^\n]*agentRefusal \? editRefusedJob\(pick\(patch\)\)/);
+  assert.match(source, /onModel=\{\(value\) => \{[^\n]*\{model: value\}[^\n]*agentRefusal \? editRefusedJob\(pick\(patch\)\)/);
   assert.match(source, /onEffort=\{\(effort\) => agentRefusal \? editRefusedJob\(\{effort\}\)/);
 });
 

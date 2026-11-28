@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fakeAppleTools, MIN_MACOS } from './helpers/macos-app.mjs';
+import { npmCacheEnv } from './helpers/npm-cache.mjs';
 import { machOArchs, parsePlist } from '../packaging/macos/bundle-tool.mjs';
 
 const run = promisify(execFile);
@@ -38,7 +39,7 @@ test('the tarball and the .deb run with no system Node on PATH', {skip, timeout:
   const work = await mkdtemp(join(tmpdir(), 'spk-d6-'));
   t.after(() => rm(work, {recursive: true, force: true}));
   await run('bash', [join(root, 'packaging/build.sh')], {cwd: root, maxBuffer: 1 << 26,
-    env: {...process.env, PACKAGE_VERSION: PREVIEW, PACKAGE_DEB_TOOL: 'dpkg-deb', DEB_COMPRESSION: 'none', FARAVAN_NODE_BIN: process.execPath}});
+    env: {...process.env, ...npmCacheEnv(), PACKAGE_VERSION: PREVIEW, PACKAGE_DEB_TOOL: 'dpkg-deb', DEB_COMPRESSION: 'none', FARAVAN_NODE_BIN: process.execPath}});
   const tarball = join(root, `packaging/dist/faravan_${PREVIEW}_linux_amd64.tar.gz`), deb = join(root, `packaging/dist/faravan_${PREVIEW}_amd64.deb`);
   const control = (await run('dpkg-deb', ['-f', deb])).stdout;
   await assertRemovalHooksInControlArchive(deb, work, 'dpkg-deb-control');
@@ -166,7 +167,7 @@ if (!['arm64', 'x86_64'].includes(arch)) process.exit(94);
 writeFileSync(out, machO(arch, out)); chmodSync(out, 0o755);
 `, {mode: 0o755});
   }
-  const env = {...process.env, PATH: tools + ':' + process.env.PATH, PACKAGE_VERSION: '0.0.1', FARAVAN_NODE_BIN: process.execPath, MAC_BUILD_LOG: join(work, 'compilers.log')};
+  const env = {...process.env, ...npmCacheEnv(), PATH: tools + ':' + process.env.PATH, PACKAGE_VERSION: '0.0.1', FARAVAN_NODE_BIN: process.execPath, MAC_BUILD_LOG: join(work, 'compilers.log')};
   // The launcher source belongs to the launcher lane; until it lands, build with a placeholder source.
   if (!(await exists(launcherSource))) {
     env.FARAVAN_LAUNCHER_SWIFT = join(work, 'placeholder launcher.swift');

@@ -1,13 +1,15 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {canonicalize} from '../lib/protocol/index.mjs';
 import {appFixture,api,waitFor} from './helpers/triage-small-app-fixture.mjs';
 
 const jobInput=(circle,prompt='Readiness job')=>({circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),
   prompt,harness:'codex',send_anyway:true});
-async function lending(f){
-  const {owner,lender,circle}=await f.connect();
-  await api(lender.app,'/api/lending/limits',{method:'POST',body:{idleOnly:false}});
+async function lending(f,options={}){
+  const {owner,lender,circle}=await f.connect(options);
+  await api(lender.app,'/api/lending/limits',{method:'POST',body:{idleOnly:false,dailyMinutes:60,maxWallSeconds:1200}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
   return {owner,lender,circle};
@@ -21,7 +23,7 @@ test('R9: off, edit Limits, on: the next offer is taken',{timeout:90000},async t
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:8}});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:20}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   // Ask mode: an arriving offer becomes a Run it card.
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'the next offer reaches the lender',15000);
   assert.equal(card.jobDigest??card.job_digest??jobDigest,jobDigest);
@@ -29,7 +31,7 @@ test('R9: off, edit Limits, on: the next offer is taken',{timeout:90000},async t
 });
 test('control: a lending lender takes the next job',{timeout:90000},async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await lending(f);
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'the next offer reaches the lender',15000);
   void jobDigest;
 });
@@ -51,47 +53,105 @@ test('R9: a lender whose loop stopped is never ready, and On starts it again',{t
   await rm(counters,{force:true});
   await api(lender.app,'/api/lending/off',{method:'POST',body:{}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
-  await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'the next offer reaches the restarted lender',15000);
 });
 
-// Judge r10 R3: with 18 minutes left today and jobs that need 20, the lender read "Ready for requests" and the
-// borrower "1 computer is ready", and no offer came.
-test('R3: less time left today than a job needs is done for today, everywhere',{timeout:90000},async t=>{
-  const f=await appFixture(t),{lender,circle}=await f.connect();
-  const {writeFile}=await import('node:fs/promises'),{join}=await import('node:path'),{lenderDayKey}=await import('../lib/v1/lender.mjs');
-  await api(lender.app,'/api/lending/limits',{method:'POST',body:{idleOnly:false,dailyJobs:12,dailyMinutes:60,maxWallSeconds:1200}});
-  await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
-  const status0=await api(lender.app,'/api/status');
-  await writeFile(join(lender.home,'v1','app-counters.json'),JSON.stringify({day:lenderDayKey(Date.now(),status0.limits?.timeZone),jobs:2,milliseconds:42*60000,pending:null}));
-  await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
-  const status=await waitFor(async()=>{const s=await api(lender.app,'/api/status');return s.today?.minutes===42&&s;},'the lender counted 42 minutes',15000);
-  assert.equal(status.lendingProjection.admission,'blocked');
-  assert.equal(status.lendingProjection.admissionReason,'daily_limit');
-  assert.equal(status.today.jobMinutes,20);
-  await waitFor(()=>f.heartbeats?.at(-1)?.intent.state==='resting','the circle hears it is resting',15000);
+// Readiness describes the advertised range; each offer is checked against that range.
+async function watchReadiness(t,app){
+  const controller=new AbortController();
+  const response=await fetch(app.origin+'/api/events?after=0',{headers:{'x-faravan-session-token':app.token,accept:'text/event-stream'},signal:controller.signal});
+  const reader=response.body.getReader(),decoder=new TextDecoder();let text='';
+  const pump=(async()=>{try{for(;;){const {done,value}=await reader.read();if(done)break;text+=decoder.decode(value,{stream:true});}}catch{}})();
+  t.after(async()=>{controller.abort();await pump;});
+  const events=()=>text.split('\n').filter(line=>line.startsWith('data:')).flatMap(line=>{
+    try{const event=JSON.parse(line.slice(5));return event.type==='readiness'?[event.data]:[];}catch{return [];}
+  });
+  await new Promise(resolve=>setTimeout(resolve,1500));
+  return events;
+}
+function relayPresence(f,lender){
+  const base=f.override;let hb,heartbeatAt;
+  f.override=async ctx=>{
+    if(ctx.route==='/heartbeat'){
+      const proof=JSON.parse(Buffer.from(ctx.req.headers['faravan-proof'],'base64url')).payload;
+      if(proof.key_id===lender.app.device.keyId){hb=ctx.body;heartbeatAt=new Date(proof.created*1000).toISOString();}
+    }
+    if(ctx.route!=='/presence')return base(ctx);
+    const devices=hb?[{device:lender.app.device.keyId,deviceName:'Synthetic lender',online:true,source:'heartbeat',last_heartbeat_at:heartbeatAt,
+      intent:hb.intent,execution:hb.execution,blockers:hb.blockers,agents:hb.agents,budget:hb.budget,capabilities:hb.capabilities,
+      account_offers:(hb.accounts??[]).flatMap(a=>a.models.filter(m=>m.enabled).map(m=>({providerId:a.providerId,modelId:m.id,effortIds:m.efforts.map(e=>e.id)})))}]:[];
+    const bytes=Buffer.from(canonicalize({now:new Date().toISOString(),online_seconds:90,devices,persons:[]}));
+    ctx.res.writeHead(200,{'content-type':'application/json','content-length':bytes.length});ctx.res.end(bytes);return true;
+  };
+  return ()=>hb;
+}
+test('R3: a smaller daily allowance stays ready, advertises ten minutes and refuses a twenty-minute offer',{timeout:90000},async t=>{
+  const f=await appFixture(t),{owner,lender,circle}=await lending(f,{heartbeatMs:100});
+  const lenderHeartbeat=relayPresence(f,lender);
+  const ads=[],base=f.override;
+  f.override=async ctx=>{if(ctx.body?.advertisement)ads.push(ctx.body.advertisement);return base(ctx);};
+  await waitFor(()=>lender.app.lendingAdmission()===null,'initial readiness',15000);
+  const events=await watchReadiness(t,lender.app),settled=events().length;
+  await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyMinutes:10}});
+  assert.equal(lender.app.lendingAdmission(),null);
+  assert.equal((await api(lender.app,'/api/status')).lendingProjection.admission,'allowed');
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
+  const refused=await waitFor(async()=>{const s=await api(lender.app,'/api/lending');return s.heldOffers?.find(o=>o.id===jobDigest);},'the per-offer refusal',15000);
+  assert.equal(refused.reason,'daily_limit');
+  assert.deepEqual(await api(lender.app,'/api/approvals'),[]);
+  assert.equal(f.jobs.get(jobDigest).current_attempt??null,null);
+  await waitFor(()=>lenderHeartbeat()?.budget?.minutes_left_today===10,'the circle hears ten minutes remain',15000);
+  const borrower=await api(owner.app,'/api/jobs/'+encodeURIComponent(jobDigest)+'?circle='+circle.id);
+  assert.equal(borrower.statusContract.reasonCode,'daily_limit',JSON.stringify({presence:borrower.presence,status:borrower.statusContract}));
+  assert.match(borrower.statusContract.explanation,/done for today/);
+  assert.equal(events().length,settled,'a smaller positive allowance and idle polling do not change readiness');
+  // A smaller offer behind the refused one still reaches review and uses the reduced advertisement.
+  const small=structuredClone(f.jobs.get(jobDigest).job.payload);
+  small.intent_id=randomUUID();small.requirements.limits.wall_seconds=60;
+  const submitted=await (await owner.app.device.client(circle.id)).submitJob(small);
+  const smallDigest=submitted.job_digest??submitted.jobDigest;
+  const card=await waitFor(async()=>(await api(lender.app,'/api/approvals')).find(c=>c.jobDigest===smallDigest),'the one-minute offer reaches review',15000);
+  await api(lender.app,'/api/approvals/'+card.id+'/accept',{method:'POST',body:{}});
+  await waitFor(()=>ads.some(ad=>ad.max_limits.wall_seconds===600),'the signed ten-minute advertisement',15000);
+  assert.equal(ads.at(-1).max_limits.wall_seconds,600);
+  await waitFor(()=>f.jobs.get(smallDigest)?.state==='result-accepted','the smaller offer completes',15000);
+  await waitFor(()=>lender.app.lendingAdmission()===null,'ready again after the smaller offer',15000);
 });
 
-// Dot review of judge r10: a readiness event makes every open page reread at once, so it fires only when the answer
-// changes, never for lender states that repeat or alternate each poll while admission stays the same.
-test('readiness events fire when admission changes, not on every lender poll',{timeout:90000},async t=>{
-  const f=await appFixture(t),{lender,circle}=await lending(f);
-  await waitFor(async()=>lender.app.lendingAdmission()===null,'the lender admits',15000);
-  const controller=new AbortController();t.after(()=>controller.abort());
-  const response=await fetch(lender.app.origin+'/api/events?after=0',{headers:{'x-faravan-session-token':lender.app.token,accept:'text/event-stream'},signal:controller.signal});
-  const reader=response.body.getReader(),decoder=new TextDecoder();let text='';
-  const readiness=()=>[...text.matchAll(/"type":"readiness"/g)].length;
-  const pump=(async()=>{try{for(;;){const {done,value}=await reader.read();if(done)break;text+=decoder.decode(value,{stream:true});}}catch{}})();
+test('readiness events report exhausted daily allowance once and restoration once',{timeout:90000},async t=>{
+  const f=await appFixture(t),{owner,lender,circle}=await lending(f);
+  await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
+  const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'offer review',15000);
+  await api(lender.app,'/api/approvals/'+card.id+'/accept',{method:'POST',body:{}});
+  await waitFor(async()=>{const s=await api(lender.app,'/api/status');return s.today.jobs===1&&s.lendingProjection.execution==='idle'&&lender.app.lendingAdmission()===null;},'one completed job',15000);
+  const events=await watchReadiness(t,lender.app),settled=events().length;
   await new Promise(resolve=>setTimeout(resolve,1500));
-  const settled=readiness();
-  await new Promise(resolve=>setTimeout(resolve,3000));
-  assert.equal(readiness(),settled,'an idle lender polling every 25 ms sends no readiness news');
-  await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyMinutes:10}});
-  await waitFor(()=>readiness()===settled+1,'one readiness event when Limits change admission',5000);
-  await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyMinutes:5}});
-  await new Promise(resolve=>setTimeout(resolve,500));
-  assert.equal(readiness(),settled+1,'a Limits change that leaves admission the same is not news');
-  controller.abort();await pump;void circle;
+  assert.equal(events().length,settled,'idle polling is not readiness news');
+  await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:1}});
+  await waitFor(()=>events().length===settled+1,'one not-ready event',5000);
+  assert.deepEqual(events().at(-1),{seq:events().at(-1).seq,ready:false,reason:'daily_limit'});
+  assert.equal(lender.app.lendingAdmission(),'daily_limit');
+  await new Promise(resolve=>setTimeout(resolve,500));assert.equal(events().length,settled+1);
+  await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:2}});
+  await waitFor(()=>events().length===settled+2,'one restored-ready event',5000);
+  assert.deepEqual(events().at(-1),{seq:events().at(-1).seq,ready:true,reason:null});
+  await new Promise(resolve=>setTimeout(resolve,500));assert.equal(events().length,settled+2);
+});
+
+test('readiness events report account disable and re-enable separately',{timeout:90000},async t=>{
+  const f=await appFixture(t),{lender}=await lending(f);
+  await waitFor(()=>lender.app.lendingAdmission()===null,'initial readiness',15000);
+  const events=await watchReadiness(t,lender.app),settled=events().length;
+  const accounts=await api(lender.app,'/api/accounts'),account=accounts.accounts[0];
+  await api(lender.app,'/api/accounts/'+account.id+'/settings',{method:'POST',body:{expectedRevision:accounts.revision,enabled:false}});
+  await waitFor(()=>events().length===settled+1,'one account-disabled event',5000);
+  assert.equal(events().at(-1).ready,false);assert.equal(events().at(-1).reason,'lending_off');
+  const updated=await api(lender.app,'/api/accounts');
+  await api(lender.app,'/api/accounts/'+account.id+'/settings',{method:'POST',body:{expectedRevision:updated.revision,enabled:true}});
+  await waitFor(()=>events().length===settled+2,'one account-enabled event',5000);
+  assert.equal(events().at(-1).ready,true);assert.equal(events().at(-1).reason,null);
+  await new Promise(resolve=>setTimeout(resolve,1500));assert.equal(events().length,settled+2);
 });
 
 test('O-B live composer transport evidence immediately blocks and recovers lending',{timeout:90000},async t=>{
@@ -140,7 +200,7 @@ test('O-B live composer transport evidence immediately blocks and recovers lendi
  await compose();
  reject(Object.assign(new Error('late old failure'),{code:'network_error'}));await oldRead;
  assert.equal((await api(lender.app,'/api/status')).lendingProjection.admission,'allowed');
- const sent=await api(lender.app,'/api/jobs',{method:'POST',body:jobInput(circle,'Active execution survives host observation')});
+ const sent=await api(lender.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle,'Active execution survives host observation')});
  await waitFor(()=>lender.backend.calls.some(([kind])=>kind==='run'),'own execution starts',15000);
  const running=await waitFor(async()=>{const s=await api(lender.app,'/api/status');return s.lendingProjection.execution==='running'?s:null;},'execution confirmed');
  failure=Object.assign(new Error('synthetic host transport'),{code:'network_error'});await compose();

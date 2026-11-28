@@ -11,7 +11,7 @@ const prompt='Research rain gardens and cite sources';
 async function returned(t,{outside=false,large=false,bomb=false}={}){const root=await mkdtemp(join(tmpdir(),'app-reports-'));t.after(()=>rm(root,{recursive:true,force:true}));await mkdir(join(root,'faravan-output'));await writeFile(join(root,'faravan-output/report.md'),'# Findings\n\nRain gardens capture runoff.');await writeFile(join(root,'faravan-output/data.csv'),'a,b\n1,2');await writeFile(join(root,'faravan-output/pixel.png'),Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64'));if(outside)await writeFile(join(root,'unexpected.js'),'hidden');if(large)await writeFile(join(root,'faravan-output/large.csv'),Buffer.alloc(20*1024*1024,65));if(bomb)await writeFile(join(root,'faravan-output/pixel.png'),pngOf(12000,12000));return execFileSync('tar',['-czf','-','.'],{cwd:root});}
 test('prompt-only report goes through signed submission, report reader API, and individual/all downloads',async t=>{
  const f=await appFixture(t),{owner,circle}=await f.connect();
- const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,prompt,noSource:true,result:{kind:'message'}}});
+ const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,prompt,noSource:true,result:{kind:'message'}}});
  const base='/api/jobs/'+encodeURIComponent(jobDigest),query='?circle='+circle.id;
  const projected=await api(owner.app,base+query);assert.equal(projected.sourceKind,'none');assert.equal(projected.resultKind,'message');
  const job=f.jobs.get(jobDigest);assert.deepEqual(job.job.payload.source,{kind:'none'});assert.deepEqual(job.job.payload.result,{kind:'message'});
@@ -26,19 +26,19 @@ test('prompt-only report goes through signed submission, report reader API, and 
 });
 test('app rejects ambiguous sources before packaging local files',async t=>{
  const f=await appFixture(t),{owner,circle}=await f.connect();
- await api(owner.app,'/api/jobs',{method:'POST',status:400,body:{circle:circle.id,prompt,noSource:true,repo:{path:'/must-not-be-read'},result:{kind:'message'}}});
+ await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',status:400,body:{circle:circle.id,prompt,noSource:true,repo:{path:'/must-not-be-read'},result:{kind:'message'}}});
 });
 
 test('the whole-result route refuses a signed typed tree with hidden root files',async t=>{
  const f=await appFixture(t),{owner,circle}=await f.connect();
- const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,prompt,noSource:true,result:{kind:'message'}}});
+ const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,prompt,noSource:true,result:{kind:'message'}}});
  await f.complete(jobDigest,'owner',{candidate:await returned(t,{outside:true}),output:{kind:'message'},transcript:JSON.stringify({type:'result',result:'Answer'}),receipt:{candidate_format:'tree'}});
  const response=await boundedFetch(owner.app.origin+'/api/jobs/'+encodeURIComponent(jobDigest)+'/result?circle='+circle.id,{headers:{'x-faravan-session-token':owner.app.token}});
  assert.notEqual(response.status,200);assert.equal((await response.json()).code,'path_traversal');
 });
 test('a large attachment leaves the final Markdown readable and downloadable',async t=>{
  const f=await appFixture(t),{owner,circle}=await f.connect();
- const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,prompt,noSource:true,result:{kind:'message'}}});
+ const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,prompt,noSource:true,result:{kind:'message'}}});
  await f.complete(jobDigest,'owner',{candidate:await returned(t,{large:true}),output:{kind:'message'},transcript:JSON.stringify({type:'result',result:'# Complete answer'}),receipt:{candidate_format:'tree'}});
  const base='/api/jobs/'+encodeURIComponent(jobDigest),q='?circle='+circle.id;
  const view=await api(owner.app,base+'/changes'+q);assert.equal(view.message.markdown,'# Complete answer');
@@ -48,7 +48,7 @@ test('a large attachment leaves the final Markdown readable and downloadable',as
 });
 test('a typed image with excessive dimensions is downloadable but never advertised or served inline',async t=>{
  const f=await appFixture(t),{owner,circle}=await f.connect();
- const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,prompt,noSource:true,result:{kind:'message'}}});
+ const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,prompt,noSource:true,result:{kind:'message'}}});
  await f.complete(jobDigest,'owner',{candidate:await returned(t,{bomb:true}),output:{kind:'message'},transcript:JSON.stringify({type:'result',result:'Image'}),receipt:{candidate_format:'tree'}});
  const base='/api/jobs/'+encodeURIComponent(jobDigest),q='?circle='+circle.id;
  const view=await api(owner.app,base+'/changes'+q),image=view.files.find(file=>file.path.endsWith('pixel.png'));
@@ -60,7 +60,7 @@ test('a typed image with excessive dimensions is downloadable but never advertis
 
 for (const kind of ['message','files']) test(`a ${kind} no-project follow-up stays empty and retains its local ancestry`,async t=>{
  const f=await appFixture(t),{owner,circle}=await f.connect();
- const {jobDigest:parent}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,prompt,noSource:true,result:{kind}}});
+ const {jobDigest:parent}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,prompt,noSource:true,result:{kind}}});
  await f.complete(parent,'owner',{candidate:await returned(t),output:{kind},transcript:JSON.stringify({type:'result',result:'# Original answer'}),receipt:{candidate_format:'tree'}});
  const query='?circle='+circle.id,base='/api/jobs/'+encodeURIComponent(parent);
  const context=await api(owner.app,base+'/continuation'+query);
@@ -68,16 +68,16 @@ for (const kind of ['message','files']) test(`a ${kind} no-project follow-up sta
  const parentResult=f.jobs.get(parent).result_digest;
  const body={circle:circle.id,prompt:'Explain the next step',draft_id:'no-project-followup-'+kind,followup:{parentJob:parent,parentResult}};
  const before=f.requests.filter(r=>r.method==='PUT'&&r.route.startsWith('/artifacts/')).length;
- const {jobDigest:child}=await api(owner.app,'/api/jobs',{method:'POST',body});
+ const {jobDigest:child}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body});
  const payload=f.jobs.get(child).job.payload;
  assert.deepEqual(payload.source,{kind:'none'});assert.deepEqual(payload.result,{kind:'message'});
- assert.deepEqual(payload.requirements.capabilities,['results_v1','parent_link_v1']);
+ assert.deepEqual(payload.requirements.capabilities,['results_v1','parent_link_v1','run_request_v1']);
  assert.equal(f.requests.filter(r=>r.method==='PUT'&&r.route.startsWith('/artifacts/')).length-before,1,'only the follow-up prompt is uploaded');
  const view=await api(owner.app,'/api/jobs/'+encodeURIComponent(child)+query);
  assert.equal(view.local.parentJob,parent);assert.equal(view.local.parentResult,parentResult);assert.equal(view.local.prompt,body.prompt);
- const replay=await api(owner.app,'/api/jobs',{method:'POST',body});assert.equal(replay.jobDigest,child);assert.equal(replay.replayed,true);
+ const replay=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body});assert.equal(replay.jobDigest,child);assert.equal(replay.replayed,true);
  const thread=await api(owner.app,'/api/jobs/'+encodeURIComponent(child)+'/thread'+query);assert.equal(thread.thread.length,2);
- const explicit=await api(owner.app,'/api/jobs',{method:'POST',body:{...body,draft_id:'explicit-followup-'+kind,noSource:true}});
+ const explicit=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{...body,draft_id:'explicit-followup-'+kind,noSource:true}});
  assert.deepEqual(f.jobs.get(explicit.jobDigest).job.payload.source,{kind:'none'});
  assert.deepEqual(f.jobs.get(explicit.jobDigest).job.payload.result,{kind:'message'});
 });

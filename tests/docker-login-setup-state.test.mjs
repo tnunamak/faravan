@@ -76,8 +76,8 @@ const appSource=await readFile(new URL('../lib/v1/app.mjs',import.meta.url),'utf
 const projectionStart=appSource.indexOf('    const checks=(report?.preflight?.checks??[]).map(');
 const projectionEnd=appSource.indexOf('    const names=value=>',projectionStart);
 assert.ok(projectionStart>0&&projectionEnd>projectionStart,'app readiness projection exists');
-const projectChecks=new Function('report','safeLine','appRemedy',appSource.slice(projectionStart,projectionEnd)+'return checks;');
-const project=checks=>projectChecks({preflight:{checks}},value=>String(value??''),c=>c.fix??'');
+const projectChecks=new Function('report','safeLine','appRemedy','dockerConfirmationRetryPending',appSource.slice(projectionStart,projectionEnd)+'return checks;');
+const project=(checks,retryPending=false)=>projectChecks({preflight:{checks}},value=>String(value??''),c=>c.fix??'',retryPending);
 
 test('the app readiness projection retains unverified sign-in evidence for Setup',()=>{
   const checks=project([{name:'sbx_install',ok:true},{name:'docker_runtime',ok:true},
@@ -85,7 +85,11 @@ test('the app readiness projection retains unverified sign-in evidence for Setup
   assert.equal(checks.find(c=>c.name==='docker_login').signinVerified,false);
   const step=setupVM({readiness:{ready:true,checks},agents:[],status:{lending:{enabled:false}}}).steps.find(s=>s.id==='docker-account');
   assert.equal(step.detail,'Faravan could not confirm the Docker sign-in.');
-  const accepted=project([{name:'docker_login',ok:true,signinVerified:false,createAccepted:true,detail:'x'}]);
+  const checking=project([{name:'docker_login',ok:true,signinVerified:false}],true);
+  assert.equal(checking[0].checking,true);
+  assert.equal(checking[0].signinVerified,false);
+  const accepted=project([{name:'docker_login',ok:true,signinVerified:false,createAccepted:true,detail:'x'}],true);
+  assert.equal(accepted[0].checking,undefined);
   assert.equal(accepted.find(c=>c.name==='docker_login').createAccepted,true);
 });
 

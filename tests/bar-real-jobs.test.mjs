@@ -58,6 +58,29 @@ test('newest twenty are selected and JSON failure causes are named',()=>{
   assert.equal(countJobs(input,since).unnamedFailures,1);
   assert.throws(()=>countJobs([...jobs(1),{...jobs(1)[0],state:'failed'}],since),/disagree/);
 });
+test('installed command prefers the release directory and uses executable PATH fallback',async()=>{
+  const {installedApp}=await import('../scripts/bar-real-jobs.mjs');
+  const home='/fixture/home',data='/fixture/data',release=data+'/faravan/usr/bin/faravan',cli='/fixture/bin/faravan';
+  const env={XDG_DATA_HOME:data,PATH:'/fixture/bin'};
+  const tried=[];
+  const only=(...paths)=>async file=>{tried.push(file);if(!paths.includes(file))throw Error('not executable');};
+  assert.equal(await installedApp({home,env,canExecute:only(release,cli)}),release);
+  assert.deepEqual(tried,[release]);
+  tried.length=0;
+  assert.equal(await installedApp({home,env,canExecute:only(cli)}),cli);
+  assert.ok(!tried.some(path=>path.includes('faravan-preview-')));
+});
+
+test('installed command reports a missing candidate without using a retired preview',async()=>{
+  const {installedApp}=await import('../scripts/bar-real-jobs.mjs');
+  const tried=[];
+  await assert.rejects(installedApp({home:'/fixture/home',env:{PATH:''},canExecute:async file=>{
+    tried.push(file);throw Error('not executable');
+  }}),/Installed Faravan command not found/);
+  assert.equal(tried[0],'/fixture/home/.local/share/faravan/usr/bin/faravan');
+  assert.ok(!tried.some(path=>path.includes('faravan-preview-')));
+});
+
 test('reader only calls installed list and get commands, and rejects saved results',async()=>{
   const calls=[];
   const run=async(app,args)=>{calls.push([app,args]);return {stdout:JSON.stringify(args[1]==='list'?[{...jobs(1)[0],circle:{id:'circle'}}]:jobs(1)[0])};};

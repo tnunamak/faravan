@@ -15,7 +15,7 @@ import { composeVM, projectVM, skippedCircleNotice, composeCircleLabel } from '.
 import { hostOffline } from '../../../lib/v1/circle-host.mjs';
 import {SOURCE_UNKNOWN_LINE} from './resend-result.mjs';
 import { loadDraft, restoreDraft, moveDraft, saveDraft, clearDraftIfCurrent, COMPOSE_DRAFT_PREFIX, draftBody, sendUncertain, newDraftId, busyWait } from './compose-draft.mjs';
-import { composeCircle, sendableCircles, circleAgents, noAgentReason, createdJobVM, offeredModels, offeredEfforts, lendersChoice, lendersAccountChoice, keepOffered, keepAuto, autoOffered, isAutoChoice, AUTO_CHOICES } from './compose-model.mjs';
+import { composeCircle, sendableCircles, circleAgents, noAgentReason, createdJobVM, offeredModels, offeredEfforts, lendersChoice, lendersAccountChoice, keepOffered } from './compose-model.mjs';
 import { PageSkeleton } from './shell-states.jsx';
 import { ProjectPicker, ProjectRow } from './project-picker.jsx';
 import {saveAttachment,loadAttachment,removeAttachment} from './source-attachments.mjs';
@@ -40,7 +40,7 @@ export function ComposeBody({ vm, project, draft, home, circles = [], circle = '
   const models = accountModels(accountOffers);
   const efforts = accountEfforts(accountOffers,runRequest);
   const chosenModel = runRequest.models === 'any' ? '' : accountModelKey(runRequest.models[0]);
-  const lenderChoice = draft.agent && !draft.model && !draft.effort && !draft.auto ? lendersChoice(offers, draft.agent) : '';
+  const lenderChoice = draft.agent && !draft.model && !draft.effort ? lendersChoice(offers, draft.agent) : '';
   const folderRefused = Boolean(vm.folderError) && draft.sourceKind !== 'none' && !draft.followup;
   // A folder refusal and its recovery buttons live in Project, and Send's reason points there, so show it.
   // A required project that is not chosen yet is never hidden behind a closed row.
@@ -57,10 +57,8 @@ export function ComposeBody({ vm, project, draft, home, circles = [], circle = '
   const sendPointer = vm.folderError && draft.sourceKind !== 'none' ? 'See the folder message above.' : '';
   const choiceLock = ownershipBlocked || draft.sending || busy || vm.state === 'compose.send-uncertain' ? lockReason : '';
   const choiceReason = !draft.agent ? 'Choose an agent first.' : choiceLock;
-  // A saved automatic choice can always be cleared, even with no agent and no offers, or Send would stay off with nothing to change.
-  // The list offers no new choice then; only the draft's own locks apply.
-  const modelReason = draft.auto ? choiceLock : choiceReason || (!draft.model && !offeredModels(offers, draft.agent).length ? 'No lender offers a choice right now.' : '');
-  const effortReason = choiceReason || (draft.auto ? 'The lender chooses the effort.' : !draft.effort && !offeredEfforts(offers, draft.agent, draft.model).length ? 'No lender offers a choice right now.' : '');
+  const modelReason = choiceReason || (!draft.model && !offeredModels(offers, draft.agent).length ? 'No lender offers a choice right now.' : '');
+  const effortReason = choiceReason || (!draft.effort && !offeredEfforts(offers, draft.agent, draft.model).length ? 'No lender offers a choice right now.' : '');
   const agentLocked = ownershipBlocked || draft.sending || busy || vm.state === 'compose.send-uncertain';
   const circleReason = draft.followup ? 'A follow-up stays in the same circle.' : locked ? lockReason : '';
   const noSource = draft.sourceKind === 'none';
@@ -172,11 +170,9 @@ export function ComposeBody({ vm, project, draft, home, circles = [], circle = '
                 {efforts.map(e => <option key={e} value={e}>{e}</option>)}
               </Select></label>
             </details> : <>
-            <details class="cmp-model-choice" open={Boolean(draft.model || draft.effort || draft.auto)}><summary class="cmp-setting-row"><span class="cmp-setting-label">Model and effort</span><span class="cmp-setting-value">{(draft.auto ? AUTO_CHOICES[draft.auto] ?? 'Unknown choice' : [draft.model, draft.effort && `${draft.effort} effort`].filter(Boolean).join(' · ')) || (draft.agent ? (lenderChoice || 'Let the lender choose') : 'Let the lender choose · choose an agent to change')}</span><Icon name="chev-r" size="sm" /></summary>
-            <label class="cmp-route-field"><span>Model</span><Select id="cmp-model" class="selectish" aria-label="Model" value={draft.auto ? 'auto:' + draft.auto : draft.model || ''} disabled={Boolean(modelReason)} disabledReason={modelReason} onChange={e=>onModel(e.currentTarget.value)}>
+            <details class="cmp-model-choice" open={Boolean(draft.model || draft.effort)}><summary class="cmp-setting-row"><span class="cmp-setting-label">Model and effort</span><span class="cmp-setting-value">{[draft.model, draft.effort && `${draft.effort} effort`].filter(Boolean).join(' · ') || (draft.agent ? (lenderChoice || 'Let the lender choose') : 'Let the lender choose · choose an agent to change')}</span><Icon name="chev-r" size="sm" /></summary>
+            <label class="cmp-route-field"><span>Model</span><Select id="cmp-model" class="selectish" aria-label="Model" value={draft.model || ''} disabled={Boolean(modelReason)} disabledReason={modelReason} onChange={e=>onModel(e.currentTarget.value)}>
               <option value="">Let the lender choose</option>
-              {Object.entries(AUTO_CHOICES).filter(([intent]) => autoOffered(offers, draft.agent, intent) || draft.auto === intent).map(([intent, label])=><option key={intent} value={'auto:' + intent}>{label}</option>)}
-              {draft.auto && !isAutoChoice(draft.auto) && <option value={'auto:' + draft.auto}>{'Unknown choice: ' + draft.auto}</option>}
               {draft.model && !offeredModels(offers, draft.agent).includes(draft.model) && <option value={draft.model}>{draft.model}</option>}
               {offeredModels(offers, draft.agent).map(m=><option key={m} value={m}>{m}</option>)}
             </Select><Icon name="chev-r" size="sm"/></label>
@@ -204,7 +200,7 @@ export function ComposeBody({ vm, project, draft, home, circles = [], circle = '
               <summary class="cmp-privacy-details" aria-label="Privacy and source details"><svg class="i sm" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg></summary>
             <div class="cmp-settings-content cmp-consent">
               <p class="cmp-audience">{FIRST_SEND_COPY.visible}{' '}<a href="#cmp-sharing" onClick={e=>{e.preventDefault();const section=document.getElementById('cmp-sharing');section.open=true;section.scrollIntoView({block:'nearest'});}}>Review what you’re sending</a></p>
-              <p>Model · {draft.auto ? AUTO_CHOICES[draft.auto] ?? 'Unknown choice' : draft.model || 'Set by the lender'}</p><p>Effort · {draft.auto ? 'Set by the lender' : draft.effort || 'Set by the lender'}</p>
+              <p>Model · {draft.model || 'Set by the lender'}</p><p>Effort · {draft.effort || 'Set by the lender'}</p>
               <p>Leave a choice on “Let the lender choose” and the lender picks it.</p>
               <p>Requested limits · The lender’s own per-job limit can be lower.</p>
               <details class="cmp-limits"><summary>Resource bounds <Icon name="chev-r" size="sm" /></summary><p>Up to {Math.ceil(JOB_DEFAULTS.limits.wall_seconds / 60)} minutes. These are requested limits, not an observation of a run. Disk is a preferred limit; it may not be enforced.</p></details>
@@ -568,8 +564,8 @@ function ReadyComposePage({ circle, selected, circles, setCircle, api, refresh, 
   // A follow-up stays in its circle, so it never offers another one.
   const instead = draft.followup ? null : circles.find(c => c.id !== circle && !hostOffline(c)) ?? null;
   const composeRepo = draft.followup ? {status:'ok'} : sourceReady(draft,repo)?repo:repo.status==='ok'?{status:'idle'}:repo;
-  const baseVM = useMemo(() => ({ ...composeVM({ prompt: draft.prompt, repo:composeRepo, circle: { id: circle, name: selected?.name, state: state?.circle === circle ? state : { networked: Boolean(selected?.origin) } }, submission, now, uncertainSince:draft.uncertainSince,sourceKind:sourceKind(draft),draftSaved,viewerSession,computerName,clientOffline:reach?.offline === true, choice:signed ? {} : {agent:draft.agent,model:draft.model,effort:draft.effort,auto:draft.auto}, instead }), checking: repo.status === 'checking' }),
-    [signed, instead, draft.prompt, draft.uncertainSince, draft.sourceKind, draft.followup, repo, circle, selected, state, submission, now, draftSaved, viewerSession, computerName, reach?.offline, draft.agent, draft.model, draft.effort, draft.auto]);
+  const baseVM = useMemo(() => ({ ...composeVM({ prompt: draft.prompt, repo:composeRepo, circle: { id: circle, name: selected?.name, state: state?.circle === circle ? state : { networked: Boolean(selected?.origin) } }, submission, now, uncertainSince:draft.uncertainSince,sourceKind:sourceKind(draft),draftSaved,viewerSession,computerName,clientOffline:reach?.offline === true, choice:signed ? {} : {agent:draft.agent,model:draft.model,effort:draft.effort}, instead }), checking: repo.status === 'checking' }),
+    [signed, instead, draft.prompt, draft.uncertainSince, draft.sourceKind, draft.followup, repo, circle, selected, state, submission, now, draftSaved, viewerSession, computerName, reach?.offline, draft.agent, draft.model, draft.effort]);
   const directoryError=!draft.followup && sourceKind(draft)!=='none' && workingDirectoryProblem(draft.workingDirectory?.trim());
   const signedWhy = signedRequestBlocker(state?.circle === circle ? state : null,draft);
   const vm=signedWhy && submission==='idle' ? {...baseVM,send:{...baseVM.send,disabled:true,why:signedWhy}} : moveBlocked ? {...baseVM,send:{...baseVM.send,disabled:true,why:'Changing circles could not be confirmed. Copy your request before leaving, then check the saved requests in both circles before sending.'}} : directoryError && submission==='idle' ? {...baseVM,send:{...baseVM.send,disabled:true,why:directoryError}} : baseVM;
@@ -583,10 +579,8 @@ function ReadyComposePage({ circle, selected, circles, setCircle, api, refresh, 
   const offers=state?.circle===circle?(state.offers??[]):[];
   // Choosing an agent or a model keeps the other choices only while the circle's lenders still offer them.
   const pick=patch=>{
-    const next={agent:draftRef.current.agent,model:draftRef.current.model,effort:draftRef.current.effort,auto:draftRef.current.auto,...patch};
-    // A preset replaces the model and effort; a model or an agent change keeps a preset only while a lender still offers it.
-    const auto=keepAuto(offers,next);
-    return {...patch,...(auto?{model:'',effort:''}:keepOffered(offers,next)),auto};
+    const next={agent:draftRef.current.agent,model:draftRef.current.model,effort:draftRef.current.effort,...patch};
+    return {...patch,...keepOffered(offers,next)};
   };
   const editRefusedJob = patch => {
     pending.current = null;
@@ -632,7 +626,7 @@ function ReadyComposePage({ circle, selected, circles, setCircle, api, refresh, 
         onPath={changePath} onChoose={() => setPickerOpen(true)} onSelectProject={selectProject} suggestions={repo.refusal?.suggestions || repo.info?.suggestions || []}
         onInclude={(includeUncommitted) => change({ includeUncommitted }, { rotate: true })}
         onAgent={(agent) => agentRefusal ? editRefusedJob(pick({agent})) : change(pick({agent}), {rotate:true})}
-        onModel={(value) => { const patch = value.startsWith('auto:') ? {auto: value.slice(5), model: '', effort: ''} : {auto: '', model: value}; agentRefusal ? editRefusedJob(pick(patch)) : change(pick(patch), {rotate:true}); }}
+        onModel={(value) => { const patch = {model: value}; agentRefusal ? editRefusedJob(pick(patch)) : change(pick(patch), {rotate:true}); }}
         onEffort={(effort) => agentRefusal ? editRefusedJob({effort}) : change({effort}, {rotate:true})}
         onVerify={(verifyCmd) => change({verifyCmd, verifyEdited: true}, {rotate: true})}
         onCircle={changeCircle} onCheck={(force=true) => {if(force || repo.status!=='ok')check();}} onSend={() => requestSend()} onSendAnyway={() => requestSend(true)}

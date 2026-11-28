@@ -25,7 +25,6 @@ export function Shell({ route, home, devices, approvals, jobs, circles = [], tit
     machine = machineVM(home, devices, { readiness, agents, approvals, jobs, unavailable }),
     owner = devices?.ownerName;
   const scopedMachineHold = (route.page === 'circles' || route.page === 'circle' || route.page === 'jobs') && machine.kind === 'need';
-  const canRaiseLimit = machine.href === '#/lend/limits/owner-limit';
   return (
     <div class="app swing-app">
       <Sidebar
@@ -36,11 +35,7 @@ export function Shell({ route, home, devices, approvals, jobs, circles = [], tit
         foot={
           <>
             {scopedMachineHold ? (
-              canRaiseLimit ? (
-                <a class="side-link" href={machine.href}>Raise limit for {machine.name}</a>
-              ) : (
-                <a class="side-link" href="#/lend">{machine.name}</a>
-              )
+              <a class="side-link" href="#/lend">{machine.name}</a>
             ) : (
               <ThisComputer {...machine} href={machine.href || "#/lend"} />
             )}

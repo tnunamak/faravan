@@ -19,23 +19,25 @@ import {validateMacAppZip} from '../lib/v1/macos-update-archive.mjs';
 const run=promisify(execFile),repo='tnunamak/faravan-updates';
 const sourceRoot=fileURLToPath(new URL('..',import.meta.url));
 const datedVersion=/^\d+\.\d+\.\d+-preview\.\d{8}\.\d+$/;
-const usage='release-candidate.mjs --commit SHA --version X.Y.Z-preview.YYYYMMDD.N [--dry-run] [--mac-zip FILE | --linux-only]\nrelease-candidate.mjs --promote VERSION [--dry-run]';
+const usage='release-candidate.mjs --commit SHA --private-head SHA --version X.Y.Z-preview.YYYYMMDD.N [--dry-run] [--mac-zip FILE | --linux-only]\nrelease-candidate.mjs --promote VERSION [--dry-run]';
 export function parseOptions(args) {
-  const {values:v}=parseArgs({args,options:{commit:{type:'string'},version:{type:'string'},'dry-run':{type:'boolean'},'linux-only':{type:'boolean'},'mac-zip':{type:'string'},promote:{type:'string'}}});
+  const {values:v}=parseArgs({args,options:{commit:{type:'string'},'private-head':{type:'string'},version:{type:'string'},'dry-run':{type:'boolean'},'linux-only':{type:'boolean'},'mac-zip':{type:'string'},promote:{type:'string'}}});
   if(v.promote) {
     if(!datedVersion.test(v.promote)||Object.keys(v).some(key=>!['promote','dry-run'].includes(key)))throw Error(usage);
     return {promote:v.promote,dryRun:!!v['dry-run']};
   }
+  if(!/^[0-9a-f]{40}$/i.test(v['private-head']??''))throw Error('A full --private-head SHA is required\n'+usage);
   if(!/^[0-9a-f]{7,40}$/i.test(v.commit??'')||!datedVersion.test(v.version??'')||v['linux-only']&&v['mac-zip'])throw Error(usage);
-  return {commit:v.commit,version:v.version,dryRun:!!v['dry-run'],linuxOnly:!!v['linux-only'],macZip:v['mac-zip']?resolve(v['mac-zip']):null};
+  return {commit:v.commit,privateHead:v['private-head'].toLowerCase(),version:v.version,dryRun:!!v['dry-run'],linuxOnly:!!v['linux-only'],macZip:v['mac-zip']?resolve(v['mac-zip']):null};
 }
 export function checkIdentity(versionText,metadata,{version,commit}) {
   if(versionText.trim()!==version||metadata?.schemaVersion!==1||metadata.version!==version||metadata.sourceSha!==commit)
     throw Error('Artifact version or source SHA does not match the requested version and commit');
 }
-export function verifyCandidate({bytes,signature,publicKey=UPDATE_PUBLIC_KEY,version,commit,artifacts}) {
+export function verifyCandidate({bytes,signature,publicKey=UPDATE_PUBLIC_KEY,version,commit,privateHead,artifacts}) {
   const manifest=verifyManifest(bytes,signature,publicKey);
   if(! /^[0-9a-f]{40}$/.test(manifest.sourceSha??'')||commit&&manifest.sourceSha!==commit)throw Error('Candidate sourceSha must identify the full 40-character source commit');
+  if(privateHead!==undefined&&manifest.privateHead!==privateHead)throw Error('Candidate signed privateHead does not match the requested private branch head');
   if(manifest.version!==version)throw Error('Candidate version does not match the requested version');
   assertNewRelease(manifest,null);
   if(artifacts) {
@@ -76,6 +78,11 @@ async function logged(command,args,options={}) {
     child.once('error',reject);child.once('exit',(code,signal)=>code===0?accept():reject(Error(command+' failed ('+(signal??code)+')')));
   });
 }
+// ditto stores a signed script's code signature as an AppleDouble "._" entry (Contents/MacOS/._faravan). A Mac restores it as
+// extended attributes; unzip on Linux makes it a stray file that the bundle check rightly refuses. Leave those entries out.
+export async function unpackMacZip(file,directory) {
+  await output('unzip',['-q',file,'-d',directory,'-x','*/._*']);
+}
 async function macArtifact(options,scratch) {
   let file=options.macZip;
   if(!file) {
@@ -92,7 +99,7 @@ async function macArtifact(options,scratch) {
   const bytes=await readFile(file);await validateMacAppZip(bytes);
   await output('unzip',['-t',file]);
   const unpacked=join(scratch,'unpacked');await mkdir(unpacked);
-  await output('unzip',['-q',file,'-d',unpacked]);
+  await unpackMacZip(file,unpacked);
   return {file,...await verifyMacApp(join(unpacked,'Faravan.app'),options)};
 }
 export async function verifyMacApp(app,options) {
@@ -226,12 +233,12 @@ export async function main(args=process.argv.slice(2)) {
     if(mac)assetMap.push({file:mac.file,platform:'darwin',arch:mac.arch,kind:'macos-app-zip',channel:mac.channel.id,bundleId:mac.channel.bundleId,url:url(mac.file)});
     const map=join(scratch,'assets.json');if(mac)await writeFile(map,JSON.stringify(assetMap));
     const signed=join(scratch,'signed');
-    await logged(process.execPath,[join(sourceRoot,'packaging/sign-update.mjs'),'--tarball',tarball,'--version',options.version,
+    await logged(process.execPath,[join(sourceRoot,'packaging/sign-update.mjs'),'--tarball',tarball,'--version',options.version,'--private-head',options.privateHead,
       '--key',process.env.FARAVAN_UPDATE_KEY||join(homedir(),'.config/faravan-release/update-private.pem'),'--out',signed,
       '--source-sha',options.commit,'--tarball-url',url(tarball),'--linux-channel',channel.id,'--deb',deb,...(mac?['--asset-map',map]:[])]);
     const bytes=await readFile(join(signed,'update.json')),signature=await readFile(join(signed,'update.json.sig'));
     const files=[tarball,deb,...(mac?[mac.file]:[])],artifacts=await Promise.all(files.map(hashArtifact));
-    const manifest=verifyCandidate({bytes,signature,version:options.version,commit:options.commit,artifacts});
+    const manifest=verifyCandidate({bytes,signature,version:options.version,commit:options.commit,privateHead:options.privateHead,artifacts});
     process.stdout.write(bytes);
     console.log('Verified exact manifest bytes and every artifact hash, version and source SHA.');
     if(options.dryRun) {

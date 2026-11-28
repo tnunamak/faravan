@@ -85,6 +85,8 @@ test('source guard rejects a new code instead of accepting the fallback', () => 
 });
 
 const cases = [
+  ['invalid_run_request','before_start','request','failed',false,'none','request'],
+  ['lending_off','before_claim','lender','requeue',false,'none','lender_stop'],
   // Confirming an action belongs to the requester; ending a hold is the lender's choice.
   ['confirmation_required', 'before_start', 'request', 'failed', false, 'none', 'request'],
   ['hold_release_requested', 'before_start', 'lender', 'requeue', false, 'none', 'lender_stop'],
@@ -107,7 +109,6 @@ const cases = [
   ['output_missing', 'result', 'platform', 'failed', false, 'actual', 'result_delivery'],
   ['output_invalid', 'result', 'platform', 'failed', false, 'actual', 'result_delivery'],
   ['sandbox_not_ready', 'before_start', 'lender', 'requeue', false, 'none', 'lender_setup'],
-  ['pace50_disabled', 'before_start', 'lender', 'requeue', false, 'none', 'lender_setup'],
   ['unreadable_window_origin', 'before_start', 'platform', 'requeue', false, 'none', 'platform'],
   ['readiness_changed', 'before_start', 'lender', 'requeue', false, 'none', 'lender_setup'],
   ['execution_failed', 'prepare', 'lender', 'requeue', false, 'none', 'lender_setup'],

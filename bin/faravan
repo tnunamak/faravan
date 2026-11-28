@@ -144,12 +144,6 @@ async function cmdDoctor(argv, options = {}) {
   const { flags, positional } = parseFlags(argv, [], ['fix-policy', 'quick']);
   if (positional.length > 0) fail('usage: faravan doctor [--fix-policy] [--quick] [--json]');
   const result = await sandboxPreflight({ json: flags.json, fixPolicy: flags['fix-policy'], quick: flags.quick, ...options });
-  try {
-    const {configHome}=await import('../lib/local-state.mjs');
-    const state=JSON.parse(fs.readFileSync(path.join(configHome(),'v1','lending-pace50-state.json'),'utf8'));
-    const holds=state.attempts.filter(a=>a.hold_closed!==true&&a.resources.some(r=>r.held_micro>0||r.unrepresented_micro>0));
-    if(!flags.json)for(const hold of holds)process.stdout.write(`HOLD ${hold.id}: turn lending off, then faravan lending release-hold --attempt-id '${hold.id.replaceAll("'", "'\\''")}' --yes (charged in full; wait for delayed provider charges to be ruled out)\n`);
-  } catch(error) {if(error.code!=='ENOENT'&&!flags.json)process.stdout.write('CHECK Lending holds could not be read.\n');}
   if (!result.ok) process.exitCode = 1;
 }
 

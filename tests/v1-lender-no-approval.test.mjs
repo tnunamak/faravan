@@ -28,7 +28,7 @@ for(const [name,approvalOption] of [
   assert.ok(f.jobDigest,'the fixture offers a job');
   assert.ok(f.job.payload,'the offered job is available for the admission probe');
   const controller=new AbortController();
-  const lender=createLender({
+  const lender=createLender({...f.runOptions,
     client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
     ...approvalOption,
     onEvent:event=>{f.events.push(event);},
@@ -47,14 +47,14 @@ for(const [name,approvalOption] of [
     }
     if(failure&&failure.name!=='AbortError'&&failure.code!=='aborted')throw failure;
   };
-  const heldEvents=()=>f.events.filter(event=>event.reason==='approval_unavailable').length;
+  const heldEvents=()=>f.events.filter(event=>event.reason==='approval_pending').length;
   const assertHeld=()=>{
     noFreshClaim(f);
     noExecution(f);
-    assert.equal(lender.getState().status,'paused');
-    assert.equal(lender.getState().reason,'approval_unavailable');
+    assert.equal(lender.getState().status,'waiting_for_sandbox');
+    assert.equal(lender.getState().reason,'approval_pending');
     assert.equal(lender.getState().paused,false,'the hold preserves enabled lending intent');
-    assert.equal(lender.admits(f.job.payload),'approval_unavailable','readiness uses the same hold');
+    assert.equal(lender.admits(f.job.payload),'approval_pending','readiness uses the same hold');
   };
   try {
     // A removed pre-claim hold can reach the later decline guard with the same

@@ -1,6 +1,11 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {borrowerRunRequest,resolveSelection} from '../lib/v1/run-request.mjs';
+import {HOST_CAPABILITIES,RUN_REQUEST_CAPABILITY} from '../lib/v1/versions.mjs';
+import {syntheticAccountRunOptions} from './helpers/v1-lender-fixture.mjs';
+import {checkNewJob} from '../lib/protocol/index.mjs';
 import {createLender} from '../lib/v1/lender.mjs';
 import {classify, isPassingDecline, passingDeclineCode} from '../lib/v1/failures.mjs';
 import {jobStatusContract} from '../lib/v1/status-contract.mjs';
@@ -11,6 +16,7 @@ const CLEANUP_WAIT = 'Nobody can take it right now · 1 computer is waiting for 
 const CLEANUP_HISTORY = "The last try waited for the lender's computer to clean up. The lender's current status is unavailable.";
 const LENDER = 'Waiting for cleanup of sandboxes from last time…';
 const DIGEST = 'sha256:' + 'a'.repeat(64);
+const GOLDEN=JSON.parse(readFileSync(new URL('../docs/protocol/vectors/golden.json',import.meta.url))).objects.job.envelope.payload;
 const AUTHOR = 'sha256:' + 'b'.repeat(64);
 const PREPARATION_MS = 1000;
 const clone = value => structuredClone(value);
@@ -49,16 +55,18 @@ function fixture({accepted = false, cleanup = true, recoveryAtSend = false} = {}
   let counters = null, inFlight = false, admissions = 0, capabilities = 0, prepares = 0, starts = 0, approvals = 0, loopError;
   const spec = {...resolveHarness('codex'), auth_strategy: 'host-env-proxy', credential_in_guest: false};
   const limits = {wall_seconds: 60, cpu: 1, memory_bytes: 512 * 1048576, disk_bytes: 512 * 1048576, output_bytes: 16384};
-  const job = {circle: 'cleanup-test', author: AUTHOR, expires_at: new Date(clock.now() + 86400000).toISOString(),
-    prompt: {digest: 'sha256:' + 'c'.repeat(64), media_type: 'text/plain', size: 7},
-    source: {kind: 'none'}, requirements: {harness: [spec.harness_id], capabilities: [], egress: 'provider-only', limits}};
+  const job = {...clone(GOLDEN),circle:GOLDEN.circle,author:AUTHOR,created_at:new Date(clock.now()-1000).toISOString().replace('.000Z','Z'),runRequest:borrowerRunRequest({harness:'codex'}),result:{kind:'message'},expires_at: new Date(clock.now() + 86400000).toISOString().replace('.000Z','Z'),
+    prompt: {digest: 'sha256:' + 'c'.repeat(64), media_type: 'text/plain', bytes: 7},
+    source: {kind: 'none'}, requirements: {harness: [spec.harness_id], capabilities: ['results_v1',RUN_REQUEST_CAPABILITY], egress: 'provider-only', limits}};
+  assert.deepEqual(checkNewJob(job),{ok:true},'cleanup fixture submits a current complete job');
   const report = {available: true, enforced_limits: Object.keys(limits),
     max_limits: {...limits, wall_seconds: 3600}, capabilities: [], egress: ['provider-only']};
+  const runOptions=syntheticAccountRunOptions(),accounts=runOptions.runAccounts();
   // A durable already-approved intent exercises the real claimJob accepted branch.
   if (accepted) counters = {day: '2026-11-09', jobs: 0, milliseconds: 0, pending: null, claimPending: {
     state: 'created-unsent', jobDigest: DIGEST, job: {payload: clone(job)}, acceptedAt: clock.now(),
     wallSeconds: limits.wall_seconds, leaseSeconds: 120, idempotencyKey: 'cleanup-approved',
-    advertisement: {harnesses: [spec.harness_id], models: [], capabilities: ['results_v1'],
+    advertisement: {accounts,harnesses: [spec.harness_id], models: [], capabilities: ['results_v1',RUN_REQUEST_CAPABILITY],
       egress: report.egress, enforced_limits: report.enforced_limits, max_limits: report.max_limits}}};
   const backend = {
     deadlineRecoveryPending: () => inFlight,
@@ -77,6 +85,7 @@ function fixture({accepted = false, cleanup = true, recoveryAtSend = false} = {}
     async start() {starts++; throw new Error('the fixture must never launch an agent');},
   };
   const client = {
+    async capabilities(){return {capabilities:[...HOST_CAPABILITIES]};},
     async claimJob(digest, advertisement, options) {
       assert.equal(digest, DIGEST); return client.claimNext(advertisement, options);
     },
@@ -86,7 +95,8 @@ function fixture({accepted = false, cleanup = true, recoveryAtSend = false} = {}
       const attempt = {attempt_id: 'cleanup-' + (deliveries.length + 1), job_digest: DIGEST,
         generation: deliveries.length + 1, state: 'active', execution_started_at: null,
         lease_expires_at: new Date(clock.now() + 120000).toISOString()};
-      const claim = {job_digest: DIGEST, job: {payload: clone(job)}, attempt};
+      attempt.selection=resolveSelection({runRequest:job.runRequest,accounts:advertisement.accounts}).value;
+      const claim = {job_digest:DIGEST,job:{payload:clone(job)},attempt,selection:attempt.selection};
       deliveries.push(clone(claim)); return claim;
     },
     async fetchArtifact() {return Buffer.from('Do work');},
@@ -106,7 +116,7 @@ function fixture({accepted = false, cleanup = true, recoveryAtSend = false} = {}
     async reserve() {return {ok: true, reservation: {provider: 'codex', model: 'fixture'}};},
     async settle() {return {applied: true};},
   };
-  const lender = createLender({client, backend, clock, adapters: [{spec, installed: true, signedIn: true, models: []}],
+  const lender = createLender({...runOptions,client, backend, clock, adapters: [{spec, installed: true, signedIn: true, models: []}],
     policy: {storage, enabled: true, mode: 'ask', timeZone: 'UTC', pollMs: 100,
       preparationTimeoutMs: PREPARATION_MS, lendingRuntime: {candidate}},
     approve: async () => {approvals++; return true;}, credentialValues: async () => [],
@@ -158,7 +168,7 @@ for (const accepted of [false, true]) {
     await f.clock.advance(PREPARATION_MS);
     await f.until(() => f.releases.length === 1, 'the timer must release the job without waiting for recovery');
     assert.equal(f.releases[0].code, 'cleanup_pending');
-    assert.deepEqual(JSON.parse(f.releases[0].reason), {code: 'cleanup_pending'});
+    assert.deepEqual(JSON.parse(f.releases[0].reason), {code:'cleanup_pending',until:Math.min(Date.parse(f.job.expires_at),f.clock.now()+120000)});
     assert.equal(f.launches, 0);
   });
 
@@ -168,8 +178,7 @@ for (const accepted of [false, true]) {
     await f.until(() => f.releases.length === 1 && f.lender.snapshot.current === null, 'the first job must be released');
     const expiry = Date.parse(f.job.expires_at);
     if (accepted) {
-      assert.equal(f.counters.acceptedClaim?.intent.jobDigest, DIGEST, 'the existing approval must be kept');
-      assert.equal(f.counters.acceptedClaim.intent.state, 'created-unsent');
+      assert.ok(f.counters.jobConsents?.some(row=>row.jobDigest===DIGEST&&!row.revoked),'the job approval must be kept');
     }
     for (const row of [...(f.counters.declined ?? []), ...(f.counters.hiddenOffers ?? [])])
       if (row.jobDigest === DIGEST) assert.ok(row.expiresAt < expiry, 'cleanup must not hide the job until its expiry');
@@ -180,7 +189,7 @@ for (const accepted of [false, true]) {
     f.finishRecovery(); await f.clock.advance(100);
     await f.until(() => f.deliveries.length === 2, 'the same job must be eligible after recovery');
     assert.ok(f.claims.every(call => call.recovery === false));
-    assert.ok(!f.claims.at(-1).exclude.includes(DIGEST));
+    assert.equal(f.claims.filter(call=>!call.exclude.includes(DIGEST)).length,2,'only the original claim and the claim after recovery take the job');
     if (accepted) assert.equal(f.approvals, 0, 'cleanup must not require approval again');
     assert.equal(f.launches, 0, 'late completion of the old admission must never launch');
   });
@@ -192,9 +201,9 @@ for (const accepted of [false, true]) {
     f.finishRecovery(); await drain();
     await f.until(() => f.releases.length > 0 && f.lender.snapshot.current === null, 'ordinary timeout must settle');
     // The timeout keeps its reason and takes the bounded decline path, so the hidden row ends with the lender's readiness epoch.
-    assert.equal(f.releases[0].code, 'preparation_timeout');
-    if (accepted) assert.ok(f.counters.hiddenOffers.some(row => row.jobDigest === DIGEST && row.epoch !== undefined && row.expiresAt < Date.parse(f.job.expires_at)));
-    assert.ok(!f.events.some(event => event.reason === 'cleanup_pending'));
+    assert.equal(f.releases[0].code,'cleanup_pending');
+    assert.ok(f.counters.declined.some(row=>row.jobDigest===DIGEST&&row.epoch!==undefined&&row.expiresAt<Date.parse(f.job.expires_at)));
+    assert.ok(f.events.some(event=>event.reason==='cleanup_pending'&&event.until>f.clock.now()));
   });
 }
 

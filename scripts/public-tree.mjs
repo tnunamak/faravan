@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 // Deliberately reviewed data: adding a new root does not make it public automatically.
 export const ALLOWLIST = [
   '.gitignore', '.gitleaks.toml', '.github/workflows/ci.yml',
-  '.github/workflows/release-macos.yml',
+  '.github/workflows/release-macos.yml', '.github/workflows/bar-install.yml', '.github/workflows/bar-join-borrow.yml',
   'LICENSE.md', 'THIRD-PARTY-NOTICES.md', 'licenses/', 'README.md', 'package.json', 'package-lock.json',
   'playwright.config.mjs', 'playwright.verify.config.mjs',
   'bin/', 'lib/', 'public/', 'ui/', 'tray/', 'packaging/', 'profiles/', 'kits/',

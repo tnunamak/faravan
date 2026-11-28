@@ -9,7 +9,7 @@ import {until, deferred} from './helpers/v1-lender-fixture.mjs';
 
 function launch(f) {
   const controller = new AbortController();
-  const lender = createLender({client:f.client, backend:f.backend, adapters:f.adapters, policy:f.policy,
+  const lender = createLender({...f.runOptions,client:f.client, backend:f.backend, adapters:f.adapters, policy:f.policy,
     clock:f.clock, approve:async () => true, onEvent:event => f.events.push(event)});
   const settled = lender.start(controller.signal).catch(() => {});
   f.stop = async () => {
@@ -65,13 +65,6 @@ test('Stop while the sandbox of a finished run is removed still delivers the out
   await stopAt(t, (f, held) => {
     const destroy = f.backend.destroy.bind(f.backend);
     f.backend.destroy = async (...args) => {if (f.saved()?.outputPending) await held(); return destroy(...args);};
-  });
-});
-
-test('Stop while the finished run is settled with the lending candidate still delivers the output', {timeout:20000}, async t => {
-  await stopAt(t, (f, held) => {
-    const candidate = f.policy.lendingRuntime.candidate, finish = candidate.finish.bind(candidate);
-    candidate.finish = async (...args) => {await held(); return finish(...args);};
   });
 });
 

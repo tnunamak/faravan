@@ -65,13 +65,17 @@ test('Off clears pending backoff and a later On starts with the base delay',asyn
  const c=fixture();await assert.rejects(c.controls.autoResume('circle'));await c.backgroundCheck;
  c.controls.retryFailedResume();await c.backgroundCheck;
  assert.ok(runInNewContext('resumeRetryAt',c)>c.time);
+ let renewalsParked=0;
  Object.assign(c,{parts:['api','lending','off'],cancelResumes:()=>{},policy:null,approvals:new Map(),lendingRuntime:{},
-  schedulePauseEnd:()=>{},paceEventId:()=> 'off-event',lendingView:()=>({}),readinessChanged:()=>{},closeReadingSandboxes:async()=>{}});
+  schedulePauseEnd:()=>{},renewalParked:false,stopCheckCoordinator:{disableRenewal:()=>{renewalsParked++;}},
+  paceEventId:()=> 'off-event',lendingView:()=>({}),readinessChanged:()=>{},closeReadingSandboxes:async()=>{}});
  const begin="            if(['off','pause'].includes(parts[2])) {";
  const end=source.indexOf("          if(parts[1]==='approvals'",source.indexOf(begin));
  const route=source.slice(source.indexOf(begin),source.lastIndexOf('\n          }',end));
  const off=runInNewContext('(async function(input){'+route+'})',c);
  await off({});
+ assert.equal(c.renewalParked,true);
+ assert.equal(renewalsParked,1,'Off parks the stop check renewal');
  assert.equal(c.resumeFailed,null);assert.equal(runInNewContext('resumeRetryAt',c),0);
  assert.equal(runInNewContext('resumeRetryDelay',c),0);
  let starts=0;c.startLending=async()=>{starts++;throw failure();};

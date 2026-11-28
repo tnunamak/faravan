@@ -11,7 +11,7 @@ test('O4 a lender that reaches its daily cap reports it to the circle without wa
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',
     commit:'1'.repeat(40),prompt:'Synthetic friend task.',harness:'codex'}});
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'friend approval card');
   await api(lender.app,'/api/approvals/'+card.id+'/accept',{method:'POST',body:{}});

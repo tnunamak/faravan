@@ -6,8 +6,6 @@ import {ObjectiveExplanation, ProtectionChooser} from './lending-policy-view.jsx
 import {renderFixture, renderedText} from './render.test-helper.mjs';
 import {statusView} from './helpers.mjs';
 import {EXPLAINER, LINES, REASON_LINE} from '../../../lib/v1/lending-status-copy.mjs';
-import {certifiedKappa} from '../../../lib/v1/lending-pace50-source.mjs';
-import {initialObservationFixture} from '../../../tests/helpers/initial-observation-fixture.mjs';
 
 // The explanation uses the server's admission and basis, with owner-facing language.
 const account = decision => ({id: 'claude', label: 'Claude', decision});
@@ -44,25 +42,11 @@ test('a saved provider failure gives a plain explanation without changing the he
   assert.match(renderedText(renderFixture(ObjectiveExplanation,{snapshot})),/provider returned a server error \(5xx\)/i);
 });
 
-test('real weekly spare-capacity hold names the governing weekly reset in the rendered explanation', async t => {
+test('weekly spare-capacity hold names the governing weekly reset in the rendered explanation', () => {
   const now=Date.parse('2026-10-30T00:00:00Z');
-  const weeklyReset=Date.parse('2026-10-31T07:00:00Z');
-  const shortReset=Date.parse('2026-10-30T01:30:00Z');
-  const f=await initialObservationFixture(t,{startAt:now,weeklyResetAt:weeklyReset,shortResetAt:shortReset,
-    weeklyUtilization:98,shortUtilization:4,maxJobUsd:2,
-    // This account's own measurement, at the shipped Max 20x rate.
-    kappaForUsage:({provider,window,model,account_id})=>({...certifiedKappa({provider,plan:'max20',window,model}),
-      binding:{account_sha256_16:account_id}})});
-  await f.candidate.observe(f.args); // Populate the cache through the background path.
-  const refused=await f.reserve();
-  const decision=f.candidate.lastJobDecisionFor('claude');
-  assert.equal(refused.ok,false);
-  assert.equal(decision.reason,'exceeds_spare');
-  assert.equal(decision.objective.reasonCode,'objective_exceeds_spare');
-  assert.equal(decision.objective.resetsAt[decision.objective.bindingWindow],new Date(weeklyReset).toISOString());
-  assert.notEqual(decision.objective.resetsAt[decision.objective.bindingWindow],new Date(shortReset).toISOString());
-  assert.equal(f.adapter.state().attempts.length,0);
-
+  const decision={admitted:false,reason:'exceeds_spare',status:{line:'Not enough spare capacity now.'},
+    objective:{admission:'held',reasonCode:'objective_exceeds_spare',reasonText:'Not enough spare capacity now.',
+      bindingWindow:'seven_day',resetsAt:{seven_day:'2026-10-31T07:00:00.000Z'}}};
   const snapshot={now,zone:'America/Chicago',accounts:[account(decision)]};
   const text=renderedText(renderFixture(ObjectiveExplanation,{snapshot}));
   assert.match(text,/Not enough spare capacity now\./);
@@ -125,7 +109,7 @@ test('the fresh projection owns the explanation when the last job disagrees', ()
   assert.equal(row.line, current.status.line);
 });
 
-// The server's named evidence holds (lib/v1/lender-pace50.mjs SEAM_UNKNOWN). Each must read as its own status, not as an unknown one.
+// The server's named evidence holds (lib/v1/account launch.mjs SEAM_UNKNOWN). Each must read as its own status, not as an unknown one.
 const NAMED_HOLDS = ['account_busy', 'probe_deferred', 'refresh_failed', 'identity_unknown', 'account_week_mapping_unknown', 'epoch_unknown', 'resources_incomplete',
   'funding_unknown', 'executor_unknown', 'stop_bound_unknown', 'conversion_unknown', 'history_unknown', 'queue_unknown',
   'owner_scenarios_unknown', 'friend_value_unknown', 'objective_evidence_unknown'];

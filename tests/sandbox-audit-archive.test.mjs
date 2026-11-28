@@ -21,12 +21,12 @@ for (const kind of ['expanded bytes', 'entry count']) test('M4: remote source ca
   const f = await lenderFixture(t, { mutateJob: job => { job.source = { kind: 'archive', artifact }; } });
   f.artifacts.set(artifact.digest, bytes);
   const controller = new AbortController();
-  const lender = createLender({ client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
+  const lender = createLender({...f.runOptions, client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
     clock: f.clock, approve: async () => true, credentialValues: async () => [], onEvent: event => f.events.push(event) });
   const running = lender.start(controller.signal);
   t.after(async () => { controller.abort(); await running; });
   await until(() => f.events.some(event => ['declined', 'failed', 'finished'].includes(event.status)), 'source outcome');
-  assert.ok(f.events.some(event => event.status === 'declined' && event.reason === 'too_large'));
+  assert.ok(f.events.some(event => event.status === 'declined' && event.reason === 'cannot_run_here'));
   assert.equal(f.calls.some(([kind]) => kind === 'run'), false);
   assert.ok(f.calls.some(([kind]) => kind === 'destroy'));
   assert.deepEqual(await readdir(f.root), [], 'validation rejects before writing any member');

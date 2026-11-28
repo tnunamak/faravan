@@ -107,7 +107,7 @@ test('an unavailable optional stop read preserves the running job and reports un
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
-  const job=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',
+  const job=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',
     commit:'1'.repeat(40),prompt:'Synthetic optional stop-read regression',harness:'codex'}});
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'approval');
   await api(lender.app,'/api/approvals/'+card.id+'/accept',{method:'POST',body:{}});
@@ -221,7 +221,7 @@ test('owner shutdown does not wait for a stop read the coordinator never answers
     if(record.req.method==='GET'&&record.route.endsWith('/stop-request')){held++;return true;}
     return previous(record);
   };
-  const job=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',
+  const job=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',
     commit:'1'.repeat(40),prompt:'Synthetic shutdown regression',harness:'codex'}});
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'approval');
   await api(lender.app,'/api/approvals/'+card.id+'/accept',{method:'POST',body:{}});
@@ -239,7 +239,7 @@ test('an unknown stop status withholds the requester\'s Stop, and this computer 
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
-  const job=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',
+  const job=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',
     commit:'1'.repeat(40),prompt:'Synthetic stop-affordance regression',harness:'codex'}});
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'approval');
   await api(lender.app,'/api/approvals/'+card.id+'/accept',{method:'POST',body:{}});
@@ -278,9 +278,9 @@ async function heldRun(t,{ownerPollMs=250,replayAfterSubmit=false}={}) {
   const submission={circle:circle.id,git:'https://github.com/example/synthetic.git',
     commit:'1'.repeat(40),prompt:'Synthetic shared Stop regression',harness:'codex',
     ...(replayAfterSubmit?{draft_id:'replay-12345678'}:{})};
-  const job=await api(owner.app,'/api/jobs',{method:'POST',body:submission});
+  const job=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:submission});
   if(replayAfterSubmit) {
-    const replay=await api(owner.app,'/api/jobs',{method:'POST',body:submission});
+    const replay=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:submission});
     assert.equal(replay.jobDigest,job.jobDigest);
     assert.equal(replay.replayed,true);
   }
@@ -405,10 +405,9 @@ test('a verified shared Stop stays known through an optional outage, then recove
 test('an optional outage reuses a verified Stop only for the same attempt, and an authorization failure stays a failure',{timeout:120000},async t=>{
   const {owner,lender,circle,job,attempt,releaseCancel,cancelEntered}=await heldRun(t);
   const originalClient=owner.app.device.client,previousClient=originalClient.bind(owner.app.device);
+  const originalRead=owner.app.device.jobReadClient,previousRead=originalRead.bind(owner.app.device);
   let mode='normal';
-  owner.app.device.client=async(...args)=>{
-    const client=await previousClient(...args);
-    return new Proxy(client,{get(target,key){
+  const wrap=client=>new Proxy(client,{get(target,key){
       if(key==='getJob')return async(digest,opts={})=>{
         const view=await target.getJob(digest,opts);
         return mode==='newer'&&view.current_attempt?{...view,current_attempt:{...view.current_attempt,generation:view.current_attempt.generation+1}}:view;
@@ -420,7 +419,8 @@ test('an optional outage reuses a verified Stop only for the same attempt, and a
       };
       const value=target[key];return typeof value==='function'?value.bind(target):value;
     }});
-  };
+  owner.app.device.client=async(...args)=>wrap(await previousClient(...args));
+  owner.app.device.jobReadClient=async(...args)=>wrap(await previousRead(...args));
   try {
     await api(lender.app,'/api/lending/stop',{method:'POST',body:{attemptId:attempt.attempt_id,confirmed:true}});
     await waitFor(()=>cancelEntered()>0,'local cancellation held before cessation');
@@ -440,7 +440,7 @@ test('an optional outage reuses a verified Stop only for the same attempt, and a
     await assert.rejects(operations.get({digest,circle:circle.id}),error=>error.status===401,'an authorization failure is not availability');
   } finally {
     mode='normal';
-    owner.app.device.client=originalClient;
+    owner.app.device.client=originalClient;owner.app.device.jobReadClient=originalRead;
     releaseCancel();
   }
 });
