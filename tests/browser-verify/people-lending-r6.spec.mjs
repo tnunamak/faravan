@@ -50,9 +50,6 @@ test('real separate owner and lender join, persist person names, and offer a job
  await expect.poll(async()=>{const d=await api(h.lenderApi,'/api/devices');return d.circles.find(c=>c.circle===circle.id)?.members.map(m=>m.personName);},{timeout:20000}).toEqual(expect.arrayContaining(['Alex Example','Maya Okafor']));
  await api(h.lenderApi,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
  await api(h.lenderApi,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
- const ownerSettings=await api(h.lenderApi,'/api/lending/owner-settings');
- const engineMinimum=Math.max(ownerSettings.defaultMaxJobUsd,...ownerSettings.minimums.map(row=>row.minimumMaxJobUsd));
- await api(h.lenderApi,'/api/lending/owner-settings',{method:'POST',body:{maxJobUsd:engineMinimum,reason:'Synthetic person-name journey needs room for one worst-case call.'}});
  // Lending on reaches the owner through the lender's next advertisement; a job sent before that is refused honestly.
  await expect.poll(async()=>{
   const device=await api(h.ownerApi,'/api/devices');

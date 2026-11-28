@@ -48,9 +48,9 @@ for(const answer of [true, null, false, 'timeout']) test('31-minute evidence run
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   assert.equal(fast,0,'GET and agent selection do not probe');
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{idleOnly:false}});
-  const started=await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id},status:answer===false?409:200});
-  if(answer===false)assert.equal(started.code,'agent_not_ready');
-  else assert.equal(started.enabled,true);
+  // docs/protocol/app-api.md: lending on saves the intent; a signed-out account is answered in status, not as an agent_not_ready veto.
+  const started=await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
+  assert.equal(started.lending_on,true);
   // A stored sign-in that reads as gone ends the background check without a sandbox; any other answer runs the full check.
   await waitFor(()=>answer===false?fast>=2:full>=2,'retained background full check');
   const rows=await api(lender.app,'/api/agents');
@@ -80,8 +80,8 @@ test('a signed-out proxy still gets the stale native owner fast check before cla
   assert.equal(refreshed.proxySignedIn,false);
 
   armed=true;time+=1001;
-  const denied=await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id},status:409});
-  assert.equal(denied.code,'agent_not_ready');
+  const denied=await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
+  assert.equal(denied.lending_on,true,'the intent is saved; the signed-out account is answered in status');
   assert.equal(fast,1,'the stale native owner sign-in gets one bounded pre-claim probe');
   assert.equal(full,1,'the pre-claim probe does not start another native sandbox check');
 });
@@ -101,10 +101,10 @@ test('lending-on refreshes expired proxy readiness before accepting it',{timeout
   assert.equal(rows[0].proxySignedIn,true);
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   proxyReady=false;time+=1001;
-  const denied=await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id},status:409});
-  assert.equal(denied.code,'agent_not_ready');
+  const denied=await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
+  assert.equal(denied.lending_on,true,'the intent is saved; the signed-out account is answered in status');
   assert.ok(proxyChecks>=2,'lending-on performs a new identity check after the cache TTL');
-  assert.equal((await api(lender.app,'/api/lending')).enabled,false);
+  assert.equal((await api(lender.app,'/api/status')).reason,'no_accounts');
 });
 
 test('an unreadable sign-in store is "can\'t read", never "sign in again" on the lender row',{timeout:90000},async t=>{

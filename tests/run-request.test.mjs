@@ -1,7 +1,7 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateRunRequest,validateAccountAdvertisement,resolveSelection,selectionSatisfies,offersRunRequest} from '../lib/v1/run-request.mjs';
+import {borrowerRunRequest,validateRunRequest,validateAccountAdvertisement,resolveSelection,selectionSatisfies,offersRunRequest} from '../lib/v1/run-request.mjs';
 
 const model=(id,over={})=>({id,label:id,enabled:true,rank:0,pareto:null,efforts:[{id:'low',label:'Low'},{id:'high',label:'High'}],defaultEffort:'low',...over});
 const accounts=[
@@ -82,4 +82,13 @@ test('waiting eligibility uses fresh anonymous offers for the exact signed provi
   assert.equal(offersRunRequest({...withdrawn,account_offers:[...withdrawn.account_offers,offer]},req(model,'high')),true);
   assert.equal(offersRunRequest({...device,account_offers:[]},req(model,'high')),false);
   assert.equal(offersRunRequest({...device,account_offers:[null,{...offer,effortIds:'high'}]},req()),false);
+});
+
+
+test('borrower shorthand becomes one request before signing',()=>{
+  assert.deepEqual(borrowerRunRequest({}), req());
+  assert.deepEqual(borrowerRunRequest({harness:'codex',model:'gpt',effort:'high'}),req([{providerId:'codex',modelId:'gpt'}],'high'));
+  assert.deepEqual(borrowerRunRequest({budget_v1:{effort:'low'}}),req('any','low'));
+  for(const input of [{budget_v1:{max_list_usd:1}},{auto_run_v1:{intent:'strongest'}},{runRequest:req(),effort:'high'}])
+    assert.throws(()=>borrowerRunRequest(input),{code:'invalid_request'});
 });

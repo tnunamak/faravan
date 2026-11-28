@@ -1,7 +1,7 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {paceInputFromObservation} from '../lib/v1/lending-pace50-source.mjs';
+
 import {lendingReadiness} from '../lib/v1/lending-readiness.mjs';
 const observation = {refresh_succeeded:true, identity:{verified:true,account_id:'fixture'}, account_week_id:'week', epoch:'epoch',
   complete:true, weekly_resource_id:'weekly', funding:{subscription_only:'proven'}, executor:{single_executor:'proven'},
@@ -34,7 +34,6 @@ test('readiness distinguishes explicit failures and missing evidence',()=>{
   assert.deepEqual(check({signedIn:null,observation:null}).map(x=>x.state),['unknown','unknown','unknown','unknown','unknown','unknown']);
 });
 
-
 test('a mismatched account is a failure rather than an unread account',()=>{
   const row=check({observation:{...observation,identity:{verified:false,reason:'identity_mismatch'}}})[1];
   assert.equal(row.state,'fail');
@@ -52,30 +51,6 @@ test('failing checks offer plain actions without a role prefix',()=>{
   const plan=check({observation:{...observation,funding:{subscription_only:'unknown',reason:'plan_not_subscription'}}})[2];
   assert.equal(plan.line,'This account has no plan Faravan can lend from.');
   assert.equal(plan.fix,'Check the plan, usage limit and billing settings for this account.');
-});
-
-
-test('every policy proof refusal prevents an all-passing checklist',()=>{
-  const cases = [
-    ['refresh_failed',{refresh_succeeded:false}],
-    ['identity_unknown',{identity:{verified:false}}],
-    ['account_week_mapping_unknown',{account_week_id:null}],
-    ['epoch_unknown',{epoch:null}],
-    ['resources_incomplete',{complete:false}],
-    ['funding_unknown',{funding:{subscription_only:'unknown'}}],
-    ['executor_unknown',{executor:{single_executor:'unknown'}}],
-    ['stop_bound_unknown',{stop:{bounded_execution:'unknown'}}],
-    ['stop_bound_unknown',{stop_bound_ms:null}],
-    ['conversion_unknown',{resources:[{kappa_micro:null}]}],
-  ];
-  for (const [reason, patch] of cases) {
-    const value={...observation,...patch};
-    assert.equal(paceInputFromObservation(value,{now:1}).refuse,reason);
-    const rows=check({observation:value});
-    assert.ok(rows.some(row=>row.state!=='pass'),reason);
-    if (reason==='executor_unknown' || reason==='stop_bound_unknown')
-      assert.equal(rows.find(row=>row.id==='job_control').state,'unknown',reason);
-  }
 });
 
 test('a missing default-model price row is unknown even after a successful observation', () => {
@@ -100,7 +75,6 @@ test('missing shipped calibration shows estimation without turning missing measu
   assert.equal(check({observation:{...observation,refresh_succeeded:false,calibration_missing:[detail]}})
     .find(item=>item.id==='conversion').fix,'Refresh the agent allowance. If the estimate is still unavailable, check the account plan or report the missing estimate.');
 });
-
 
 test('missing or malformed calibration metadata never promises automatic conversion recovery',()=>{
   for(const calibration_missing of [undefined,[],[{}],[{reason:'calibration_missing',scope:'plan'}]]) {

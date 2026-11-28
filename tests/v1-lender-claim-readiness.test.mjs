@@ -2,6 +2,7 @@ import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DockerSbxBackend,SBX_RUN_OPTIONS} from '../lib/docker-backend.mjs';
+import {RUN_REQUEST_CAPABILITY} from '../lib/v1/versions.mjs';
 import {createLender} from '../lib/v1/lender.mjs';
 import {lenderFixture,until} from './helpers/v1-lender-fixture.mjs';
 import {claimCensus} from './helpers/claim-census.mjs';
@@ -38,23 +39,23 @@ async function withObservedDaemon(t,{offers=true,killOnOffers=true}={}) {
   f.client.claimNext=async(...args)=>{await claim(...args);controller.abort();return null;};
   f.client.claimJob=(_digest,advertisement,context)=>f.client.claimNext(advertisement,{...context,waitSeconds:0});
   if(offers){
-    f.client.capabilities=async()=>({capabilities:['offers_v1']});
+    f.client.capabilities=async()=>({capabilities:['offers_v1',RUN_REQUEST_CAPABILITY]});
     f.client.listOffers=async function*(){if(killOnOffers)stopDaemon();yield {job_digest:f.jobDigest,job:f.job,state:'queued',published_at:'2026-10-09T12:00:00Z',current_attempt:null};};
   }
   const start=(hooks={})=>{
-    const lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,approve:async()=>true,onEvent:event=>f.events.push(event),...hooks});
+    const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,approve:async()=>true,onEvent:event=>f.events.push(event),...hooks});
     const loop=lender.start(controller.signal);
     f.stop=async()=>{controller.abort();await loop;};
     return loop;
   };
-  const advertisement={harnesses:['codex'],models:['example-model'],capabilities:[],egress:report.egress,enforced_limits:report.enforced_limits,max_limits:report.max_limits};
+  const advertisement={accounts:f.runOptions.runAccounts(),harnesses:['codex'],models:['example-model'],capabilities:[RUN_REQUEST_CAPABILITY],egress:report.egress,enforced_limits:report.enforced_limits,max_limits:report.max_limits};
   const recoverDaemon=async()=>{host.up=true;await native.lenderCapabilities(options);f.clock.advance(60000);};
   return {...f,start,stopDaemon,recoverDaemon,advertisement,calls,controller};
 }
 
 test('an offer selected after the observed daemon dies sends no new claim',async t=>{
   const f=await withObservedDaemon(t);const loop=f.start();
-  await until(()=>f.count('/jobs/claim-next')>0||f.events.some(event=>event.reason==='sandbox_not_ready'),'claim or fresh refusal');
+  await until(()=>f.count('/jobs/claim-next')>0||f.events.some(event=>event.reason==='sandbox_check_pending'),'claim or fresh refusal');
   f.controller.abort();await loop;
   assert.equal(f.count('/jobs/claim-next'),0);
   assert.equal(f.saved().claimPending.state,'created-unsent');
@@ -65,18 +66,18 @@ test('a durable acceptance cannot create a claim from an idle observation after 
   const intent={jobDigest:f.jobDigest,advertisement:f.advertisement,leaseSeconds:120,idempotencyKey:'accepted-before-outage',state:'created-unsent',acceptedAt:f.clock.now(),ruleId:null};
   await f.policy.storage.set({day:'2026-10-09',jobs:0,milliseconds:0,pending:null,acceptedClaim:{intent,claim:{job:f.job,job_digest:f.jobDigest,acceptedHarness:'codex',automatic:false}}});
   f.stopDaemon();const loop=f.start();
-  await until(()=>f.count('/jobs/claim-next')>0||f.events.some(event=>event.reason==='sandbox_not_ready'),'accepted claim or fresh refusal');
+  await until(()=>f.count('/jobs/claim-next')>0||f.events.some(event=>event.reason==='sandbox_check_pending'),'accepted claim or fresh refusal');
   f.controller.abort();await loop;
   assert.equal(f.count('/jobs/claim-next'),0);
   assert.equal(f.saved().claimPending.state,'created-unsent','accepted work remains parked without sending');
   assert.equal(f.saved().claimPending.idempotencyKey,intent.idempotencyKey);
 });
 
-test('a new legacy claim checks the backend after idle discovery',async t=>{
+test('a new account claim checks the backend after idle discovery',async t=>{
   const f=await withObservedDaemon(t,{offers:false});
-  f.policy.quota=()=>{f.stopDaemon();return {provider:'codex',remaining:100,observedAt:f.clock.now()};};
+  f.runOptions.accountExecution.availability=async()=>{f.stopDaemon();return {decision:{kind:'lend'},accountIds:f.runOptions.runAccounts().map(a=>a.accountId)};};
   const loop=f.start();
-  await until(()=>f.count('/jobs/claim-next')>0||f.events.some(event=>event.reason==='sandbox_not_ready'),'legacy claim or fresh refusal');
+  await until(()=>f.count('/jobs/claim-next')>0||f.events.some(event=>event.reason==='sandbox_check_pending'),'legacy claim or fresh refusal');
   f.controller.abort();await loop;
   assert.equal(f.count('/jobs/claim-next'),0);
 });
@@ -86,7 +87,7 @@ for(const state of [undefined,'sent-uncertain'])test(`an unproven restored ${sta
   const intent={advertisement:f.advertisement,exclude:[],leaseSeconds:120,idempotencyKey:'uncertain-before-outage',...(state?{state}:{})};
   await f.policy.storage.set({day:'2026-10-09',jobs:0,milliseconds:0,pending:null,claimPending:intent});
   f.stopDaemon();const loop=f.start();
-  await until(()=>f.events.some(event=>event.reason==='sandbox_not_ready'),'restored claim waits');
+  await until(()=>f.events.some(event=>event.reason==='sandbox_check_pending'),'restored claim waits');
   assert.equal(f.count('/jobs/claim-next'),0);
   await f.recoverDaemon();f.clock.advance(1000);await loop;
   assert.equal(f.count('/jobs/claim-next'),1);
@@ -102,7 +103,7 @@ test('the claim check follows the awaited automatic acceptance audit',async t=>{
   f.policy.standingRules=[{id:'automatic',circle:f.job.payload.circle,people:[f.job.payload.author],agents:['codex'],maxWallSeconds:300,dailyJobs:10,weeklyJobs:70,dailyMinutes:60,weeklyMinutes:420,expiresAt:f.clock.now()+86400000}];
   let unapplied;
   const loop=f.start({onDecision:async()=>{f.stopDaemon();},onDecisionNotApplied:async entry=>{unapplied=entry;}});
-  await until(()=>f.count('/jobs/claim-next')>0||f.events.some(event=>event.reason==='sandbox_not_ready'),'audit completes before claim refusal');
+  await until(()=>f.count('/jobs/claim-next')>0||f.events.some(event=>event.reason==='sandbox_check_pending'),'audit completes before claim refusal');
   f.controller.abort();await loop;
   assert.equal(f.count('/jobs/claim-next'),0);
   assert.equal(unapplied,undefined,'the acceptance is retained while admission waits');
@@ -114,7 +115,7 @@ test('a kept acceptance uses background cooldown while the daemon remains down',
   const intent={jobDigest:f.jobDigest,advertisement:f.advertisement,leaseSeconds:120,idempotencyKey:'waiting-through-outage',state:'created-unsent',acceptedAt:f.clock.now(),ruleId:null};
   await f.policy.storage.set({day:'2026-10-09',jobs:0,milliseconds:0,pending:null,acceptedClaim:{intent,claim:{job:f.job,job_digest:f.jobDigest,acceptedHarness:'codex',automatic:false}}});
   f.stopDaemon();const loop=f.start();
-  await until(()=>f.events.some(event=>event.reason==='sandbox_not_ready'),'first failed admission');
+  await until(()=>f.events.some(event=>event.reason==='sandbox_check_pending'),'first failed admission');
   const diagnoses=f.calls.filter(row=>row[1]==='diagnose').length;
   for(let second=0;second<30;second++){
     f.clock.advance(1000);await new Promise(resolve=>setImmediate(resolve));
@@ -137,27 +138,13 @@ test('replacing a confirmed expired claim requires fresh backend health',async t
   };
   f.client.getJob=async()=>({state:'queued',current_attempt:attempt});
   const loop=f.start();
-  await until(()=>keys.some(key=>key!==intent.idempotencyKey)||f.events.some(event=>event.reason==='sandbox_not_ready'),'replacement claim or fresh refusal');
+  await until(()=>keys.some(key=>key!==intent.idempotencyKey)||f.events.some(event=>event.reason==='sandbox_check_pending'),'replacement claim or fresh refusal');
   f.controller.abort();await loop;
   assert.deepEqual(keys,[intent.idempotencyKey],'only the original committed request can be replayed during the outage');
   assert.ok(['created-unsent','expired-unstarted'].includes(f.saved().claimPending.state));
 });
 
-test('a candidate hold waits on shared discovery without full admission probes',async t=>{
-  const f=await withObservedDaemon(t,{killOnOffers:false});
-  const intent={jobDigest:f.jobDigest,advertisement:f.advertisement,leaseSeconds:120,idempotencyKey:'waiting-for-candidate',state:'created-unsent',acceptedAt:f.clock.now(),ruleId:null};
-  await f.policy.storage.set({day:'2026-10-09',jobs:0,milliseconds:0,pending:null,acceptedClaim:{intent,claim:{job:f.job,job_digest:f.jobDigest,acceptedHarness:'codex',automatic:false}}});
-  f.policy.lendingRuntime.candidate.gate=async()=> 'paused';
-  const diagnoses=f.calls.filter(row=>row[1]==='diagnose').length;
-  const loop=f.start();
-  await until(()=>f.events.some(event=>event.reason==='paused'),'candidate hold');
-  for(let second=0;second<30;second++){
-    f.clock.advance(1000);await new Promise(resolve=>setImmediate(resolve));
-  }
-  f.controller.abort();await loop;
-  assert.equal(f.count('/jobs/claim-next'),0);
-  assert.equal(f.calls.filter(row=>row[1]==='diagnose').length,diagnoses);
-});
+
 
 test('a replacement saved before daemon death cannot make its first claim send',async t=>{
   const f=await withObservedDaemon(t,{offers:false});
@@ -179,7 +166,7 @@ test('a replacement saved before daemon death cannot make its first claim send',
   };
   f.client.getJob=async()=>({state:'queued',current_attempt:attempt});
   const loop=f.start();
-  await until(()=>replacement&&(keys.includes(replacement)||f.events.some(event=>event.reason==='sandbox_not_ready')),'replacement send or fresh refusal');
+  await until(()=>replacement&&(keys.includes(replacement)||f.events.some(event=>event.reason==='sandbox_check_pending')),'replacement send or fresh refusal');
   f.controller.abort();await loop;
   assert.deepEqual(keys,[intent.idempotencyKey],'a new key is not an uncertain replay');
   assert.equal(f.saved().claimPending.state,'created-unsent');
@@ -193,7 +180,7 @@ test('a daemon failure during the transmission journal write prevents the first 
     if(!stopped&&value.claimPending?.state==='sent-uncertain'){stopped=true;f.stopDaemon();}
   };
   const loop=f.start();
-  await until(()=>f.count('/jobs/claim-next')>0||stopped&&f.events.some(event=>event.reason==='sandbox_not_ready'),'first-send check after durable transmission marker');
+  await until(()=>f.count('/jobs/claim-next')>0||stopped&&f.events.some(event=>event.reason==='sandbox_check_pending'),'first-send check after durable transmission marker');
   f.controller.abort();await loop;
   assert.equal(f.count('/jobs/claim-next'),0);
   assert.equal(f.saved().claimPending.state,'created-unsent','a known unsent intent remains parked as unsent');
@@ -204,7 +191,7 @@ test('an unsent journal stays parked on the observation cooldown during an outag
   const intent={advertisement:f.advertisement,leaseSeconds:120,idempotencyKey:'never-sent',state:'created-unsent'};
   await f.policy.storage.set({day:'2026-10-09',jobs:0,milliseconds:0,pending:null,claimPending:intent});
   f.stopDaemon();const loop=f.start();
-  await until(()=>f.events.some(event=>event.reason==='sandbox_not_ready'),'unsent request refused');
+  await until(()=>f.events.some(event=>event.reason==='sandbox_check_pending'),'unsent request refused');
   const diagnoses=f.calls.filter(row=>row[1]==='diagnose').length;
   for(let second=0;second<30;second++){f.clock.advance(1000);await new Promise(resolve=>setImmediate(resolve));}
   f.controller.abort();await loop;
@@ -226,7 +213,7 @@ test('a first send that becomes uncertain replays unchanged without another full
     f.controller.abort();return null;
   };
   const loop=f.start();
-  await until(()=>f.events.some(event=>event.status==='accepting'&&event.reason==='unavailable'),'first send has an uncertain answer');
+  await until(()=>f.events.some(event=>event.status==='accepting'&&event.reason==='circle_unreachable'),'first send has an uncertain answer');
   f.clock.advance(1000);await loop;
   assert.equal(requests.length,2);
   assert.deepEqual(requests[1],requests[0]);
@@ -269,7 +256,7 @@ test('an accepted claim is not vetoed by an allowance observation that changed b
   // The soft observation is fine when the acceptance was made and reads low again before the claim is sent.
   f.policy.quota=()=>({provider:'codex',remaining:0,observedAt:f.clock.now()});
   const loop=f.start();
-  await until(()=>f.count('/jobs/claim-next')>0||f.events.some(event=>event.reason==='quota_reserve'),'claim sent or allowance veto');
+  await until(()=>f.count('/jobs/claim-next')>0||f.events.some(event=>event.reason==='no_spare'),'claim sent or allowance veto');
   f.controller.abort();await loop;
   assert.equal(f.count('/jobs/claim-next'),1,'the acceptance reaches the claim; execution-time admission still checks the allowance');
 });

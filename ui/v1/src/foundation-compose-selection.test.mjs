@@ -28,7 +28,7 @@ test('ambiguous send and send-anyway preserve explicit selection and no-project 
     assert.deepEqual(again,{...before,send_anyway:true});
     assert.equal(again.noSource,true);assert.deepEqual(again.result,{kind:'message'});
     assert.equal('repo' in again,false);assert.equal(again.draft_id,original.id);
-    assert.equal(again.model,'specific');assert.deepEqual(again.budget_v1,{effort:'precise'});
+    assert.equal(again.model,'specific');assert.equal(again.effort,'precise');
   } finally {storage.clear();}
 });
 test('late local restore does not replace an unknown explicit choice with a default',()=>{

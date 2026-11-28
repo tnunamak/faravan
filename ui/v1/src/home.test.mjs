@@ -692,7 +692,7 @@ test('reserve copy dates a future reset and suppresses an elapsed check', () => 
 });
 test('Home shows an automatic offer waiting for the owner reserve under In motion', () => {
  const at=Date.now();
- const pending={id:'queued-proof',circle:circle.id,agent:'claude-code-subscription',reason:'quota_reserve',expiresAt:at+600000};
+ const pending={id:'queued-proof',circle:circle.id,agent:'claude-code-subscription',reason:'no_spare',expiresAt:at+600000};
  const decision={admitted:false,reason:'owner_reserve',wait:{accountKey:'claude',reason:'owner_reserve',
   strategyId:null,source:'window_reset',nextEvaluationAtMs:at+300000}};
  const snapshot={...home,activeCircle:circle.id,lending:{...lending,mode:'auto',heldOffers:[pending]},

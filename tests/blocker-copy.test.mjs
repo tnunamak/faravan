@@ -120,12 +120,18 @@ test('a blocked lending state the app cannot name gives no direction it cannot b
     for (const rule of NEVER) assert.doesNotMatch(formatLendingProjection(projection(reason)).reason, rule, reason);
 });
 
-test('an unconfirmed job runner or stop bound is no hold: it names no button or software, only the usage estimate', () => {
+test('an unconfirmed job runner names the missing job controls; an unconfirmed stop bound names only the usage estimate', () => {
   // Frozen change (docs/foundation-1113/SPEC.md section 3): unknown funding, executor or stop-bound evidence adds no hard hold,
-  // so these reasons no longer ask the owner to open Setup. The line states the estimate the lender actually uses.
-  for (const reason of ['executor_unknown', 'stop_bound_unknown']) {
+  // so these reasons no longer ask the owner to open Setup. A stop bound states the estimate the lender actually uses.
+  // e735e21bb then named the missing job controls for an unconfirmed executor (the owner's next step is the sandbox setup,
+  // not a usage estimate); a stop bound keeps the estimate line.
+  const expected = {
+    executor_unknown: 'Holding — job controls could not be confirmed. This needs you: check the sandbox setup and try again.',
+    stop_bound_unknown: 'Usage estimate: lending uses available readings or the starting estimate; history improves it.',
+  };
+  for (const [reason, want] of Object.entries(expected)) {
     const {line} = lendingStatus({reason, detail:{}});
-    assert.equal(line, 'Usage estimate: lending uses available readings or the starting estimate; history improves it.');
+    assert.equal(line, want);
     assert.doesNotMatch(line, /installed|can start|Setup|support/, line);
     for (const rule of NEVER) assert.doesNotMatch(line, rule, reason);
   }

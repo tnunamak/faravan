@@ -1,4 +1,5 @@
 import './helpers/no-browser.mjs';
+import {fixtureAccounts,accountHeartbeat} from './helpers/run-request-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
@@ -14,13 +15,14 @@ const jobInput=circle=>({circle:circle.id,git:'https://github.com/example/synthe
 const semanticProjection=value=>({...value,times:{...value.times,observedAt:null}});
 async function claimQueuedJob(client,f,jobDigest) {
   const requirements=f.jobs.get(jobDigest).job.payload.requirements;
-  return client.claimNext({harnesses:['codex'],models:['example-model'],capabilities:['filtered_git_v1'],
+  await client.heartbeat(accountHeartbeat(fixtureAccounts()));
+  return client.claimNext({harnesses:['codex'],models:['example-model'],capabilities:['filtered_git_v1','run_request_v1'],accounts:fixtureAccounts(),
     egress:['internet','provider-only'],enforced_limits:Object.keys(requirements.limits),max_limits:requirements.limits},{waitSeconds:0});
 }
 
 test('create, list, and detail return the same authoritative job projection', {timeout:60000}, async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
-  const created=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const created=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const path='/api/jobs/'+encodeURIComponent(created.jobDigest)+'?circle='+encodeURIComponent(circle.id);
   const listed=(await api(owner.app,'/api/jobs?circle='+encodeURIComponent(circle.id)))
     .find(job=>job.job_digest===created.jobDigest);
@@ -56,7 +58,7 @@ test('a start-request acknowledgement remains nonrunning until backend launch is
     context.res.writeHead(200,{'content-type':'application/json','content-length':bytes.length});
     context.res.end(bytes);return true;
   };
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const client=await lender.app.device.client(circle.id);
   const claim=await claimQueuedJob(client,f,jobDigest);
   const presence=await client.fetchPresence();
@@ -91,7 +93,7 @@ test('a bare start request does not prove borrower approval',{timeout:60000},asy
     const bytes=Buffer.from(canonicalize({now,online_seconds:90,devices,persons:[]}));
     context.res.writeHead(200,{'content-type':'application/json','content-length':bytes.length});context.res.end(bytes);return true;
   };
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const client=await lender.app.device.client(circle.id),claim=await claimQueuedJob(client,f,jobDigest);
   await client.startAttempt(claim.attempt);
   const path='/api/jobs/'+encodeURIComponent(jobDigest)+'?circle='+encodeURIComponent(circle.id);
@@ -103,10 +105,11 @@ test('a bare start request does not prove borrower approval',{timeout:60000},asy
 
 test('a holder can report the original launch time after release through HTTP', {timeout:60000}, async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await f.realConnect();
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const client=await lender.app.device.client(circle.id),ownerClient=await owner.app.device.client(circle.id);
   const requirements=(await ownerClient.getJob(jobDigest)).job.payload.requirements;
-  const claim=await client.claimNext({harnesses:['codex'],models:['example-model'],capabilities:['filtered_git_v1'],
+  await client.heartbeat(accountHeartbeat(fixtureAccounts()));
+  const claim=await client.claimNext({harnesses:['codex'],models:['example-model'],capabilities:['filtered_git_v1','run_request_v1'],accounts:fixtureAccounts(),
     egress:['internet','provider-only'],enforced_limits:Object.keys(requirements.limits),max_limits:requirements.limits},{waitSeconds:0});
   await client.startAttempt(claim.attempt);
   const at=new Date().toISOString().replace(/\.\d{3}Z$/,'Z');
@@ -118,7 +121,7 @@ test('a holder can report the original launch time after release through HTTP', 
 
 test('queued detail that is claimed and started during its presence read shows the newer running state', {timeout:60000}, async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const baseOverride=f.override;let releasePresence=()=>{},enterPresence;
   const presenceGate=new Promise(resolve=>{releasePresence=resolve;});
   const presenceEntered=new Promise(resolve=>{enterPresence=resolve;});
@@ -147,7 +150,7 @@ test('queued detail that is claimed and started during its presence read shows t
 
 test('claimed detail whose generation changes during the borrower outcome read shows the newer attempt', {timeout:60000}, async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const client=await lender.app.device.client(circle.id),first=await claimQueuedJob(client,f,jobDigest);
   const outcomesFile=join(owner.home,'v1','borrower-outcomes.json');
   execFileSync('mkfifo',[outcomesFile]);
@@ -183,7 +186,7 @@ test('claimed detail whose generation changes during the borrower outcome read s
 
 test('queued snapshot held inside borrower outcomes survives an unstarted claim honestly', {timeout:60000}, async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const client=await lender.app.device.client(circle.id);
   const outcomesFile=join(owner.home,'v1','borrower-outcomes.json');
   execFileSync('mkfifo',[outcomesFile]);
@@ -232,13 +235,13 @@ test('queued snapshot held inside borrower outcomes survives an unstarted claim 
 
 test('cancel acknowledgement includes a best-effort current job projection', {timeout:60000}, async t=>{
   const f=await appFixture(t),{owner,circle}=await f.connect();
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const result=await api(owner.app,'/api/jobs/'+encodeURIComponent(jobDigest)+'/cancel',{method:'POST',body:{circle:circle.id}});
   assert.equal(result.authority_revoked,true);
   assert.equal(result.jobProjection.kind,'job');
   assert.ok(['stopped','stopping','unknown'].includes(result.jobProjection.phase));
 
-  const second=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const second=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const baseOverride=f.override;
   f.override=async context=>{
     if(context.route==='/jobs/'+second.jobDigest.slice(7)&&context.req.method==='GET'){
@@ -252,9 +255,9 @@ test('cancel acknowledgement includes a best-effort current job projection', {ti
   assert.equal(acknowledged.jobProjection.reasonCode,'observation_unavailable');
 });
 
-test('daily cap blocks admission while running, and Off publishes the stopped execution', {timeout:90000}, async t=>{
+test('daily cap blocks admission, Off closes new lending, and Stop publishes cessation', {timeout:90000}, async t=>{
   const f=await appFixture(t,{hold:true}),{owner,lender,circle}=await f.connect();
-  const first=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const first=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:1,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
@@ -262,7 +265,7 @@ test('daily cap blocks admission while running, and Off publishes the stopped ex
   const firstCard=await waitFor(async()=>(await api(lender.app,'/api/approvals')).find(card=>card.jobDigest===first.jobDigest),'first approval');
   await api(lender.app,'/api/approvals/'+firstCard.id+'/accept',{method:'POST',body:{}});
   await waitFor(()=>lender.backend.calls.filter(([kind])=>kind==='run').length===1,'first run');
-  const activeStatus=await api(lender.app,'/api/status');
+  const activeStatus=await waitFor(async()=>{const view=await api(lender.app,'/api/status');return view.lendingProjection.execution==='running'&&view;},'the held account run is observed',15000);
   assert.equal(activeStatus.lendingProjection.admission,'blocked');
   assert.equal(activeStatus.lendingProjection.admissionReason,'daily_limit');
   assert.equal(activeStatus.lendingProjection.execution,'running');
@@ -301,10 +304,11 @@ test('daily cap blocks admission while running, and Off publishes the stopped ex
     'the top-level current job follows the coherent execution projection');
   lender.app.device.memberNames=memberNames;
 
+  if(incomplete.lendingProjection.execution!=='idle')await api(lender.app,'/api/lending/stop',{method:'POST',body:{confirmed:true,attemptId:activeStatus.lending.current}});
   const status=await waitFor(async()=>{
     const view=await api(lender.app,'/api/status');
     return view.lendingProjection.execution==='idle'&&view;
-  },'Off completes its stopped report');
+  },'Stop completes its stopped report',30000);
   assert.equal(status.lendingProjection.intent,'off');
   assert.equal(status.lendingProjection.admission,'blocked');
   assert.equal(status.lendingProjection.admissionReason,'daily_limit');
@@ -383,7 +387,7 @@ test('a heartbeat built across a readiness change does not advertise the old rea
 // returning "Status unavailable"; the stop shows (or its outcome), never an unknown lending state.
 test('a stop issued while Home builds its projection reads as stopping or stopped, never unavailable',{timeout:90000},async t=>{
   const f=await appFixture(t,{hold:true}),{owner,lender,circle}=await f.connect();
-  await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
@@ -402,7 +406,7 @@ test('a stop issued while Home builds its projection reads as stopping or stoppe
 // Stop), the same state Lending and Home show, instead of "Running · Live".
 test('a stop this lender issued shows the job as stopping before the host records it',{timeout:90000},async t=>{
   const f=await appFixture(t,{hold:true}),{owner,lender,circle}=await f.connect();
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
@@ -412,6 +416,7 @@ test('a stop this lender issued shows the job as stopping before the host record
   await waitFor(()=>lender.backend.calls.some(([kind])=>kind==='run'),'running');
   const path='/api/jobs/'+encodeURIComponent(jobDigest)+'?circle='+encodeURIComponent(circle.id);
   await waitFor(async()=>(await api(lender.app,path)).jobProjection.phase==='running','running projection');
+  await waitFor(async()=>(await api(lender.app,'/api/status')).currentJob!==null,'local execution observation');
   let release=()=>{};const held=new Promise(resolve=>{release=resolve;});
   const cancel=lender.backend.cancel.bind(lender.backend);
   lender.backend.cancel=async(...args)=>{await held;return cancel(...args);};
@@ -458,12 +463,11 @@ for(const [label,result] of [
   });
 }
 
-
 // A finished job reads its attempt's stop request only to explain an early stop. If that read fails, the job stays
 // reviewable exactly as before; the outage must not turn a finished job into an uncertain one.
 test('a failed stop-history read keeps a finished job reviewable',{timeout:20000},async t=>{
   const f=await appFixture(t),{owner,circle}=await f.connect();
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   await f.complete(jobDigest,'owner',{});
   const previous=f.override;let injected=0;
   f.override=async record=>{

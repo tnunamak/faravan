@@ -1,9 +1,41 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import { circlePerson, circlesListVM, joinOutcomeVM, memberAvailability, deviceUsage, invitationExpiryLabel } from './circles-view.mjs';
+import { circleJobsStatus, circlePerson, circlesListVM, joinOutcomeVM, memberAvailability, deviceUsage, invitationExpiryLabel } from './circles-view.mjs';
 import {withLendingProjection} from './lending-projection.fixture.mjs';
 import {homePeopleVM} from './view-models.mjs';
+test('unreachable history names a known host and the last time it answered', () => {
+  const result = circleJobsStatus('c', [{circleId:'c', state:'unavailable', reason:'unreachable'}], [], null, {
+    circle:{joinInfo:{ownerName:'Alex'}, host:{lastReachedAt:'2026-11-24T18:00:00Z'}},
+    now:Date.parse('2026-11-26T18:00:00Z'), zone:'UTC',
+  });
+  assert.match(result.message, /Alex’s computer, which hosts this circle, did not answer\. Last reached on Tuesday 24 November at 6:00 PM\./);
+  assert.match(result.message, /Only that computer serves this circle for now; jobs wait until it is back/);
+});
+test('unreachable history falls back to the host computer when its name is unknown', () => {
+  const result = circleJobsStatus('c', [{circleId:'c', state:'unavailable', reason:'unreachable'}]);
+  assert.match(result.message, /The computer that hosts this circle did not answer/);
+});
+test('unreachable history omits the last-contact clause when time is unknown', () => {
+  const result = circleJobsStatus('c', [{circleId:'c', state:'unavailable', reason:'unreachable'}], [], null, {
+    circle:{joinInfo:{ownerName:'Alex'}, host:{lastReachedAt:null}},
+  });
+  assert.match(result.message, /Alex’s computer/);
+  assert.doesNotMatch(result.message, /Last reached|Invalid Date/);
+});
+test('partial history explains what was checked and preserves saved jobs and timestamp', () => {
+  const now = Date.parse('2026-11-26T18:00:00Z');
+  const savedAt = '2026-11-24T18:00:00.000Z';
+  const result = circleJobsStatus('c', [{circleId:'c', state:'partial', cachedRows:1, savedAt}], [], null, {
+    circle:{joinInfo:{ownerName:'Alex'},host:{lastReachedAt:savedAt}}, now, zone:'UTC',
+  });
+  assert.match(result.message, /Alex’s computer, which hosts this circle, did not answer\. Last reached on Tuesday 24 November at 6:00 PM\./);
+  assert.match(result.message, /Only that computer serves this circle for now; jobs wait until it is back/);
+  assert.match(result.message, /Showing jobs that member computers confirmed/);
+  assert.match(result.message, /Saved jobs may still be shown\./);
+  assert.equal(result.savedAt, savedAt);
+});
+
 test('circle rows disclose hosting and known member counts without addresses', () => {
   const [row] = circlesListVM([{id:'c',name:'Friends',origin:'http://10.23.1.2:1234',owned:true}], {circles:[{circle:'c',members:[{},{}]}]}, {configured:true,circle:'c',running:true});
   assert.equal(row.meta, 'Hosted on this computer · 2 computers · Online');

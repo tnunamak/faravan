@@ -1,0 +1,15 @@
+name: Candidate join and borrow
+on:
+  workflow_dispatch:
+  push:
+    branches: [ff/t1-integ-1127, 'bar-hosted-*']
+permissions:
+  contents: read
+jobs:
+  # Each hosted runner is outside the owner's network. Its throwaway circle and
+  # two isolated app processes communicate locally; this does not test WAN routing.
+  # The existing journey fake replaces provider execution only. No secrets needed.
+  borrow:
+    uses: ./.github/workflows/bar-install.yml
+    with:
+      join-borrow: true

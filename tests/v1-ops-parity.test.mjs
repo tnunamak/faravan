@@ -303,7 +303,6 @@ test('local log learning read/set share REST and agent contracts without an impo
   }
 });
 
-
 test('local learning controller fences Off and detects new completed meter periods', async () => {
   // Isolated lifecycle test: execute the exact controller block with explicit injected
   // adapters. It neither loads app dependencies nor reads any session directory.
@@ -436,7 +435,7 @@ test('limits.set retires preview presence without removing real presence or idle
   }
   assert.throws(() => validate(op.input, {presence:'legacy-preview'}));
   validate(op.input, {idleOnly:true, lendingPolicy:{stopOnReturn:true}});
-  for (const id of ['lending.presence', 'lending.allow_once', 'circles.presence']) {
+  for (const id of ['circles.presence']) {
     const real = opById(id);
     assert.ok(real, id);
     assert.ok(paths['/api/ops/' + id]?.post, id);

@@ -1,3 +1,4 @@
+import {poolFactCache} from './helpers/pool-fact-cache.mjs';
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -54,15 +55,16 @@ test('one unknown-account cleanup debt reserves the single machine slot',async t
     policy:{enabled:true,dailyJobs:null,dailyMinutes:null,lendingPolicy:{accountSlots:1,machineSlots:1}},
     adapters:[{spec:{harness_id:'claude-code-subscription'}},{spec:{harness_id:'codex'}}],
     createLender:opts=>{
-      const worker={start:signal=>new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true})),
+      const facts=poolFactCache(opts.policy);const worker={start:async signal=>{await facts.refresh();if(!signal.aborted)await new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));},refreshAdmission:()=>facts.refresh(),
         getState:()=>({status:'idle',reason:null,current:null}),
-        admits:()=>opts.policy.hold(null),
+        admits:()=>facts.reason,
         cessation:()=>({proven:true})};
       workers.push({accountKey:opts.accountKey,worker});return worker;
     }});
   const running=pool.start(controller.signal);
   t.after(async()=>{controller.abort();await running;});
   while(workers.length<2)await new Promise(resolve=>setImmediate(resolve));
+ await pool.refreshAdmission();
   const claude=workers.find(w=>w.accountKey==='claude').worker,codex=workers.find(w=>w.accountKey==='codex').worker;
   // The row is live debt: the fallback worker already refuses on it.
   assert.notEqual(claude.admits(),null,'the retained row must still hold the fallback worker');

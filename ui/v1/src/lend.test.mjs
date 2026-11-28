@@ -164,7 +164,7 @@ test('a partial block keeps the switch on and lists the signed-out agent among t
   const out = page({lendingProjection:{schemaVersion:2,kind:'lending',intent:'on',admission:'blocked',admissionReason:'agent_signed_out',execution:'idle',executionJob:null,
       evidence:{intentState:'ready',dailyLimitReached:false,executionState:'idle'},version:'fixture'},needs_you:[{kind:'agent_signed_out', agent:'claude-code-subscription'}]},
     {agents:[{...agents[0], signedIn:false, signInSupported:true}, agents[1]]});
-  assertDomOrder(withoutMaskMarkers(out), ['Jobs can’t start', 'No job can start until a lent agent is signed in.', 'class="legacy blocker-signin primary"', 'Workspace checks passed', 'Agents you lend', 'Signed out']);
+  assertDomOrder(withoutMaskMarkers(out), ['Jobs can’t start', 'The agent account is signed out.', 'class="legacy blocker-signin primary"', 'Workspace checks passed', 'Agents you lend', 'Signed out']);
   assert.match(withoutMaskMarkers(out), /class="signin"/);
   assert.match(out, /aria-checked="true"/);
   assert.doesNotMatch(renderedText(out), /count(ed)? (toward|against)/);

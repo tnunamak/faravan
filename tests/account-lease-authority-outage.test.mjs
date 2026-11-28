@@ -78,7 +78,8 @@ test('a coordinator outage mid-run never refuses the provider dispatch, and the 
   await api(lender.app, '/api/agents/codex', {method: 'POST', body: {useForLending: true}});
   await api(lender.app, '/api/lending/mode', {method: 'POST', body: {circle: circle.id, mode: 'auto'}});
   await api(lender.app, '/api/lending/on', {method: 'POST', body: {circle: circle.id}});
-  const submitted = await api(owner.app, '/api/jobs', {method: 'POST', body: {
+  // Authorize this synthetic owner submission so the outage test reaches dispatch.
+  const submitted = await api(owner.app, '/api/jobs', {method: 'POST', headers: {'faravan-confirm': 'yes'}, body: {
     circle: circle.id, prompt: 'Signed account job through a coordinator outage',
     git: 'https://github.com/example/synthetic.git', commit: '1'.repeat(40), harness: 'codex',
     runRequest: {schemaVersion: 1, models: [{providerId: 'codex', modelId: 'example-model'}], effortId: 'high'},

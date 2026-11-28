@@ -1,3 +1,4 @@
+import {giveBackCode} from '../lib/v1/lending-reasons.mjs';
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,6 +8,7 @@ import {realLenderFixture} from './helpers/v1-real-lender-fixture.mjs';
 import {until} from './helpers/v1-lender-fixture.mjs';
 import {DatabaseSync} from 'node:sqlite';
 import {canonicalize} from '../lib/protocol/index.mjs';
+import {accountHeartbeat} from './helpers/run-request-fixture.mjs';
 
 // Real lender, real coordinator store and HTTP client, fake clock; the backend never starts a sandbox.
 // One lender is the only computer that can take the job, so what it excludes locally decides whether the job ever runs.
@@ -45,14 +47,20 @@ async function fixture(t, {offers, code = 'sandbox_start_failed', failures = 1, 
   };
   await beforeStart?.(f, state);
   const controller = new AbortController();
-  const lender = createLender({client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
+  const lender = createLender({...f.runOptions,client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
     approve: async (...args) => {state.approvals++; return approve(...args);}, onEvent: e => f.events.push(e)});
   const loop = lender.start(controller.signal);
   f.stop = async () => {controller.abort(); await loop;};
   Object.assign(f, {state, lender});
   // Advance the lender's clock in small steps; real HTTP needs real turns between them.
-  state.tick = async (ms, step = 250) => {for (let spent = 0; spent < ms; spent += step) {f.clock.advance(step); await turn();}};
-  state.tickUntil = async (check, ms, step = 250) => {for (let spent = 0; spent < ms && !check(); spent += step) {f.clock.advance(step); await turn();}};
+  let heartbeatAt=f.clock.now();
+  const tick=async step=>{
+    f.clock.advance(step);
+    if(f.clock.now()-heartbeatAt>=30000){await f.refreshAccountHeartbeat();heartbeatAt=f.clock.now();}
+    await turn();
+  };
+  state.tick = async (ms, step = 250) => {for (let spent = 0; spent < ms; spent += step) await tick(step);};
+  state.tickUntil = async (check, ms, step = 250) => {for (let spent = 0; spent < ms && !check(); spent += step) await tick(step);};
   return f;
 }
 const job = f => f.owner.getJob(f.jobDigest);
@@ -61,7 +69,7 @@ const holdOneFailure = async (f, code = 'sandbox_start_failed') => {
   await f.state.tick(2000);
   const view = await job(f);
   assert.equal(view.state, 'queued');
-  assert.equal(JSON.parse(view.current_attempt.reason).code, code);
+  assert.equal(JSON.parse(view.current_attempt.reason).code,giveBackCode(code));
   assert.equal(f.saved().declined.find(row => row.jobDigest === f.jobDigest).exclusionVersion, 1, 'new exclusions carry an explicit version');
 };
 
@@ -143,7 +151,7 @@ for (const offers of [true, false]) {
     assert.equal(starts(f), 4, 'the first failure after the minimum time is the last');
     assert.equal(ended.state, 'failed');
     assert.equal(ended.attempts_started, 0);
-    assert.equal(JSON.parse(ended.current_attempt.reason).code, 'sandbox_start_failed', 'the borrower keeps the fixed code of the last failure');
+    assert.equal(JSON.parse(ended.current_attempt.reason).code, 'start_failed', 'the borrower keeps the fixed code of the last failure');
     assert.equal(jobStatusContract(ended).lifecycle, 'failed');
     assert.ok(f.clock.now() - start >= 30 * 60000, 'not before the minimum time');
     assert.ok(f.clock.now() - start < 60 * 60000, 'it ended long before the job expires');
@@ -185,7 +193,7 @@ test('three counted failures in two minutes leave the job queued; the first one 
   const ended = await job(f);
   assert.equal(ended.state, 'failed');
   assert.equal(ended.attempts_started, 0);
-  assert.equal(JSON.parse(ended.current_attempt.reason).code, 'sandbox_start_failed');
+  assert.equal(JSON.parse(ended.current_attempt.reason).code, 'start_failed');
   assert.ok(f.clock.now() < EXPIRY);
 });
 
@@ -209,7 +217,7 @@ for (const offers of [true, false]) test(`a preparation that times out (offers=$
   await f.state.tick(3000, 1000);
   const view = await job(f);
   assert.equal(view.state, 'queued');
-  assert.equal(JSON.parse(view.current_attempt.reason).code, 'preparation_timeout', 'the real reason, not a restart');
+  assert.equal(JSON.parse(view.current_attempt.reason).code, 'cleanup_pending', 'the real reason, not a restart');
   assert.equal(runs(f), 0);
   assert.equal(f.saved().startFailures?.find(row => row.jobDigest === f.jobDigest)?.count, 1, 'timeout uses counted decline');
   await f.state.tick(60000, 5000);
@@ -231,7 +239,7 @@ test('an explicit Skip excludes the job until it expires, whatever the lender do
   await f.state.tick(2000);
   const first = await job(f);
   assert.equal(first.state, 'queued');
-  assert.equal(JSON.parse(first.current_attempt.reason).code, 'approval_skipped');
+  assert.equal(JSON.parse(first.current_attempt.reason).code, 'approval_pending');
   // The lender's own state changes: not ready, then ready again. A person's Skip is not a setup fault, so it stays.
   f.state.ready = false;
   await f.state.tick(30000, 2000);
@@ -241,12 +249,13 @@ test('an explicit Skip excludes the job until it expires, whatever the lender do
   assert.equal(prepares(f) + runs(f), 0);
   const view = await job(f);
   assert.equal(view.state, 'queued');
-  assert.equal(JSON.parse(view.current_attempt.reason).code, 'approval_skipped');
+  assert.equal(JSON.parse(view.current_attempt.reason).code, 'approval_pending');
 });
 
 test('a passing hold is retried on its short wait and never counts against the job', {timeout: 90000}, async t => {
   const f = await fixture(t, {offers: false, code: 'sandbox_not_ready', failures: 4});
-  await f.state.tickUntil(() => runs(f) > 0, 10 * 60000);
+  // A one-second fake-clock step still observes each two-minute deadline; 250 ms steps spent most of the hang guard sleeping.
+  await f.state.tickUntil(() => runs(f) > 0, 10 * 60000, 1000);
   await f.state.tickUntil(() => false, 5000);
   const done = await job(f);
   assert.equal(f.state.failed, 4);
@@ -293,7 +302,9 @@ for (const scenario of ['Decline after setup release', 'setup row with another l
     const f = await fixture(t, {offers: true, members: true, failures: 0, beforeStart: async f => {
       const other = scenario.includes('another lender');
       const client = other ? f.clientFor(3) : f.client;
-      const ad = {harnesses: ['codex'], models: ['example-model'], capabilities: ['filtered_git_v1'],
+      const accounts=f.runOptions.runAccounts();
+      await client.heartbeat(accountHeartbeat(accounts));
+      const ad = {harnesses: ['codex'], models: ['example-model'], capabilities: ['filtered_git_v1','run_request_v1'],accounts,
         egress: ['internet'], enforced_limits: Object.keys(f.job.payload.requirements.limits), max_limits: f.job.payload.requirements.limits};
       const {attempt} = await client.claimJob(f.jobDigest, ad);
       await client.release(attempt, canonicalize({code: scenario.includes('refusal') ? 'approval_denied' : 'sandbox_not_ready'}));
@@ -320,7 +331,7 @@ for (const scenario of ['Decline after setup release', 'setup row with another l
     assert.equal(f.state.approvals, 0, 'the old exclusion prevents a new prompt');
     assert.equal(runs(f), 0);
     if (scenario.startsWith('Decline')) await assert.rejects(f.client.claimJob(f.jobDigest, {
-      harnesses: ['codex'], models: ['example-model'], capabilities: ['filtered_git_v1'], egress: ['internet'],
+      harnesses: ['codex'], models: ['example-model'], capabilities: ['filtered_git_v1','run_request_v1'],accounts:f.runOptions.runAccounts(), egress: ['internet'],
       enforced_limits: Object.keys(f.job.payload.requirements.limits), max_limits: f.job.payload.requirements.limits}), {code: 'forbidden'});
   });
 }

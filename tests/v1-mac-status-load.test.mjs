@@ -102,7 +102,7 @@ test('APFS-like status polling leaves child callbacks and workspace preparation 
 });
 
 // The HTTP surface must actually choose the display contract; the ledger-only load test cannot prove that wiring.
-test('tray status uses display snapshots without taking the plan-writing snapshot path', {timeout:60000}, async t => {
+test('an unconfigured tray status does not invent provider accounts or write the retired ledger', {timeout:60000}, async t => {
   const f = await appFixture(t);
   const file = join(f.root, 'tray-ledger.json'), ledger = createLendingLedger({file});
   let displays = 0, policies = 0;
@@ -112,6 +112,7 @@ test('tray status uses display snapshots without taking the plan-writing snapsho
   const {app} = await f.start('tray-status', {lendingLedger:ledger});
   displays = policies = 0;
   await api(app, '/api/status');
-  assert.ok(displays >= 2, 'both provider accounts are displayed');
+  assert.equal(displays,0,'no enrolled account means no provider ledger display');
+  assert.deepEqual((await api(app,'/api/lending')).objective.accounts,[]);
   assert.equal(policies, 0, 'a tray read must not persist plan changes');
 });

@@ -1,4 +1,5 @@
 import './helpers/no-browser.mjs';
+import {fixtureAccounts,accountHeartbeat} from './helpers/run-request-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -70,14 +71,14 @@ function jobPayloadFor(f,{designated,rosterEpoch=1}={}){
   payload.source={kind:'none'};
   payload.result={kind:'message'};
   payload.requirements=structuredClone(payload.requirements);
-  payload.requirements.capabilities=['results_v1','designated_member_v1'];
+  payload.requirements.capabilities=['results_v1','designated_member_v1','run_request_v1'];
   payload.requirements.egress='provider-only';
   payload.requirements.limits.wall_seconds=120;
   delete payload.requirements.model;
   payload.designated_member=designated;
   return payload;
 }
-const advertisement={harnesses:['codex'],models:[],capabilities:['results_v1','designated_member_v1'],
+const advertisement={harnesses:['codex'],models:[],capabilities:['results_v1','designated_member_v1','run_request_v1'],accounts:fixtureAccounts(),
   egress:['provider-only'],enforced_limits:['wall_seconds','cpu','memory_bytes','disk_bytes','output_bytes'],
   max_limits:{wall_seconds:600,cpu:2,memory_bytes:10737483648,disk_bytes:10737483648,output_bytes:10485760}};
 
@@ -132,6 +133,7 @@ test('a designated-member job survives an owner-offline relay, uncertain retries
 
   // The designated member's own store claims: exactly one dispatch, at the one authority.
   const lenderClient=clientFor(f,f.lender,lender.origin,roster);
+  await lenderClient.heartbeat(accountHeartbeat(advertisement.accounts));
   const claim=await lenderClient.claimJob(jobDigest,advertisement,{leaseSeconds:120,idempotencyKey:'lender-claim'});
   assert.equal(claim.attempt.holder,f.lender.keyId);
   const started=await lenderClient.startAttempt(claim.attempt,{idempotencyKey:'lender-start'});
@@ -163,7 +165,7 @@ test('a designated-member job survives an owner-offline relay, uncertain retries
     generation:claim.attempt.generation,executor:f.lender.keyId,roster_epoch:roster.payload.epoch,submitted_at:nowIso,
     output:{kind:'message'},candidate:reference(result,'application/gzip'),
     transcript:reference(transcriptBytes,'application/x-ndjson'),
-    receipt:{schema:'faravan.receipt.v1',self_reported:true,harness:'codex',harness_version:'test',model:'test-model',
+    receipt:{schema:'faravan.receipt.v1',self_reported:true,harness:'codex',harness_version:'test',model:claim.attempt.selection.modelId,selection:claim.attempt.selection,
       backend:'synthetic',candidate_format:'tree',limits_applied:payload.requirements.limits,egress_applied:payload.requirements.egress,
       capabilities_applied:payload.requirements.capabilities,started_at:nowIso,finished_at:nowIso,duration_ms:0,source:payload.source}};
   const ack=await lenderClient.completeAttempt(claim.attempt,resultPayload,{idempotencyKey:'lender-complete'});

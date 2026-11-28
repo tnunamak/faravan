@@ -14,7 +14,6 @@ const OBJECTIVE = {
   owner: OWNER_NONE,
   gates: {consent: true, limits: true, funding: true, stopping: true},
   laterBurnCapacityMicro: 0,
-  ownerMaxJobUsdMicro: null,
   job: {id: 'strategy-independent', friendValue: 3, estimateUsdMicro: 3 * MICRO,
     requestedUsdMicro: 3 * MICRO, worstCallUsdMicro: 1_320_000,
     wallMs: 60_000, uncertaintyMs: 30_000, stopMs: 60_000},

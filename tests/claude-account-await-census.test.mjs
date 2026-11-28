@@ -110,7 +110,8 @@ test('every added-account subprocess is pinned and fenced from preparation throu
   };
   fake={daemon:async()=>{},execFile(executable,args,options){
    assert.equal(executable,binary,'every subprocess uses the qualified executable');
-   const templateInventory=args.length===3&&args[0]==='template'&&args[1]==='ls'&&args[2]==='--json';
+   // 387e4c3c0 made the image inventory read take every image with digests; this is exactly the command it issues.
+   const templateInventory=JSON.stringify(args)===JSON.stringify(['template','ls','--all','--digests','--no-trunc','--json']);
    const sandboxInventory=args.length===2&&args[0]==='ls'&&args[1]==='--json'&&describeSbxRuntime(transport.getStore()?.options?.sbxRuntime).purpose==='cleanup';
    spawns.push({phase,revoked,command:args[0],verb:args[1],inventory:templateInventory||sandboxInventory});
    let resolve,reject;const result=new Promise((a,b)=>{resolve=a;reject=b;});

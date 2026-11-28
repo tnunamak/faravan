@@ -233,7 +233,7 @@ test('a second timed resume does not probe again inside the backoff of the first
   await lender.app.close();
   let probes = 0;
   const restarted = await f.start('lender', {adapters: await coldCodex(), identityCacheMs: 1, identityProbe: async () => { probes++; return unknownAgent; }});
-  await waitFor(async () => (await api(restarted.app, '/api/status')).reason === 'agent_not_ready', 'the first resume ran and could not start', 20000);
+  await waitFor(async () => (await api(restarted.app, '/api/status')).reason === 'no_accounts', 'the first resume ran and could not start', 20000);
   assert.equal(probes, 1);
   await api(restarted.app, '/api/lending/pause', {method: 'POST', body: {until: Date.now() + 1500}});
   await waitFor(async () => (await api(restarted.app, '/api/status')).state !== 'paused', 'the second pause ended', 20000);

@@ -47,7 +47,7 @@ test('sandbox service not running and Faravan is starting it: one true message, 
   assert.equal(card, 'The sandbox service isn’t running. Faravan is starting it.');
   assert.equal(buttons(/class="setup-current"[^]*?<\/article>/.exec(out)[0]).filter(label => label === 'Check again').length, 0, 'nothing for the person to press');
   assert.doesNotMatch(renderedText(out), /Fix the step that needs you/, 'no step needs the person, so the lead must not say so');
-  assert.match(renderedText(out), /Lending can’t start here Your lending choice is saved\. Faravan is getting this computer ready\./);
+  assert.match(renderedText(out), /Checking this computer… Your lending choice is saved\. Faravan is getting this computer ready\./);
   noSelfLink(out, 'setup');
   clean(renderedText(out), 'setup');
   const page = lend(checks);
@@ -182,10 +182,10 @@ test('agent signed out: Lending signs in on the spot; no instruction sends the p
 });
 
 test('account near its limit: says what is held and why, offers one allowance action, nothing automatic is promised', () => {
-  const summary = formatLendingProjection({schemaVersion:2, kind:'lending', intent:'on', admission:'blocked', admissionReason:'quota_reserve', execution:'idle', executionJob:null,
+  const summary = formatLendingProjection({schemaVersion:2, kind:'lending', intent:'on', admission:'blocked', admissionReason:'no_spare', execution:'idle', executionJob:null,
     evidence:{intentState:'ready', dailyLimitReached:false, executionState:'idle'}, version:'fixture'});
-  assert.equal(summary.reason, 'Your remaining allowance is being kept for you.');
-  assert.equal(summary.remedy, 'View allowance');
+  assert.equal(summary.reason, 'This account has no spare allowance now.');
+  assert.equal(summary.remedy, 'Wait for spare allowance');
   clean(summary.reason, 'quota');
 });
 

@@ -13,10 +13,10 @@ test('a lending start that resumes after its app closes starts no lender', { tim
   await api(lender.app, '/api/agents/codex', { method: 'POST', body: { useForLending: true } });
   await api(lender.app, '/api/lending/mode', { method: 'POST', body: { circle: circle.id, mode: 'ask' } });
 
-  // Hold the start inside device.client() until the app is closing, then let it continue.
-  const device = lender.app.device, client = device.client.bind(device);
+  // Hold the start inside device.lendingClient() until the app is closing, then let it continue.
+  const device = lender.app.device, client = device.lendingClient.bind(device);
   let entered = false, release, claims = 0;
-  device.client = async (...args) => {
+  device.lendingClient = async (...args) => {
     entered = true;
     await new Promise(resolve => { release = resolve; });
     const real = await client(...args);
@@ -26,7 +26,7 @@ test('a lending start that resumes after its app closes starts no lender', { tim
   };
 
   const starting = api(lender.app, '/api/lending/on', { method: 'POST', body: { circle: circle.id }, status: 409 }).catch(error => error);
-  await waitFor(() => entered, 'lending start reached the device client');
+  await waitFor(() => entered, 'lending start reached the device lending client');
   await bounded(lender.app.close(), 'close during a lending start');
   release();
   await starting;

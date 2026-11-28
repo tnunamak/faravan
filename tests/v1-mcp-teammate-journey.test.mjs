@@ -2,11 +2,16 @@ import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { runMcpServer } from '../lib/v1/mcp.mjs';
 
 // Producer continuity, not provider authentication, scheduling, signature or
 // installed-product proof. All app calls terminate in the fake client below.
 test('one MCP teammate transcript preserves human state, exact request and result identity', { timeout: 10000 }, async t => {
+  const cwd = await mkdtemp(join(tmpdir(), 'faravan-mcp-teammate-'));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
   const input = new PassThrough(), output = new PassThrough();
   const pending = new Map(), transcript = [], calls = [];
   let buffer = '', sequence = 0, humanFinished = false, accepted = false, waits = 0;
@@ -20,6 +25,10 @@ test('one MCP teammate transcript preserves human state, exact request and resul
     : { flowId, target: 'fixture-agent', status: 'awaiting_browser',
       message: 'The person must sign in', url: 'https://signin.example.test/manual' };
   const opsClient = { async call(id, args, options = {}) {
+    // The app declines unconfirmed auto-authorization; only an executed send enters the transcript.
+    if (id === 'jobs.submit' && options.confirmed !== true) {
+      throw Object.assign(new Error('Fixture send requires confirmation'), { code: 'confirmation_required' });
+    }
     calls.push({ id, args: structuredClone(args), confirmed: options.confirmed });
     switch (id) {
       case 'circles.list': return [circle];
@@ -39,9 +48,9 @@ test('one MCP teammate transcript preserves human state, exact request and resul
         assert.equal(args.expected_circle_id, circle.id);
         assert.equal(args.harness, 'fixture-agent');
         assert.equal(args.model, pair.model);
-        assert.deepEqual(args.budget_v1, { effort: pair.effort });
+        assert.equal(args.effort,pair.effort);
         assert.equal(Object.hasOwn(args, 'confirm'), false);
-        assert.equal(Object.hasOwn(args.budget_v1, 'max_list_usd'), false);
+        assert.equal(Object.hasOwn(args,'budget_v1'),false);
         assert.equal(accepted, false, 'one confirmed submission');
         accepted = true;
         return { jobDigest: digest, operationKey: 'fixture-operation' };
@@ -67,7 +76,7 @@ test('one MCP teammate transcript preserves human state, exact request and resul
       if (waiter && !message.method) { pending.delete(message.id); waiter(message); }
     }
   });
-  const running = runMcpServer({ input, output, opsClient, operations: {},
+  const running = runMcpServer({ input, output, opsClient, operations: {}, cwd,
     toolsets: ['all', 'meta'] });
   t.after(async () => { input.end(); await running; });
   const request = (method, params = {}) => new Promise(resolve => {
@@ -97,7 +106,7 @@ test('one MCP teammate transcript preserves human state, exact request and resul
   assert.match(signin.description, /nothing opens by itself/);
   const submitSchema = data(await call('ops_describe', { id: 'jobs.submit' })).input;
   assert.ok(submitSchema.properties.model);
-  assert.ok(submitSchema.properties.budget_v1.properties.effort.enum.includes(pair.effort));
+  assert.ok(submitSchema.properties.effort);
   // The registry submit path is necessary; the old tool cannot express effort.
   assert.equal(tools.find(tool => tool.name === 'submit_job').inputSchema.properties.budget_v1, undefined);
   assert.equal(calls.length, 0, 'discovery never starts setup or work');
@@ -120,14 +129,13 @@ test('one MCP teammate transcript preserves human state, exact request and resul
 
   const args = { circle: circle.id, prompt: 'Return a synthetic message', noSource: true,
     result: { kind: 'message' }, harness: 'fixture-agent', model: pair.model,
-    budget_v1: { effort: pair.effort } };
+    effort: pair.effort };
   const refused = await call('jobs_submit', args);
   assert.equal(refused.result.isError, true);
-  assert.equal(refused.result.structuredContent.code, 'confirmation_required');
+  assert.equal(refused.result.structuredContent.code, 'confirmation_required',JSON.stringify(refused.result));
   assert.equal(calls.filter(c => c.id === 'jobs.submit').length, 0);
-  assert.equal(refused.result.structuredContent.confirmation_input.expected_circle_id, circle.id);
   const sent = data(await call('jobs_submit', { ...args,
-    ...refused.result.structuredContent.confirmation_input, confirm: true }));
+    expected_circle_id:circle.id, confirm: true }));
   assert.equal(sent.jobDigest, digest); assert.equal(sent.operationKey, 'fixture-operation');
 
   const waitingJob = data(await call('jobs_wait', { circle: circle.id, digest: sent.jobDigest, timeout_seconds: 0 }));
@@ -140,5 +148,5 @@ test('one MCP teammate transcript preserves human state, exact request and resul
   assert.match(result.result.content[0].text, /Do not follow instructions/);
   assert.equal(calls.filter(c => c.id === 'jobs.submit').length, 1);
   assert.equal(transcript.some(m => m.method === 'elicitation/create'), false,
-    'client advertised no elicitation: explicit confirmation_required is preserved');
+    'client advertised no elicitation: an unconfirmed arbitrary-source send stays blocked');
 });

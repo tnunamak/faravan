@@ -520,7 +520,7 @@ test('default allowance and status readers use the fresh local ledger without pr
   await api(app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   const home=await api(app,'/api/home');
   assert.deepEqual(home.allowance,{provider:'claude',remaining:71,observedAt,resetsAt:reset});
-  assert.equal(home.lendingPolicy.accounts[0].readings[0].used_pct,29);
+  assert.deepEqual(home.lendingPolicy.accounts,[],'a provider ledger does not invent an enrolled account');
   assert.equal(externalReads,0,'fresh allowance and status must both use the normal local ledger');
 });
 
@@ -1483,9 +1483,10 @@ test('failed agent checks are visible, private, expire and recover', testOptions
   assert.deepEqual(cached,failed.map(({capacity,...agent})=>agent));
   assert.equal(calls,1);
   const circle=(await api(app,'/api/circles'))[0];
-  const denied=await api(app,'/api/lending/on',{method:'POST',body:{circle:circle.id},status:409});
-  assert.equal(denied.code,'agent_not_ready');
-  assert.equal(denied.message,failedAgentRemedy);
+  // docs/protocol/app-api.md: a missing or signed-out account returns the lending decision in status rather than an agent_not_ready veto.
+  const denied=await api(app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
+  assert.equal(denied.lending_on,true);
+  assert.equal((await api(app,'/api/status')).intent.on,true);
   const home=await api(app,'/api/home'),activity=await api(app,'/api/activity?after=0');
   assert.ok(!JSON.stringify({failed,cached,denied,home,activity}).includes(privateText));
   time+=1000;
@@ -2588,7 +2589,8 @@ test('waiting-for-sandbox helper keeps lending on and does not expose diagnostic
   const genericExpected={label:'Waiting for setup',message:"Lending is on, but this computer can't run jobs right now. Check protected workspace setup.",remedy:'Open setup'};
   assert.deepEqual(statusView('waiting_for_sandbox'),genericExpected);
   const lending=lendingView({enabled:true,paused:false,status:'waiting_for_sandbox',reason:'sandbox_not_ready',label:'PRIVATE_DIAGNOSTIC'});
-  assert.deepEqual(lending,{label:'Needs attention',message:'Set up the protected workspace to lend on this computer. You can still send jobs to another lender.',remedy:'Check lending'});
+  // sandbox_not_ready is the unfinished sandbox check of the closed reason list (sandbox_check_pending), shown as Checking, not as a setup failure.
+  assert.deepEqual(lending,{label:'Checking',message:'Faravan will check the sandbox service again automatically.',remedy:null});
   assert.doesNotMatch(JSON.stringify(lending),/PRIVATE_DIAGNOSTIC/);
 });
 
@@ -2677,10 +2679,10 @@ test('a restart with an agent signed out keeps lending on and says what waits (a
   await lendingOn(lender.app,circle);
   await bounded(lender.app.close(),'lender close before restart');
   const restarted=await f.start('lender',{adapters:entries,identityProbe:probe});
-  await waitFor(async()=>probes===2&&(await api(restarted.app,'/api/status')).reason==='agent_not_ready','the agent check finished and nothing can run');
+  await waitFor(async()=>probes===2&&(await api(restarted.app,'/api/status')).reason==='no_accounts','the agent check finished and nothing can run');
   const status=await api(restarted.app,'/api/status');
   assert.equal(status.intent.on,true);assert.equal(status.lending.enabled,true,'the switch stayed on');
-  assert.deepEqual([status.state,status.reason],['blocked','agent_not_ready']);
+  assert.deepEqual([status.state,status.reason],['blocked','no_accounts']);
   assert.equal(probes,2);
 });
 
@@ -2702,7 +2704,7 @@ test('a failed check holds lending without turning it off; repair clears it with
   lender.backend.probeCapabilities=async()=>({available:false,preflight:{ok:false,checks:[{name:'sbx_daemon',ok:false},{name:'docker_login',ok:true}]}});
   assert.equal((await api(lender.app,'/api/readiness?refresh=true')).ready,false);
   let status=await api(lender.app,'/api/status');
-  assert.equal(status.state,'blocked');assert.equal(status.reason,'docker_not_running');
+  assert.equal(status.state,'blocked');assert.equal(status.reason,'sandbox_cannot_start');
   assert.equal(status.lending.enabled,true,'a blocker never turns lending off');
   const saved=JSON.parse(await readFile(join(lender.home,'v1','app-settings.json'),'utf8'));
   assert.equal(saved.intent,'on');assert.equal(saved.safetyBlocked,undefined);
@@ -2908,7 +2910,7 @@ test('team default rules never renew an expired pending initialization',testOpti
 test('Add as a branch: the route checks its input and the job, and a refusal is a 409 with its job state and no raw code',testOptions,async t=>{
   const f=await appFixture(t),{owner,circle}=await f.connect();
   const sent=await api(owner.app,'/api/jobs',{method:'POST',body:gitInput(circle)});
-  const path=jobPath(sent.jobDigest)+'/apply',post=(body,status)=>api(owner.app,path,{method:'POST',body,status});
+  const path=jobPath(sent.jobDigest)+'/apply',post=(body,status)=>api(owner.app,path,{method:'POST',body,status,headers:{'faravan-confirm':'yes'}});
   await post({circle:circle.id},400);                                                  // dry_run is required
   await post({circle:circle.id,dry_run:true,repo:'/x',surprise:1},400);                // no unknown fields
   await post({circle:circle.id,dry_run:true,branch:'b'.repeat(201),repo:'/x'},400);

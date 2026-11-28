@@ -5,25 +5,28 @@ import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createPrivateKey,randomUUID} from 'node:crypto';
 import {PassThrough} from 'node:stream';
+import {setTimeout as delay} from 'node:timers/promises';
 import {DatabaseSync} from 'node:sqlite';
 import * as p from '../lib/protocol/index.mjs';
 import {createJobOperations,runV1Command} from '../lib/v1/cli.mjs';
 import {runMcpServer} from '../lib/v1/mcp.mjs';
 import {appFixture,api,boundedFetch,syntheticBackend,waitFor} from './helpers/v1-app-fixture.mjs';
+import {syntheticAccountAdvertisement} from './helpers/synthetic-run-account.mjs';
 import {resultArchive} from './helpers/v1-journey.mjs';
 
 const seconds=()=>Math.floor(Date.now()/1000);
 const iso=n=>new Date(n*1000).toISOString().replace('.000Z','Z');
-const advertisement={harnesses:['claude-code-subscription'],models:[],capabilities:['filtered_git_v1','designated_member_v1'],
+const advertisement={harnesses:['codex'],models:[],capabilities:['filtered_git_v1','designated_member_v1'],
   egress:['provider-only','internet'],enforced_limits:['cpu','memory_bytes','disk_bytes','output_bytes','wall_seconds'],
   max_limits:{wall_seconds:1800,cpu:2,memory_bytes:8589934592,disk_bytes:17179869184,output_bytes:33554432}};
 
+const accountsByDevice=new WeakMap();
 let heartbeatSequence=0;
 async function advertise(device,circle,key,execution='idle') {
   const client=await device.memberClient(circle,key);
   await client.heartbeat({seq:heartbeatSequence++,intent:{state:'ready',reason:null,until:null},execution:{state:execution,stops_by:null},
-    agents:[{adapter:'claude-code-subscription',readiness:'ready',models:[]}],
-    capabilities:['designated_member_v1'],blockers:[]});
+    agents:[{adapter:'codex',readiness:'ready',models:[]}],
+    capabilities:['designated_member_v1','run_request_v1'],accounts:accountsByDevice.get(device),blockers:[]});
 }
 
 function assertNoOwnerJobWrites(w,start){
@@ -75,7 +78,7 @@ test('default send skips the first addressed member while it is running',{timeou
     };
     return client;
   };
-  const target=await w.borrower.app.device.sendTarget(w.circle.id,{harness:['claude-code-subscription']});
+  const target=await w.borrower.app.device.sendTarget(w.circle.id,{harness:['codex']});
   assert.equal(target.designatedMember,ordered[1].app.device.keyId);
   assert.deepEqual(probes,ordered.map(member=>member.app.device.keyId),'a failed live probe tries the next member');
   w.borrower.app.device.memberClient=memberClient;
@@ -84,7 +87,7 @@ test('default send skips the first addressed member while it is running',{timeou
   assert.deepEqual(compose.lenders.map(row=>row.keyId).sort(),ordered.map(member=>member.app.device.keyId));
   let output='';
   const code=await runV1Command(['job','submit','--git','https://github.com/example/app.git@'+'a'.repeat(40),
-    '--prompt','CLI chooses a member','--harness','claude-code','--circle',w.circle.id,'--yes','--json'],
+    '--prompt','CLI chooses a member','--harness','codex','--circle',w.circle.id,'--yes','--json'],
     {device:w.borrower.app.device,home:w.borrower.home,stdout:{write:text=>{output+=text;}},stderr:{write(){}}});
   assert.equal(code,0,output);
   assert.equal((await (await w.borrower.app.device.jobReadClient(w.circle.id,JSON.parse(output).jobDigest)).getJob(JSON.parse(output).jobDigest)).job.payload.designated_member,
@@ -99,7 +102,7 @@ test('default send skips the first addressed member while it is running',{timeou
     input.write(JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'fixture',version:'1'}}})+'\n');
     await waitFor(()=>messages.find(row=>row.id===1),'MCP initialization');
     input.write(JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'jobs_submit',arguments:{circle:w.circle.id,
-      prompt:'MCP chooses a member',noSource:true,result:{kind:'message'},harness:'claude-code',confirm:true}}})+'\n');
+      prompt:'MCP chooses a member',noSource:true,result:{kind:'message'},harness:'codex',confirm:true}}})+'\n');
     const response=await waitFor(()=>messages.find(row=>row.id===2),'MCP default send');
     assert.notEqual(response.result?.isError,true,JSON.stringify(response));
     const digest=response.result.structuredContent.jobDigest;
@@ -113,7 +116,7 @@ test('default send shuffles idle members with a seeded order',{timeout:180000},a
   for(const member of ordered)await advertise(member.app.device,w.circle.id,member.app.device.keyId);
   // Seed 1 of the Park-Miller generator gives a draw below 1/2, swapping two members.
   let seed=1;t.mock.method(Math,'random',()=>((seed=seed*16807%2147483647)-1)/2147483646);
-  const target=await device.sendTarget(w.circle.id,{harness:['claude-code-subscription']});
+  const target=await device.sendTarget(w.circle.id,{harness:['codex']});
   assert.equal(target.designatedMember,ordered[1].app.device.keyId);
 });
 
@@ -132,11 +135,11 @@ test('Stop before any claim avoids that lender for an hour, then allows it again
   const view=await (await device.jobReadClient(w.circle.id,next.jobDigest)).getJob(next.jobDigest);
   assert.equal(view.job.payload.designated_member,ordered[1].app.device.keyId);
   await ops.cancel({circle:w.circle.id,digest:next.jobDigest});
-  const fallback=await device.sendTarget(w.circle.id,{harness:['claude-code-subscription']});
+  const fallback=await device.sendTarget(w.circle.id,{harness:['codex']});
   assert.equal(fallback.designatedMember,null,'both excluded: use the owner queue');
   const store=device.intentStore(w.circle.id),slot='cancel:'+first.jobDigest,record=await store.get(slot);
   await store.set(slot,{...record,result:{...record.result,requested_at:iso(seconds()-3601)}});
-  const eligible=await device.sendTarget(w.circle.id,{harness:['claude-code-subscription']});
+  const eligible=await device.sendTarget(w.circle.id,{harness:['codex']});
   assert.equal(eligible.designatedMember,ordered[0].app.device.keyId,'an old Stop does not exclude a lender');
 });
 
@@ -145,10 +148,11 @@ test('changed folder files download from the member home with the owner offline'
   await mkdir(folder);await writeFile(join(folder,'notes.txt'),'old\n');
   w.incumbent.down();
   const sent=await api(w.borrower.app,'/api/jobs',{method:'POST',headers:{'faravan-confirm':'yes'},body:{circle:w.circle.id,repo:{path:folder},
-    prompt:'Update notes',harness:'claude-code',designated_member:w.lenderId,send_anyway:true}});
+    prompt:'Update notes',harness:'codex',designated_member:w.lenderId,send_anyway:true}});
   const client=await w.lender.app.device.memberClient(w.circle.id,w.lenderId);
-  const claim=await client.claimJob(sent.jobDigest,{...advertisement,
-    capabilities:[...advertisement.capabilities,'source_manifest_v1','source_project_name_v1']},{leaseSeconds:120});
+  await advertise(w.lender.app.device,w.circle.id,w.lenderId);
+  const claim=await client.claimJob(sent.jobDigest,{...w.advertisement,
+    capabilities:[...w.advertisement.capabilities,'source_manifest_v1','source_project_name_v1']},{leaseSeconds:120});
   await client.startAttempt(claim.attempt);
   const job=(await client.getJob(sent.jobDigest)).job.payload;
   const patch=Buffer.from('diff --git a/notes.txt b/notes.txt\n--- a/notes.txt\n+++ b/notes.txt\n@@ -1 +1 @@\n-old\n+new\n');
@@ -194,6 +198,8 @@ async function members(t,{lenderOptions}={}) {
   const w=await f.realConnect({lenderOptions:lenderOptions?.(f)??{}});
   const {owner,declining:borrower,lender,circle,incumbent}=w;
   const lenderId=lender.app.device.keyId;
+  for(const member of [borrower,lender])accountsByDevice.set(member.app.device,syntheticAccountAdvertisement(member.home));
+  const claimAdvertisement={...advertisement,capabilities:[...advertisement.capabilities,'run_request_v1'],accounts:accountsByDevice.get(lender.app.device)};
   const origin='http://127.0.0.1:'+(await lender.app.memberListener.start()).port;
   const borrowerOrigin='http://127.0.0.1:'+(await borrower.app.memberListener.start()).port;
   await owner.app.device.setMemberOrigin(circle.id,lenderId,origin);
@@ -201,9 +207,9 @@ async function members(t,{lenderOptions}={}) {
   await borrower.app.device.refreshRoster(circle.id);await lender.app.device.refreshRoster(circle.id);
   const ops=()=>createJobOperations({device:borrower.app.device,home:borrower.home,clock:seconds});
   const input=prompt=>({circle:circle.id,prompt,git:'https://github.com/example/app.git@'+'a'.repeat(40),
-    harness:'claude-code',send_anyway:true,designated_member:lenderId});
+    harness:'codex',send_anyway:true,designated_member:lenderId});
   const rootKey=createPrivateKey(await readFile(join(owner.home,'v1','roots',circle.id+'.pem'),'utf8'));
-  return {...w,f,borrower,lenderId,origin,ops,input,rootKey};
+  return {...w,f,borrower,lenderId,origin,ops,input,rootKey,advertisement:claimAdvertisement};
 }
 
 const providerConfiguration={descriptor:{schemaVersion:1,id:'codex',label:'Fixture',signInKind:'api_key',refreshKind:'none',
@@ -214,13 +220,23 @@ const providerConfiguration={descriptor:{schemaVersion:1,id:'codex',label:'Fixtu
   modelFlag:'-m',effortFlag:'--effort',keyEnv:'JOB_KEY',baseUrlEnv:'BASE_URL'};
 
 for(const outcome of ['result','Stop','borrower Stop'])test('the lender app returns '+outcome+' to a non-owner app while every owner request fails',{timeout:180000},async t=>{
+  const waitForState=async read=>{
+    for(;;){
+      t.signal.throwIfAborted();
+      const value=await read();
+      if(value)return value;
+      await delay(25,undefined,{signal:t.signal});
+    }
+  };
+  let signalHold;
+  const enteredHold=new Promise(resolve=>{signalHold=resolve;});
   const w=await members(t,{lenderOptions:f=>{
     const backend=syntheticBackend(f.root,{finalMessage:'Finished offline.',captureStream:true});
     backend.prepareAccountRun=async spec=>Object.assign(await backend.prepare(spec),{job_id:spec.job_id,
       sandbox_id:'offline-'+randomUUID(),_cleanupId:randomUUID()});
     backend.inspect=async h=>({job_id:h.job_id,status:'exited'});
     const start=backend.start.bind(backend);
-    const held=new Set();backend.heldRuns=0;
+    const held=new Set();
     backend.release=()=>{for(const release of held)release();};
     backend.start=async(h,opts)=>{
       const agent=h._entrypoint.startsWith('env ');
@@ -234,7 +250,7 @@ for(const outcome of ['result','Stop','borrower Stop'])test('the lender app retu
       const result=await start(h,opts);
       if(agent)await new Promise(resolve=>{
         const release=()=>{held.delete(release);resolve();};
-        held.add(release);h._release=release;backend.heldRuns++;
+        held.add(release);h._release=release;signalHold();
       });
       return result;
     };
@@ -252,17 +268,17 @@ for(const outcome of ['result','Stop','borrower Stop'])test('the lender app retu
   await post('/api/agents/codex',{useForLending:true});
   await post('/api/lending/mode',{circle:w.circle.id,mode:'auto'});
   await post('/api/lending/on',{circle:w.circle.id});
-  await waitFor(async()=>{
+  await waitForState(async()=>{
     const page=await (await w.lender.app.device.memberClient(w.circle.id,w.lenderId)).fetchPresence();
     return page.devices.some(row=>row.device===w.lenderId&&row.intent?.state==='ready'&&row.execution?.state==='idle'&&row.account_offers?.length);
-  },'idle account offer at the lender store',30000);
+  });
   w.incumbent.down();
   const requestStart=w.realRequests.length;
   const ops=w.ops(),input={...w.input('App runs with the owner already gone'),git:undefined,noSource:true,result:{kind:'message'},
     designated_member:undefined,harness:'codex',runRequest:{schemaVersion:1,models:[{providerId:'codex',modelId:'example-model'}],effortId:'high'}};
   const submitted=await api(w.borrower.app,'/api/jobs',{method:'POST',headers:{'faravan-confirm':'yes'},body:input});
   await w.lender.app.device.probeHost(w.circle.id);
-  await waitFor(()=>w.lender.backend.heldRuns===1,'held app execution',30000);
+  await enteredHold;
   if(outcome==='result'){
     w.lender.backend.release();
     const done=await waitFor(async()=>{const view=await ops.get({circle:w.circle.id,digest:submitted.jobDigest});
@@ -288,10 +304,18 @@ for(const outcome of ['result','Stop','borrower Stop'])test('the lender app retu
     assert.equal(reopened.backend.calls.filter(([op])=>op==='run').length,0);
   } else {
     const active=await ops.get({circle:w.circle.id,digest:submitted.jobDigest});
+    // Only a cancel sent after this Stop proves this Stop stopped compute.
+    const callsBeforeStop=w.lender.backend.calls.length;
     if(outcome==='borrower Stop')assert.equal((await ops.cancel({circle:w.circle.id,digest:submitted.jobDigest})).authority_revoked,true);
     else await post('/api/lending/stop',{attemptId:active.current_attempt.attempt_id,confirmed:true});
-    await waitFor(async()=>{const view=await ops.get({circle:w.circle.id,digest:submitted.jobDigest});
-      return view.current_attempt?.compute_stopped===true;},'confirmed app Stop',30000);
+    // Borrower Stop is observed on the lender's next lease renewal (30 s).
+    // Poll local state while it settles: signed reads every 10 ms can exhaust
+    // the member store's nonce budget before that renewal, masking a valid Stop.
+    await waitFor(async()=>!(await api(w.lender.app,'/api/lending')).current,'lender finished Stop',90000);
+    const stopped=await ops.get({circle:w.circle.id,digest:submitted.jobDigest});
+    assert.equal(stopped.current_attempt?.attempt_id,active.current_attempt.attempt_id,'the same attempt was stopped');
+    assert.equal(stopped.current_attempt?.compute_stopped,true,'confirmed app Stop');
+    assert.ok(w.lender.backend.calls.slice(callsBeforeStop).some(([op])=>op==='cancel'),'this Stop made the backend stop compute');
   }
   assertNoOwnerJobWrites(w,requestStart);
 });
@@ -303,7 +327,7 @@ async function complete(client,attempt,job,executor,uploader=client,{candidate=r
   return client.completeAttempt(attempt,{schema:'faravan.result.v1',circle:job.circle,job_digest:p.digest(job),
     attempt_id:attempt.attempt_id,generation:attempt.generation,executor,roster_epoch:job.roster_epoch,submitted_at:at,
     candidate:await ref(candidate,mediaType),transcript:await ref(transcript,'application/x-ndjson'),
-    receipt:{schema:'faravan.receipt.v1',self_reported:true,harness:'claude-code-subscription',harness_version:'test',model:'test',
+    receipt:{schema:'faravan.receipt.v1',self_reported:true,harness:'codex',harness_version:'test',model:attempt.selection.modelId,selection:attempt.selection,
       backend:'synthetic',candidate_format:mediaType==='text/x-diff'?'diff':'tree',...(mediaType==='text/x-diff'?{diffstat:{files:1,insertions:1,deletions:1}}:{}),limits_applied:job.requirements.limits,egress_applied:job.requirements.egress,
       capabilities_applied:job.requirements.capabilities,started_at:at,finished_at:at,duration_ms:0,source:job.source}});
 }
@@ -314,12 +338,13 @@ test('two non-owner apps send, claim, start, renew, read a result and Stop with 
   const ops=w.ops(),submitted=await ops.submit(w.input('Owner offline from the first send'));
   const borrowerClient=await borrower.app.device.memberClient(circle.id,lenderId);
   const lenderClient=await lender.app.device.lendingClient(circle.id);
+  await advertise(lender.app.device,circle.id,lenderId);
   const jobs=[];for await(const job of lenderClient.listOffers({waitSeconds:0}))jobs.push(job);
   assert.ok(jobs.some(job=>job.job_digest===submitted.jobDigest));
-  await assert.rejects(()=>borrowerClient.claimJob(submitted.jobDigest,advertisement),e=>e.code==='not_designated');
-  const claim=await lenderClient.claimJob(submitted.jobDigest,advertisement,{leaseSeconds:120});
+  await assert.rejects(()=>borrowerClient.claimJob(submitted.jobDigest,w.advertisement),e=>e.code==='not_designated');
+  const claim=await lenderClient.claimJob(submitted.jobDigest,w.advertisement,{leaseSeconds:120});
   assert.equal(claim.attempt.holder,lenderId);
-  await assert.rejects(()=>borrowerClient.claimJob(submitted.jobDigest,advertisement),e=>['not_designated','conflict'].includes(e.code));
+  await assert.rejects(()=>borrowerClient.claimJob(submitted.jobDigest,w.advertisement),e=>['not_designated','conflict'].includes(e.code));
   await lenderClient.startAttempt(claim.attempt);
   await lenderClient.renew(claim.attempt,{leaseSeconds:120});
   const view=await borrowerClient.getJob(submitted.jobDigest);
@@ -332,7 +357,7 @@ test('two non-owner apps send, claim, start, renew, read a result and Stop with 
   // A new pool session discovers the same home and persists its attempt route before claiming.
   const restarted=await lender.app.device.lendingClient(circle.id);
   for await(const _ of restarted.listOffers({waitSeconds:0})){}
-  const active=await restarted.claimJob(stop.jobDigest,advertisement,{leaseSeconds:120});
+  const active=await restarted.claimJob(stop.jobDigest,w.advertisement,{leaseSeconds:120});
   await restarted.startAttempt(active.attempt);
   const requested=await restarted.requestStop(active.attempt);
   assert.equal(requested.attempt_id,active.attempt.attempt_id);

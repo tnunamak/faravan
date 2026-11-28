@@ -12,13 +12,13 @@ import {appFixture,api,waitFor,adapters} from './helpers/offers-jobs-fixture.mjs
 // the circle sees a claim, and a failed audit write means nothing is claimed. Synthetic fixtures only; no sandbox or model.
 function launch(f,onDecision) {
   const c=new AbortController();
-  const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
     approve:()=>assert.fail('a standing rule must not ask'),onDecision,onEvent:e=>f.events.push(e)});
   const loop=lender.start(c.signal);f.stop=async()=>{c.abort();await loop;};return lender;
 }
 function offers(f) {
   let claimed=false;
-  f.client.capabilities=async()=>({capabilities:['offers_v1']});
+  f.client.capabilities=async()=>({capabilities:['offers_v1','run_request_v1']});
   f.client.listOffers=async function*(){if(!claimed)yield {job_digest:f.jobDigest,job:f.job,state:'queued',published_at:'2026-10-09T12:00:00Z',current_attempt:null};};
   f.client.claimJob=async(_digest,ad,opts)=>{claimed=true;f.namedClaims=(f.namedClaims??0)+1;return f.client.claimNext(ad,{...opts,waitSeconds:0});};
 }
@@ -43,7 +43,7 @@ test('an audit write failure prevents the automatic claim',async t=>{
   const f=await lenderFixture(t,{offers:true,harness:'claude-code-subscription'});offers(f);
   f.policy.standingRules=[scope(f)];let attempts=0;
   launch(f,async()=>{attempts++;throw Object.assign(new Error('disk full'),{code:'ENOSPC'});});
-  await until(()=>attempts>0&&f.events.some(e=>e.reason==='audit_unavailable'),'audit failure reported');
+  await until(()=>attempts>0&&f.events.some(e=>e.reason==='conditions_unavailable'),'audit failure reported');
   f.clock.advance(5000);await until(()=>attempts>1,'tried again later');
   assert.equal(f.namedClaims??0,0,'nothing is claimed without a receipt');
   assert.equal(f.count('/jobs/claim-next'),0);assert.equal(f.calls.length,0);
@@ -114,7 +114,7 @@ test('a failed audit write leaves standing rules unchanged',{timeout:120000},asy
 test('an automatic acceptance names the saved rule that granted it',{timeout:120000},async t=>{
   const realNow=Date.now.bind(Date);let offset=0;const reset=realNow()+86400000;
   const harness='claude-code-subscription';
-  const f=await appFixture(t),{owner,lender,circle}=await f.connect({adapters:adapters().map(a=>({...a,spec:legacyProxyHarness(harness)})),
+  const f=await appFixture(t),{owner,lender,circle}=await f.connect({syntheticAccounts:'claude',adapters:adapters().map(a=>({...a,spec:legacyProxyHarness(harness)})),
     quotaReader:async()=>({provider:'claude',remaining:100,observedAt:Date.now()}),lendingNow:()=>realNow()+offset,
     lendingReadings:async()=>({windows:[{window_id:'seven_day',window_minutes:10080,state:'open',used_pct:5,observed_at:realNow()+offset,resets_at:reset}]})});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false,
@@ -122,13 +122,13 @@ test('an automatic acceptance names the saved rule that granted it',{timeout:120
   await api(lender.app,'/api/agents/'+harness,{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'auto'}});
   const [granted]=await rules(lender.app);
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:gitInput(circle,harness)});
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:gitInput(circle,harness)});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
   // Continuous lending starts on day one; there is no ten-minute allowance warmup.
-  const row=await waitFor(async()=>(await api(lender.app,'/api/decisions')).events.find(e=>e.jobDigest===sent.jobDigest&&e.kind==='job'),'automatic receipt');
+  const row=await waitFor(async()=>(await api(lender.app,'/api/decisions')).events.find(e=>e.jobDigest===sent.jobDigest&&e.kind==='job'),'automatic receipt',30000);
   assert.equal(row.source,'standing-rule');assert.equal(row.decision,'accept');assert.equal(row.rule.id,granted.id);
   assert.deepEqual(row.rule,granted);assert.equal(row.decider.deviceKey,lender.app.device.keyId);
-  await waitFor(()=>f.jobs.get(sent.jobDigest).state==='result-accepted','job ran').catch(async error=>{
+  await waitFor(()=>f.jobs.get(sent.jobDigest).state==='result-accepted','job ran',30000).catch(async error=>{
     const state=await api(lender.app,'/api/lending');
     throw new Error(error.message+': '+JSON.stringify({reason:f.jobs.get(sent.jobDigest).current_attempt?.reason,status:state.status,policyReason:state.reason}),{cause:error});
   });
@@ -137,7 +137,7 @@ test('an automatic acceptance names the saved rule that granted it',{timeout:120
 
 test('an audit failure on Run it leaves the offer unclaimed',{timeout:120000},async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:gitInput(circle)});
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:gitInput(circle)});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
@@ -151,7 +151,7 @@ test('an audit failure on Run it leaves the offer unclaimed',{timeout:120000},as
 
 test('accept and skip racing on one card leave one receipt that matches the outcome',{timeout:120000},async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:gitInput(circle)});
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:gitInput(circle)});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
@@ -179,7 +179,7 @@ const settled=(log,id)=>log.events.filter(e=>e.id===id||e.supersedes===id);
 test('a review card closed while its receipt is written is not accepted',{timeout:120000},async t=>{
   const held=heldDecisions();held.module=await import('../lib/v1/decision-log.mjs');
   const f=await appFixture(t),{owner,lender,circle}=await f.connect({decisionLog:held.factory});
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:gitInput(circle)});
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:gitInput(circle)});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
@@ -202,6 +202,8 @@ test('a review card closed while its receipt is written is not accepted',{timeou
 test('a standing-rule change that fails to save is marked not applied and changes nothing',{timeout:120000},async t=>{
   const {rm}=await import('node:fs/promises');
   const f=await appFixture(t),{lender,circle}=await f.connect();
+  await api(lender.app,'/api/lending/circle',{method:'POST',body:{circle:circle.id}});
+  await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
   const file=join(lender.home,'v1','app-settings.json');await rm(file);await mkdir(file);
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'auto'},status:409});
   const view=await api(lender.app,'/api/lending');
@@ -228,9 +230,10 @@ test('limit and requester-cap edits that change automatic lending are recorded',
 // Final review: a grant is published only after it is saved; a Pause during an automatic receipt write stops the claim;
 // a partial multi-receipt failure marks the receipts already written. Deterministic latches, synthetic fixtures only.
 const latch=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
-const claudeAgents={adapters:adapters().map(a=>({...a,spec:legacyProxyHarness('claude-code-subscription')})),
+const claudeAgents={syntheticAccounts:'claude',adapters:adapters().map(a=>({...a,spec:legacyProxyHarness('claude-code-subscription')})),
   quotaReader:async()=>({provider:'claude',remaining:100,observedAt:Date.now()})};
 async function readyToLend(lender,circle,harness='claude-code-subscription') {
+  await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/'+harness,{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
@@ -247,7 +250,7 @@ test('a rule whose settings save is still pending or fails never grants a claim'
   t.after(()=>{gate.resolve();fs.open=originalOpen;syncBuiltinESMExports();});
   const saving=api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'auto'},status:409});
   await entered.promise;
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:gitInput(circle,'claude-code-subscription')});
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:gitInput(circle,'claude-code-subscription')});
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'the job is offered for review, not taken under the unsaved rule',15000);
   assert.equal(card.jobDigest,sent.jobDigest);assert.equal(f.jobs.get(sent.jobDigest).state,'queued');
   gate.resolve();await saving;fs.open=originalOpen;syncBuiltinESMExports();
@@ -282,7 +285,7 @@ test('a Pause while the automatic receipt is written stops the claim and marks t
   const f=await lenderFixture(t,{offers:true,harness:'claude-code-subscription'});offers(f);
   f.policy.standingRules=[scope(f)];const entered=latch(),gate=latch(),outcomes=[];
   const c=new AbortController();
-  const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,
     approve:()=>assert.fail('automatic path'),onDecision:async()=>{entered.resolve();await gate.promise;},
     onDecisionNotApplied:async entry=>{outcomes.push(entry);},onEvent:e=>f.events.push(e)});
   const loop=lender.start(c.signal);f.stop=async()=>{gate.resolve();c.abort();await loop;};
@@ -291,22 +294,25 @@ test('a Pause while the automatic receipt is written stops the claim and marks t
   await until(()=>outcomes.length===1,'not-applied outcome');
   f.clock.advance(5000);await new Promise(resolve=>setTimeout(resolve,100));
   assert.equal(f.namedClaims??0,0,'nothing is claimed after Pause');assert.equal(f.saved()?.claimPending??null,null);
-  assert.equal(outcomes[0].reason,'paused');assert.equal(outcomes[0].jobDigest,f.jobDigest);
+  assert.equal(outcomes[0].reason,'lending_off');assert.equal(outcomes[0].jobDigest,f.jobDigest);
 });
 
 test('a second failed receipt marks the receipts already written as not applied',{timeout:60000},async t=>{
   let count=0;const decisionLog=directory=>{const {createDecisionLog}=held.module;const log=createDecisionLog(directory);return {...log,async record(row){if(row.kind==='standing_rule'&&!row.supersedes&&++count===2)throw Object.assign(new Error('synthetic second audit failure'),{code:'ENOSPC'});return log.record(row);}};};
   const held={module:await import('../lib/v1/decision-log.mjs')};
   const f=await appFixture(t),{lender,circle}=await f.connect({decisionLog});
+  await api(lender.app,'/api/lending/circle',{method:'POST',body:{circle:circle.id}});
+  await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
+  const baseline=(await api(lender.app,'/api/decisions')).events.length;
   const base={circle:circle.id,people:[lender.app.device.keyId],agents:['codex'],maxWallSeconds:600,dailyJobs:2,weeklyJobs:5,dailyMinutes:30,weeklyMinutes:90,expiresAt:Date.now()+86400000};
   await api(lender.app,'/api/lending/rules',{method:'POST',body:{rules:[{...base,id:'a'},{...base,id:'b'}]},status:409});
   assert.deepEqual(await rules(lender.app),[]);
-  const rows=(await api(lender.app,'/api/decisions')).events;
+  const rows=(await api(lender.app,'/api/decisions')).events.slice(baseline);
   assert.deepEqual(rows.map(r=>[r.rule.id,r.applied??null]),[['a',null],['a',false]]);assert.equal(rows[1].reason,'audit_failed');
   // Across batches: a mode change whose limit receipt fails marks the rule receipt written before it.
   count=0; // the mode's create is write 1 and succeeds; the limits update is write 2 and fails
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:5,mode:'auto',circle:circle.id},status:409});
-  const later=(await api(lender.app,'/api/decisions')).events.slice(2);
+  const later=(await api(lender.app,'/api/decisions')).events.slice(baseline+2);
   const created=later.find(e=>e.decision==='create'&&!e.supersedes);assert.ok(created);
   assert.equal(later.find(e=>e.supersedes===created.id)?.applied,false);
   assert.equal((await api(lender.app,'/api/lending')).mode,'ask');
@@ -350,7 +356,7 @@ test('a member joining after an explicit people save does not inherit frozen con
     lendingPolicy:{strategy:'fixed_share',strategyParams:{fixedSharePct:100,keepPct:0},providerConsent:{claude:true},accountPlans:{claude:'max20'}}}});
   await api(lender.app,'/api/agents/'+harness,{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
-  const first=await api(owner.app,'/api/jobs',{method:'POST',body:{...gitInput(circle,harness),prompt:'Original member manual positive'}});
+  const first=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{...gitInput(circle,harness),prompt:'Original member manual positive'}});
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals')).find(c=>c.jobDigest===first.jobDigest),'first explicit approval',15000);
   await api(lender.app,'/api/approvals/'+card.id+'/accept',{method:'POST',body:{}});
   await finished(first);assert.equal(runCount(),1);
@@ -372,7 +378,7 @@ test('a member joining after an explicit people save does not inherit frozen con
   const pending=await api(owner.app,'/api/circles/'+circle.id+'/approvals');
   assert.equal(pending.length,1,'new membership was not enrolled before automatic On');
   await api(owner.app,'/api/circles/'+circle.id+'/approve',{method:'POST',body:{}});
-  const fresh=await api(newcomer.app,'/api/jobs',{method:'POST',body:{...gitInput(circle,harness),prompt:'New member must wait'}});
+  const fresh=await api(newcomer.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{...gitInput(circle,harness),prompt:'New member must wait'}});
   const review=await waitFor(async()=>(await api(lender.app,'/api/approvals')).find(c=>c.jobDigest===fresh.jobDigest),'new member manual review',15000)
     .catch(e=>{throw new Error(e.message+' FAILURES '+JSON.stringify([...new Set(f.failures.map(e=>e.message))]),{cause:e});});
   assert.equal(review.offer,true);
@@ -399,7 +405,7 @@ test('a member joining after an explicit people save does not inherit frozen con
   assert.equal(f.jobs.get(fresh.jobDigest).state,'queued');assert.equal(f.jobs.get(fresh.jobDigest).attempts_started,0);
   assert.equal(f.jobs.get(fresh.jobDigest).current_attempt,null);
   assert.equal(runCount(),1,'new member did not reach backend');
-  const again=await api(owner.app,'/api/jobs',{method:'POST',body:{...gitInput(circle,harness),prompt:'Original member after roster change'}});
+  const again=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{...gitInput(circle,harness),prompt:'Original member after roster change'}});
   offset+=600001;
   await finished(again);assert.equal(runCount(),2,'unrelated permitted work still completes');
   assert.equal(f.jobs.get(fresh.jobDigest).state,'queued');assert.equal(f.jobs.get(fresh.jobDigest).attempts_started,0);

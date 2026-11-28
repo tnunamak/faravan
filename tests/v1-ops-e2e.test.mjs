@@ -56,7 +56,9 @@ test('a lender driven by MCP and a borrower driven by the CLI complete a job wit
     input.job.estimateUsdMicro = evidence.request.requested_usd_micro ?? 4_000_000;
     return input;
   };
-  const {owner, lender, circle} = await f.connect({lendingPace50: {source}});
+  let snapshotTime=null;
+  const clock={now:()=>snapshotTime??Date.now()};
+  const {owner, lender, circle} = await f.connect({lendingPace50:{source},clock,lendingNow:clock.now});
   await api(lender.app,'/api/agents/codex/run',{method:'POST',body:{model:'gpt-6-luna',effort:null}});
   const peer = mcp(t, lender.home);
   const initialized = await peer.init();
@@ -117,7 +119,8 @@ test('a lender driven by MCP and a borrower driven by the CLI complete a job wit
   assert.equal(receipt.json.receipt.harness, 'codex');
   assert.deepEqual(receipt.json.checks, []);
 
-  // The same operation on every surface gives the same answer.
+  // Compare the same observation instant, rather than different reading ages and accrual balances.
+  snapshotTime=Date.now();
   const viaApi = await api(lender.app, '/api/lending');
   const viaCli = await cli(lender.home, ['ops', 'call', 'lending.get', '--json']);
   const viaMcp = await peer.tool('lending_get');

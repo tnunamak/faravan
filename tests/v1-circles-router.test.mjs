@@ -1,5 +1,6 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
+import {fixtureAccounts,accountHeartbeat} from './helpers/run-request-fixture.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, mkdirSync, readFileSync, existsSync, readdirSync, writeFileSync, copyFileSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
@@ -133,7 +134,8 @@ test('R1 two circles on one origin: each serves its own jobs and cannot see the 
   for (const id of [f.A, f.B]) assert.ok(existsSync(join(f.circlesDir, id, 'coordinator.sqlite')));
   assert.ok(existsSync(join(f.circlesDir, f.A, 'blobs')) && existsSync(join(f.circlesDir, f.B, 'blobs')));
   // A lender in A claims only A's job.
-  const claim = await f.client(f.A, 1).claimNext({ harnesses: ['codex'], models: ['example-model'], capabilities: ['patch-output'],
+  await f.client(f.A,1).heartbeat(accountHeartbeat(fixtureAccounts()));
+  const claim = await f.client(f.A, 1).claimNext({ harnesses: ['codex'], models: ['example-model'], capabilities: ['patch-output','run_request_v1'],accounts:fixtureAccounts(),
     egress: ['provider-only'], enforced_limits: Object.keys(golden.objects.job.envelope.payload.requirements.limits),
     max_limits: golden.objects.job.envelope.payload.requirements.limits }, { waitSeconds: 0 });
   assert.equal(claim.job_digest, submitted.jobDigest);

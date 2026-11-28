@@ -16,10 +16,6 @@ test.afterEach(async()=>{await harness?.stop();});
 
 const post=(origin,path,body)=>fetch(origin+'/api/'+path,{method:'POST',headers:{'content-type':'application/json','x-faravan-session-token':origin===harness.owner?'synthetic-session-owner':'synthetic-session-lender'},body:JSON.stringify(body)});
 async function startLending(){
-  const settingsResponse=await fetch(harness.lender+'/api/lending/owner-settings',{headers:{'x-faravan-session-token':'synthetic-session-lender'}});
-  const settings=await settingsResponse.json(),engineMinimum=Math.max(settings.defaultMaxJobUsd,...settings.minimums.map(row=>row.minimumMaxJobUsd));
-  const cap=await post(harness.lender,'lending/owner-settings',{maxJobUsd:engineMinimum,reason:'Synthetic event journey needs room for one worst-case call.'});
-  expect(cap.ok,'owner job cap: '+await cap.clone().text()).toBeTruthy();
   for(const [path,body] of [['lending/limits',{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}],['agents/codex',{useForLending:true}],['agents/claude-code-subscription',{useForLending:true}],['lending/mode',{circle:harness.circle.id,mode:'ask'}],['lending/on',{circle:harness.circle.id}]]){const r=await post(harness.lender,path,body);expect(r.ok,path+': '+await r.clone().text()).toBeTruthy();}
 }
 async function submit(prompt,agent='codex'){const r=await post(harness.owner,'jobs',{circle:harness.circle.id,git:'https://github.com/example/synthetic.git',commit:'3'.repeat(40),prompt,harness:agent});expect(r.ok,await r.clone().text()).toBeTruthy();return r.json();}

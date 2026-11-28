@@ -17,7 +17,13 @@ function failPrivacyWrites(){
  fs.mkdirSync=(file,...args)=>{if(String(file).endsWith('request-privacy-uncertain')){latches++;throw Object.assign(new Error('injected refusal write failure'),{code:'ENOSPC'});}return mkdir(file,...args);};
  syncBuiltinESMExports();return {counts:()=>({records,latches}),restore(){fs.openSync=open;fs.mkdirSync=mkdir;syncBuiltinESMExports();}};
 }
-for(const headers of [{'faravan-telemetry':'off'},{'sec-gpc':'1'}])test(`a job is refused when both opt-out writes fail (${Object.keys(headers)[0]})`,async t=>{
+// These cases exercise privacy after a confirmed send, not the separate 428 gate.
+const confirmedOptOutHeaders = [
+ {'faravan-telemetry':'off','faravan-confirm':'yes'},
+ {'sec-gpc':'1','faravan-confirm':'yes'},
+];
+
+for(const headers of confirmedOptOutHeaders)test(`a job is refused when both opt-out writes fail (${Object.keys(headers)[0]})`,async t=>{
  const h=await telemetryApp(t);await h.f.provisionFromHome('owner');const circle=await api(h.app,'/api/circles',{method:'POST',body:{origin:h.f.origin,name:'Synthetic'}});
  const body={circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic task',harness:'codex'};
  const fault=failPrivacyWrites();let accepted;
@@ -56,7 +62,7 @@ for(const failBinding of [false,true])test(`an admitted opt-out survives restart
  for(const [digest,state] of [[accepted.jobDigest,'failed'],['sha256:'+'b'.repeat(64),'result-accepted']])tel.observe('event:job',{job_digest:digest,state,attempts_started:1,job:{payload:{requirements:{harness:['codex']}}}});
  time+=600001;await tel.flushNow();assert.deepEqual(events.filter(e=>e.event==='job.run').map(e=>e.properties.outcome),failBinding?[]:['finished'],'the opted-out lifecycle never uploads; a completed binding permits an unrelated positive-control job');
 });
-for(const headers of [{'faravan-telemetry':'off'},{'sec-gpc':'1'}])test(`an opted-out request rejected before submit leaves no reservation (${Object.keys(headers)[0]})`,async t=>{
+for(const headers of confirmedOptOutHeaders)test(`an opted-out request rejected before submit leaves no reservation (${Object.keys(headers)[0]})`,async t=>{
  const h=await telemetryApp(t);await h.f.provisionFromHome('owner');const circle=await api(h.app,'/api/circles',{method:'POST',body:{origin:h.f.origin,name:'Synthetic'}});
  const response=await fetch(h.app.origin+'/api/jobs',{method:'POST',headers:{'x-faravan-session-token':h.app.token,'content-type':'application/json',...headers},body:JSON.stringify({circle:circle.id,promptFile:'/tmp/x',git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic task',harness:'codex'})});
  assert.equal(response.status,400);assert.equal(h.f.jobs.size,0);

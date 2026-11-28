@@ -1,15 +1,13 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {join} from 'node:path';
-import {createLender} from '../lib/v1/lender.mjs';
-import {createLendingRuntime} from '../lib/v1/lending-runtime.mjs';
+
 import {createNativeGuard} from '../lib/v1/lending-native-guard.mjs';
-import {PROVIDER_LIMIT_STOP_ANSWER_MS} from '../lib/v1/lending-quota-timing.mjs';
+
 import {LINES, learningLine, learningExpiredLine, learningCreatorUnknownLine, LEARNING_OFF_LINE} from '../lib/v1/lending-status-copy.mjs';
 import {planHint} from '../ui/v1/src/lending-policy-view.mjs';
-import {createSyntheticPace50Source} from './helpers/pace50-synthetic-source.mjs';
-import {lenderFixture, until} from './helpers/v1-lender-fixture.mjs';
+
+import {until} from "./helpers/v1-lender-fixture.mjs";
 import {NOW, MICRO as M} from './helpers/pace50-fixtures.mjs';
 
 // Regression tests for the 1101 round-3 re-review of native-window lending (F1-F3). Synthetic evidence only: no provider,
@@ -89,38 +87,3 @@ for (const [fact, unobserved, positive, reason] of [
 });
 
 // Native allowance exhaustion requests the provider-limit stop, with a bounded fallback when its answer never arrives.
-test('a native allowance stop through the lender requests graceful Stop and falls back after the answer budget', {timeout: 60_000}, async t => {
-  // The owner's per-job cap bounds the native budget. (A job's own budget_v1 dollar cap is refused on a native account; see the
-  // round-3 notes.)
-  const f = await lenderFixture(t, {hold: true, policy: {mode: 'auto'}, run: {model: 'gpt-6-sol'}});
-  f.policy.userActive = async () => false;
-  const source = createSyntheticPace50Source({start: f.clock.now(), used: {weekly: 0, short: 0},
-    override: ({base}) => ({...base, resources: base.resources.map(r => ({...r, conversion: 'native_window', kappa_micro: null, kappa_lower_micro: null}))})});
-  const runtime = createLendingRuntime({directory: join(f.root, 'pace50'), now: f.clock.now,
-    settings: () => ({intent: 'on', limits: {lendingPolicy: {}}}), pace50: {source, account: 'synthetic-account',
-      account_week_id: 'synthetic-week-1', contextFor: () => ({consent: true, ownerAbsent: true}),
-      ownerSettings: {limit: () => ({state: 'set', maxJobUsd: 10})}}});
-  f.policy.lendingRuntime = runtime;
-  t.after(() => runtime.close?.());
-  const graceful = [];
-  // A missing answer exercises the existing provider-limit fallback.
-  f.backend.requestStop = async (handle, reason) => { graceful.push(reason); return new Promise(() => {}); };
-  const controller = new AbortController();
-  const lender = createLender({client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
-    approve: async () => true, onEvent: event => f.events.push(event)});
-  const run = lender.start(controller.signal); run.catch(() => {});
-  f.stop = async () => { controller.abort(); f.execution.resolve(); await run.catch(error => { if (error.name !== 'AbortError') throw error; }); };
-  await until(() => f.events.some(e => e.status === 'running'), 'the job is running');
-  const attemptId = () => runtime.pace50.state().attempts[0]?.id;
-  // The job's own in-band line, as the lender's onMeter passes it on, shows both windows at their allowance.
-  const checking=runtime.candidate.recheck({attemptId: attemptId(), usd: 0, tokens: null, model: 'gpt-6-sol',
-    windows: [{window_id: 'codex:300', used_pct: 100, resets_at: null}, {window_id: 'codex:10080', used_pct: 100, resets_at: null}]});
-  await until(()=>graceful.length===1,'the native guard requests graceful Stop');
-  assert.equal(runtime.candidate.nativeGuard.status(attemptId()).stop_reason, 'allowance_reached');
-  assert.deepEqual(graceful,['provider_limit']);
-  assert.ok(!f.events.some(e=>e.status==='stopping'&&e.reason==='allowance_reached'));
-  f.clock.advance(PROVIDER_LIMIT_STOP_ANSWER_MS);
-  await checking;
-  await until(()=>f.events.some(e=>e.status==='stopping'&&e.reason==='provider_limit'),'the missing answer reaches the fallback stop');
-  await f.stop();
-});

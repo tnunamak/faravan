@@ -257,10 +257,6 @@ test('objective and projection retain the code without replacing legacy reason f
   const missing=decideObjectiveLend(p);assert.equal(missing.reasonCode,'rule_evidence_unknown');
   assert.equal(missing.ruleReasonCode,'quota_registry_missing');
   assert.equal(lendingStatus(missing).line,RULE_REASON_COPY.quota_registry_missing);
-  const capped=objectiveInput();capped.ownerMaxJobUsdMicro=1;
-  const ownerHold=decideObjectiveLend(capped);assert.equal(ownerHold.admitted,false);
-  assert.equal(ownerHold.ruleReasonCode,undefined); // A later product hold owns its explanation.
-  assert.deepEqual(lendingStatus(ownerHold),lendingStatus({reason:'request_too_large'}));
   assert.deepEqual(lendingStatus({reason:'usage_unknown',reasonCode:'objective_usage_unknown'}),
     lendingStatus({reason:'usage_unknown'}));
 });

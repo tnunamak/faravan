@@ -17,7 +17,7 @@ const savedBeforeChange = () => ({version: 1, configVersion: 13, intent: 'on', a
     lendingPolicy: {...normalizeLendingPolicy(), stopOnReturn: true, strategyParams: {perJobPct: 17},
       providerConsent: {claude: true, codex: true}}}});
 
-test('an upgrade keeps both presence protections, the saved intent and the consent, and a second start writes nothing', {timeout:60000}, async t => {
+test('an upgrade keeps both presence protections, the saved intent and removes retired consent, and a second start writes nothing', {timeout:60000}, async t => {
   const f = await appFixture(t), home = await f.home('presence-keep'), directory = join(home, 'v1');
   await mkdir(directory, {recursive: true});
   const file = join(directory, 'app-settings.json');
@@ -28,7 +28,7 @@ test('an upgrade keeps both presence protections, the saved intent and the conse
   assert.equal(first.limits.lendingPolicy.stopOnReturn, true);
   assert.equal(first.intent, 'on');
   assert.equal(first.activeCircle, 'chosen-circle');
-  assert.deepEqual(first.limits.lendingPolicy.providerConsent, {claude: true, codex: true});
+  assert.equal(first.limits.lendingPolicy.providerConsent, undefined);
   assert.equal(first.limits.lendingPolicy.strategyParams.perJobPct, 17);
   assert.equal(first.presenceDefaultsVersion, 2);
   const notice = (await api(app, '/api/home')).lendingPolicy.migration;
@@ -59,7 +59,7 @@ test('the migrated idle-only setting still holds a job while the owner is at the
     quota: () => ({provider: 'codex', remaining: 100, observedAt: f.clock.now()}),
     lendingPolicy: migrated.lendingPolicy, userActive: () => true}});
   const controller = new AbortController();
-  const lender = createLender({client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock});
+  const lender = createLender({...f.runOptions,client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock});
   const running = lender.start(controller.signal);
   for (let i = 0; i < 40; i++) { f.clock.advance(5000); for (let j = 0; j < 20; j++) await new Promise(resolve => setImmediate(resolve)); }
   assert.equal(f.calls.some(([kind]) => kind === 'run'), false, 'no job starts while the owner is present');
@@ -114,5 +114,5 @@ test('item 18: a fresh install writes both presence booleans explicitly, so a ro
   assert.strictEqual(saved.limits.idleOnly, false);
   assert.strictEqual(saved.limits.lendingPolicy.stopOnReturn, false);
   assert.equal(saved.presenceDefaultsVersion, 2);
-  assert.equal(typeof saved.presence.answer, 'string', 'the answer is its own top-level key, not the marker');
+  assert.equal(saved.presence,undefined,'retired preview presence is not persisted');
 });

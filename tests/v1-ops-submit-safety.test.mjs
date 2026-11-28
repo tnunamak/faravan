@@ -26,10 +26,10 @@ for (const id of ['jobs.submit', 'jobs.send_and_wait']) {
   test(id + ' validates requested effort with no dollar default and retains send consent', async () => {
     const schema=opById(id).input;
     for(const effort of ['none','minimal','low','medium','high','xhigh','max'])
-      assert.equal(check(schema,{...input,budget_v1:{effort}}),null);
+      assert.equal(check(schema,{...input,effort}),null);
     for(const budget_v1 of [null,{effort:null},{effort:'ultra'},{max_list_usd:0},{max_list_usd:1.5},{max_list_usd:100001},{effort:'high',extra:true}])
       assert.ok(check(schema,{...input,budget_v1}));
-    await assert.rejects(runOp(id,{...input,budget_v1:{effort:'high'}},{
+    await assert.rejects(runOp(id,{...input,effort:'high'},{
       rest:async(method,path)=>path==='/api/circles'?[approvedCircle({id:'Friends',name:'Friends',origin:'https://example.test'})]:assert.fail('unconfirmed effort dispatched'),
     }),{code:'confirmation_required'});
   });

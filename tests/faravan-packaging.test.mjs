@@ -5,12 +5,12 @@ import './helpers/no-browser.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
-import {cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {dirname, join} from 'node:path';
+import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {plistSedReplacement} from '../lib/channel-identity.mjs';
+import {stagingFixture} from './helpers/staging-fixture.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const read = path => readFileSync(join(root, path), 'utf8');
@@ -21,37 +21,6 @@ function filesUnder(directory, prefix = '') {
     return entry.isFile() ? [relativePath] : [];
   });
 }
-// Give the real stager and validator a disposable checkout with an independently
-// pinned guest archive. A no-op npm cannot build the checked-in guest payload,
-// and these tests exercise staging, not the Linux-only guest dependency build.
-function stagingFixture(work) {
-  const checkout = join(work, 'checkout');
-  for (const path of [
-    'packaging/stage-app.sh', 'packaging/check-staged-runtime.mjs',
-    'bin', 'lib', 'kits', 'public', 'docs/protocol',
-    'docs/security/credential-proxy-evidence.json', 'profiles/faravan-docker.json',
-    'package.json', 'package-lock.json', 'LICENSE.md',
-  ]) {
-    const destination = join(checkout, path);
-    mkdirSync(dirname(destination), {recursive: true});
-    cpSync(join(root, path), destination, {recursive: true, verbatimSymlinks: true});
-  }
-  const vendor = join(root, 'vendor');
-  if (existsSync(vendor)) {
-    cpSync(vendor, join(checkout, 'vendor'), {recursive: true, verbatimSymlinks: true});
-  }
-
-  const guest = join(work, 'guest');
-  const module = join(guest, 'node_modules', 'fixture-pi');
-  mkdirSync(module, {recursive: true});
-  writeFileSync(join(module, 'package.json'), '{"name":"fixture-pi","version":"0.0.0"}\n');
-  const payload = join(work, 'pi-payload.tgz');
-  execFileSync('tar', ['-czf', payload, '-C', guest, 'node_modules'], {stdio: 'pipe'});
-  const digest = createHash('sha256').update(readFileSync(payload)).digest('hex');
-  writeFileSync(join(checkout, 'kits/wf-pi/files/home/.faravan/pi-payload.sha256'), digest + '\n');
-  return {stage: join(checkout, 'packaging/stage-app.sh'), payload};
-}
-
 
 test('the staged tree holds bin/faravan beside the faravan shim', t => {
   const work = mkdtempSync(join(tmpdir(), 'faravan-stage-'));

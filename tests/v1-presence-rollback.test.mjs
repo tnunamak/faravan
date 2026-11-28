@@ -42,17 +42,17 @@ async function installSettings(f,name,value){
 
 for(const row of [
   {name:'stored defaults',version:0,idle:true,stop:true,cap:undefined,want:[true,true,10],
-    flags:['perJobCapChanged'],edit:[false,false,25]},
+    edit:[false,false,25]},
   {name:'unversioned old presence defaults',idle:true,stop:true,cap:undefined,want:[true,true,10],
-    flags:['perJobCapChanged'],edit:[false,false,0]},
-  {name:'old presence defaults and explicit cap 25',version:12,idle:true,stop:true,cap:25,want:[true,true,25],flags:[]},
-  {name:'explicit opt-out and cap zero',version:12,idle:false,stop:false,cap:0,want:[false,false,0],flags:[]},
+    edit:[false,false,0]},
+  {name:'old presence defaults and explicit cap 25',version:12,idle:true,stop:true,cap:25,want:[true,true,25],},
+  {name:'explicit opt-out and cap zero',version:12,idle:false,stop:false,cap:0,want:[false,false,0],},
   {name:'no-cap preview exception after an old owner write',version:12,idle:true,stop:true,cap:25,want:[true,true,25],
-    flags:[],edit:[false,false,undefined],clearCap:true},
+    edit:[false,false,undefined],clearCap:true},
   {name:'legacy policy with no cap',version:7,idle:false,stop:false,want:[false,false,10],
-    policy:{preset:'fixed_share',fixedSharePct:37,keepPct:42,perJobPct:null,stopOnReturn:false},flags:['fromLegacyPolicy','perJobCapChanged']},
+    policy:{preset:'fixed_share',fixedSharePct:37,keepPct:42,perJobPct:null,stopOnReturn:false},},
   {name:'legacy policy with cap zero',version:7,idle:true,stop:true,want:[true,true,0],
-    policy:{preset:'fixed_share',fixedSharePct:37,keepPct:42,perJobPct:0,stopOnReturn:true},flags:['fromLegacyPolicy']},
+    policy:{preset:'fixed_share',fixedSharePct:37,keepPct:42,perJobPct:0,stopOnReturn:true},},
 ])test(`rollback reader keeps ${row.name} and re-upgrade keeps owner choices`,{
   timeout:120000,skip:available?false:'Pinned rollback build unavailable; run this check with full Git history before publishing.',
 },async t=>{
@@ -66,8 +66,6 @@ for(const row of [
   const written=await read(headFile);
   assert.deepEqual(choices(written),row.want);
   assert.equal(written.presenceDefaultsVersion,2);
-  assert.equal(written.perJobCapDefaultsVersion,1);
-  for(const flag of row.flags)assert.equal(written.lendingPolicyMigration[flag],true);
   assert.equal(oldPolicy.repairLendingPolicy(written.limits.lendingPolicy,oldApp.APP_DEFAULTS.lendingPolicy),null,
     'the old policy reader accepts every saved policy key without repair');
 
@@ -75,17 +73,17 @@ for(const row of [
   const oldFile=await installSettings(rollback,'rollback',written);
   const {app:old}=await rollback.start('rollback');
   const view=await api(old,'/api/home');
-  assert.deepEqual(view.lending.limits,written.limits,'the actual old startup accepts all limit keys and values');
+  const oldLimits=structuredClone(view.lending.limits);
+  assert.deepEqual(oldLimits.lendingPolicy.providerConsent,{},'the old reader supplies only its empty retired provider map');
+  delete oldLimits.lendingPolicy.providerConsent;
+  assert.deepEqual(oldLimits,written.limits,'the actual old startup preserves the current limits and owner choices');
   const loaded=await read(oldFile);
   assert.equal(loaded.presenceDefaultsVersion,2);
-  assert.equal(loaded.perJobCapDefaultsVersion,1);
-  assert.deepEqual(loaded.lendingPolicyMigration,written.lendingPolicyMigration,'unknown notice fields survive the old reader');
   if(row.edit)await api(old,'/api/lending/limits',{method:'POST',body:{idleOnly:row.edit[0],
     lendingPolicy:{stopOnReturn:row.edit[1],strategyParams:row.clearCap?{}:{perJobPct:row.edit[2]}}}});
   await old.close();
   const savedByOld=await read(oldFile);
   assert.equal(savedByOld.presenceDefaultsVersion,2);
-  assert.equal(savedByOld.perJobCapDefaultsVersion,1);
   assert.deepEqual(choices(savedByOld),row.edit??row.want);
 
   const upgrade=await appFixture(t);
@@ -94,15 +92,12 @@ for(const row of [
   await again.close();
   const upgraded=await read(upgradeFile);
   const expected=structuredClone(savedByOld.limits);
-  if(row.clearCap){
-    expected.lendingPolicy.strategyParams.perJobPct=10;
-    assert.equal(upgraded.lendingPolicyMigration?.perJobCapChanged,true);
-    assert.equal(upgraded.lendingPolicyMigration?.acknowledged,false,'the accepted no-cap exception is never silent');
-  }else assert.deepEqual(upgraded.lendingPolicyMigration,savedByOld.lendingPolicyMigration,'re-upgrade adds no new migration notice');
+  assert.deepEqual(expected.lendingPolicy.providerConsent,{});
+  delete expected.lendingPolicy.providerConsent;
+  if(row.clearCap)expected.lendingPolicy.strategyParams.perJobPct=10;
   assert.deepEqual(upgraded.limits,expected,'re-upgrade preserves explicit choices except the accepted no-cap preview rule');
   const {app:second}=await upgrade.start('upgrade');
   await second.close();
   const twice=await read(upgradeFile);
   assert.deepEqual(twice.limits,upgraded.limits);
-  assert.deepEqual(twice.lendingPolicyMigration,upgraded.lendingPolicyMigration,'the next start changes no migration data');
 });

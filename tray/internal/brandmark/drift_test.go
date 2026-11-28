@@ -45,7 +45,7 @@ func TestGeneratedFilesMatchTheMark(t *testing.T) {
 func TestNoOldMarkRemains(t *testing.T) {
 	root := filepath.Join("..", "..", "..")
 	for _, path := range []string{Sprite, "ui/v1/src/bootstrap.mjs", "public/v1/index.html", "public/v1/app.mjs",
-		"packaging/macos/icon/Faravan.svg", "docs/design/experience/mockups/src/icons.svg", "tray/internal/faravantray/icons.go"} {
+		"packaging/macos/icon/Faravan.svg", "tray/internal/faravantray/icons.go"} {
 		data, err := os.ReadFile(filepath.Join(root, path))
 		if err != nil {
 			t.Fatal(err)

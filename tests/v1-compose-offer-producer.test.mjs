@@ -1,13 +1,13 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {appFixture, api, syntheticBackend, waitFor} from './helpers/v1-app-fixture.mjs';
+import {appFixture, api, browserApi, syntheticBackend, waitFor} from './helpers/v1-app-fixture.mjs';
 import {json} from './helpers/v1-journey.mjs';
-import {legacyProxyHarness} from './helpers/legacy-proxy-harness.mjs';
+
 import {lenderFixture, until} from './helpers/v1-lender-fixture.mjs';
 import {createLender} from '../lib/v1/lender.mjs';
 import {HOST_CAPABILITIES, MODEL_EFFORT_PAIRS_CAPABILITY} from '../lib/v1/versions.mjs';
-import {createSyntheticPace50Source} from './helpers/pace50-synthetic-source.mjs';
+
 import {draftBody} from '../ui/v1/src/compose-draft.mjs';
 
 // Producer to consumer. The lender's own heartbeat writer is the producer: its real body becomes the presence row that
@@ -40,29 +40,6 @@ async function composerOffers(f, owner, circle, body) {
   return (await api(owner.app, '/api/circles/' + encodeURIComponent(circle.id) + '/compose')).offers;
 }
 
-test('a Claude pair the pace-50 candidate cannot lend is left out of the heartbeat and of the composer offers', testOptions, async t => {
-  const f = await appFixture(t), beats = captureHeartbeats(f);
-  const claude = () => [{spec: legacyProxyHarness('claude-code-subscription'), installed: true, signedIn: true,
-    harnessVersion: 'synthetic-only', models: ['claude-opus-5-5', 'claude-unpriced-test'], capabilities: []}];
-  // The pace-50 candidate lends only priced Claude models: claude-unpriced-test has no price row, so it is left out.
-  const source = createSyntheticPace50Source({start: Date.now(), used: {weekly: 0, short: 0}});
-  const {owner, lender, circle} = await f.connect({heartbeatMs: 100, adapters: claude,
-    lendingPace50: {source, account_week_id: 'synthetic-week-1'}});
-  await api(lender.app, '/api/lending/limits', {method: 'POST', body: {dailyJobs: null, dailyMinutes: null, maxWallSeconds: null, idleOnly: false,
-    lendingPolicy: {accountPlans: {claude: 'max20'}, providerConsent: {claude: true}}}});
-  await api(lender.app, '/api/agents/claude-code-subscription', {method: 'POST', body: {useForLending: true}});
-  await api(lender.app, '/api/agents/claude-code-subscription/run', {method: 'POST', body: {model: null, effort: null, model_efforts: [
-    {model: 'claude-opus-5-5', effort: 'medium'}, {model: 'claude-unpriced-test', effort: 'high'}]}});
-  await api(lender.app, '/api/lending/on', {method: 'POST', body: {circle: circle.id}});
-  await api(lender.app, '/api/agents/refresh', {method: 'POST', body: {agents: ['claude-code-subscription']}});
-  const {body} = await waitFor(() => beats.findLast(b => b.signer === lender.app.device.keyId &&
-    b.body.agents?.some(a => a.adapter === 'claude-code-subscription' && a.model_efforts?.length)), 'Claude heartbeat with pairs', 15000);
-  const agentBeat = body.agents.find(a => a.adapter === 'claude-code-subscription');
-  assert.deepEqual(agentBeat.model_efforts, [{model: 'claude-opus-5-5', effort: 'medium'}], 'the heartbeat lists only the pair the candidate can lend');
-  assert.ok(!agentBeat.models.includes('claude-unpriced-test'), 'and does not list the model it cannot lend');
-  assert.deepEqual(await composerOffers(f, owner, circle, body), [{harness: 'claude-code', model: 'claude-opus-5-5', effort: 'medium', auto_intents: ['cheapest', 'strongest']}]);
-});
-
 test('a lender whose backend cannot stop a job publishes no effort pairs', testOptions, async t => {
   const f = await appFixture(t), beats = captureHeartbeats(f);
   // Effort jobs need budget_v1, and a quota lender advertises it only with a stop control. Without one, no pair is publishable.
@@ -82,7 +59,7 @@ test('a lender whose backend cannot stop a job publishes no effort pairs', testO
 function launch(f) {
   const controller = new AbortController();
   let failure;
-  const lender = createLender({client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
+  const lender = createLender({...f.runOptions,client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
     approve: async () => true, onEvent: () => {}});
   const running = Promise.resolve(lender.start(controller.signal)).catch(error => { failure = error; });
   return async () => {
@@ -95,21 +72,22 @@ function launch(f) {
 test('a job the composer signs for a pair is claimed and run by a lender at that pair effort', testOptions, async t => {
   // The composer's body becomes the signed job through the app. The lender then claims it with its own advertisement.
   const app = await appFixture(t), {owner, circle} = await app.connect();
+  const ui=await browserApi(owner.app);
   const body = draftBody({id: 'draft-pair-run-0001', prompt: 'Synthetic pair run', sourceKind: 'none', agent: 'codex', model: 'other-model', effort: 'high'}, circle.id);
-  const sent = await api(owner.app, '/api/jobs', {method: 'POST', body});
+  const sent = await ui('/api/jobs', {method: 'POST', body});
   const signed = app.jobs.get(sent.jobDigest).job.payload;
-  assert.deepEqual(signed.requirements.model, {any_of: ['other-model']});
-  assert.deepEqual(signed.budget_v1, {effort: 'high'});
+  assert.deepEqual(signed.runRequest,{schemaVersion:1,models:[{providerId:'codex',modelId:'other-model'}],effortId:'high'});
 
   const f = await lenderFixture(t, {harness: 'codex', offers: true,
     run: {model_efforts: [{model: 'example-model', effort: 'low'}, {model: 'other-model', effort: 'high'}]},
     mutateJob: job => {
       // The fixture backend caps wall time below the composer's request, so the job keeps the fixture's own limits.
       job.requirements = {...structuredClone(signed.requirements), limits: structuredClone(job.requirements.limits)};
-      job.budget_v1 = structuredClone(signed.budget_v1);
+      job.runRequest = structuredClone(signed.runRequest);
       if (signed.result !== undefined) job.result = structuredClone(signed.result);
       else delete job.result;
     }});
+  f.runOptions.runAccounts=()=>[{accountId:'fixture-account',providerId:'codex',models:[{id:'other-model',enabled:true,efforts:[{id:'high'}],defaultEffort:null}]}];
   // The host must declare the pair capability, or the lender advertises no pair and other-model is never claimed. The lender
   // takes offers from the coordinator's offer list, so this fake serves the job that way, as v1-lender-offers.test.mjs does.
   const offerHost = [...HOST_CAPABILITIES, MODEL_EFFORT_PAIRS_CAPABILITY, 'offers_v1'];

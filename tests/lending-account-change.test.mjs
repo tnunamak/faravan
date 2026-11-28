@@ -33,7 +33,7 @@ for (const provider of ['claude-code-subscription','codex']) {
     assert.deepEqual(h.workerKeys(),[h.keyOf(a),h.keyOf(b)]);
     h.registry.setEnabled(a.id,false);
     await h.changed();
-    assert.equal(h.holdOf(h.keyOf(a)),'agent_not_chosen');
+    assert.equal(h.holdOf(h.keyOf(a)),'lending_off');
     assert.equal(h.holdOf(h.keyOf(b)),null);
     assert.deepEqual(h.workerKeys(),[h.keyOf(a),h.keyOf(b)],'no worker is replaced or re-keyed');
   });
@@ -45,13 +45,13 @@ for (const provider of ['claude-code-subscription','codex']) {
     await h.start();t.after(()=>h.close());
     h.registry.setEnabled(a.id,false);h.registry.setEnabled(b.id,false);
     await h.changed();
-    assert.equal(h.holdOf(h.keyOf(a)),'agent_not_chosen');
-    assert.equal(h.holdOf(h.keyOf(b)),'agent_not_chosen');
-    assert.equal(h.admits({author:'someone'}),'agent_not_chosen','the public wait names the off accounts');
+    assert.equal(h.holdOf(h.keyOf(a)),'lending_off');
+    assert.equal(h.holdOf(h.keyOf(b)),'lending_off');
+    assert.equal(h.admits({author:'someone'}),'lending_off','the public wait names the off accounts');
     h.registry.setEnabled(b.id,true);
     await h.changed();
     assert.equal(h.holdOf(h.keyOf(b)),null);
-    assert.equal(h.holdOf(h.keyOf(a)),'agent_not_chosen');
+    assert.equal(h.holdOf(h.keyOf(a)),'lending_off');
     assert.equal(h.admits({author:'someone'}),null);
   });
 
@@ -63,11 +63,11 @@ for (const provider of ['claude-code-subscription','codex']) {
     await h.start();t.after(()=>h.close());
     h.registry.markRemoved(a.id);
     await h.changed();
-    assert.equal(h.holdOf(h.keyOf(a)),'agent_not_chosen');
+    assert.equal(h.holdOf(h.keyOf(a)),'lending_off');
     assert.equal(h.holdOf(h.keyOf(b)),null);
     await h.restart();
     assert.ok(h.workerKeys().includes(h.keyOf(a)),'the removed account still has a worker that owns its stored row');
-    assert.equal(h.holdOf(h.keyOf(a)),'agent_not_chosen');
+    assert.equal(h.holdOf(h.keyOf(a)),'lending_off');
     assert.equal(h.holdOf(h.keyOf(b)),null);
   });
 }
@@ -109,9 +109,11 @@ test('Set Agents starts only Codex in an already-running all-off App pool', {tim
   assert.equal(started.circle, circle.id);
   const originalLock = await waitFor(() => lock().length === 1 && lock(), 'the existing pool owns one counter lock', 5000);
   assert.deepEqual(poolStarts, [{circle: circle.id}]);
-  assert.deepEqual((await state()).accountStates, []);
+  const diagnosticIds=['codex:'+codex.id+'#0','claude:'+claude.id+'#0'];
+  assert.deepEqual((await state()).accountStates.map(s=>s.account),diagnosticIds);
+  await waitFor(async()=>(await state()).reason==='no_accounts','empty-account decision');
   const beforeAdmission = app.lendingAdmission();
-  assert.equal(beforeAdmission, 'lender_starting', 'the zero-worker pool loop is live');
+  assert.equal(beforeAdmission,'no_accounts','the account decision names the missing configuration');
 
   const selected = choice(await api(app, '/api/agents/codex', {method: 'POST', body: {useForLending: true}}));
   assert.deepEqual(selected, {codex: true, 'claude-code-subscription': false});
@@ -121,9 +123,9 @@ test('Set Agents starts only Codex in an already-running all-off App pool', {tim
     [{key: 'codex', legacyProvider: 'codex'}], 'the supported first choice creates one eligible default row');
   const woke = await waitFor(async () => {
     const view = await state();
-    return view.accountStates.length && view;
+    return view.accountStates.some(s=>s.account==='codex:0')&&view;
   }, 'Set Agents alone starts a worker in the existing pool', 5000);
-  assert.deepEqual(woke.accountStates.map(row => row.account), ['codex:0']);
+  assert.deepEqual(woke.accountStates.map(row=>row.account),[...diagnosticIds,'codex:0']);
   assert.equal(woke.enabled, true);
   assert.equal(woke.circle, circle.id);
   assert.deepEqual(choice(await api(app, '/api/agents')), selected, 'Codex remains chosen and Claude stays off');

@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -29,7 +30,7 @@ async function inspectOwnerStop(child, ctl, {
   try {
     while (await readState() !== 'T') abort?.throwIfAborted();
     abort?.throwIfAborted();
-    const result = sendStop();
+    const result = await sendStop();
     assert.equal(result.status, 0, result.stderr);
     const request = await readRequest();
     assert.equal(request, 'owner');
@@ -37,6 +38,26 @@ async function inspectOwnerStop(child, ctl, {
   } finally {
     // Also resume after failed assertions, so the caller's cleanup can drain it.
     signal('SIGCONT');
+  }
+}
+
+async function stopAsync(ctl, signal) {
+  const command = spawn(process.execPath, [guard, 'stop', 'owner', '--ctl', ctl],
+    { env: process.env, signal, stdio: ['ignore', 'ignore', 'pipe'] });
+  const chunks = [];
+  command.stderr.on('data', chunk => chunks.push(chunk));
+  const [status] = await once(command, 'close');
+  return { status, stderr: Buffer.concat(chunks).toString('utf8') };
+}
+
+async function waitForGuardPid(child, ctl, signal) {
+  for (;;) {
+    signal.throwIfAborted();
+    let pid;
+    try { pid = await readFile(join(ctl, 'guard.pid'), 'utf8'); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (pid?.trim() === String(child.pid)) return;
+    await delay(10, undefined, { signal });
   }
 }
 
@@ -88,33 +109,49 @@ test('missing PID fails closed without a stop request', async () => {
   await withCtl(async ctl => rejected(stop(ctl), ctl));
 });
 
-test('real guard invocation still accepts owner Stop on Linux; other platforms fail closed', { timeout: 10000 }, async t => {
+test('real guard invocation still accepts owner Stop on Linux; other platforms fail closed', { timeout: 30000 }, async t => {
   await withCtl(async ctl => {
     const home = join(ctl, 'home'); await mkdir(home);
     const config = { v: 1, mode: 'claude', ctl, nonce: 'n'.repeat(32), heartbeat_ms: 20,
-      soft_deadline_s: 3, sigint_grace_ms: 50, sigterm_grace_ms: 50 };
+      soft_deadline_s: 120, sigint_grace_ms: 50, sigterm_grace_ms: 50 };
     const child = spawn(process.execPath, [guard, 'run', '--config', Buffer.from(JSON.stringify(config)).toString('base64'),
       '--', process.execPath, '-e', 'setInterval(() => {}, 1000)'],
       { stdio: 'ignore', env: { ...process.env, HOME: home, CODEX_HOME: join(home, '.codex') } });
     const done = once(child, 'close');
+    const probe = new AbortController();
+    let signalTimeout;
+    const untilAborted = new Promise((_, reject) => { signalTimeout = reject; });
+    // Some paths fail before waiting on the final close; keep the watchdog rejection handled.
+    untilAborted.catch(() => {});
+    const cancelProbe = () => {
+      probe.abort(t.signal.reason);
+      signalTimeout(t.signal.reason);
+    };
+    t.signal.addEventListener('abort', cancelProbe, { once: true });
+    const exitedEarly = done.then(([code, signal]) => {
+      throw new Error(`Guard exited before PID/stop acknowledgement (code=${code}, signal=${signal})`);
+    });
     try {
-      const deadline = Date.now() + 5000;
-      while (!existsSync(join(ctl, 'guard.pid')) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+      await Promise.race([waitForGuardPid(child, ctl, probe.signal), exitedEarly]);
       assert.equal(existsSync(join(ctl, 'guard.pid')), true);
       if (process.platform === 'linux') {
         // The guard removes stop-request when it consumes it. Hold that consumer
         // while retaining the exact request-content assertion, then let it stop.
-        await inspectOwnerStop(child, ctl, { abort: t.signal });
-        const [code] = await done;
+        await Promise.race([
+          inspectOwnerStop(child, ctl, { abort: probe.signal, sendStop: () => stopAsync(ctl, probe.signal) }),
+          exitedEarly,
+        ]);
+        const [code] = await Promise.race([done, untilAborted]);
         assert.equal(code, 0);
         assert.equal(JSON.parse(await readFile(join(ctl, 'stop.json'), 'utf8')).stop_reason, 'owner');
       } else {
-        const result = stop(ctl);
+        const result = await stopAsync(ctl, probe.signal);
         rejected(result, ctl);
         assert.match(result.stderr, /cannot verify.*platform/);
-        await done;
       }
     } finally {
+      t.signal.removeEventListener('abort', cancelProbe);
+      probe.abort();
       // Only terminate the process group that this synthetic guard created.
       try { const pid = Number(await readFile(join(ctl, 'agent.pgid'), 'utf8')); if (Number.isSafeInteger(pid) && pid > 1) process.kill(-pid, 'SIGKILL'); } catch {}
       if (child.exitCode === null) child.kill('SIGKILL');

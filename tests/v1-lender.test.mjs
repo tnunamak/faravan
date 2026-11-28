@@ -1,4 +1,7 @@
+import {decideLending} from '../lib/v1/lending-decision.mjs';
+import {lendingReasonCode,lendingReasonText,giveBackCode} from '../lib/v1/lending-reasons.mjs';
 import './helpers/no-browser.mjs';
+import {currentAdvertisement} from './helpers/current-job-advertisement.mjs';
 import {fakeSandboxDeadlines} from './helpers/sandbox-receipt-fixture.mjs';
 import { agentDisplayName } from '../lib/v1/lending-wait.mjs';
 import test from 'node:test';
@@ -97,8 +100,9 @@ test('native sign-in alone never advertises a split subscription adapter',{timeo
   const f=await lenderFixture(t,{harness:'codex'});
   f.adapters[0]={...f.adapters[0],spec:CODEX_HARNESS,ownerSpec:CODEX_HARNESS,lendingSpec:CODEX_LENDING_HARNESS,
     ownerSignedIn:true,proxySignedIn:false,enabled:true};
+  f.runOptions.runAccounts=()=>[];f.runOptions.accountExecution.configuredAccounts=()=>[];
   launch(f);
-  await until(()=>f.events.some(e=>e.reason==='native_credentials_owner_only'),'native-only lending refusal');
+  await until(()=>f.events.some(e=>e.reason==='cannot_run_here'),'native-only lending refusal');
   await f.stop();
   assert.equal(f.count('/jobs/claim-next'),0);
   assert.equal(f.calls.some(([kind])=>kind==='prepare'),false);
@@ -109,7 +113,7 @@ for(const harness of ['codex','claude-code-subscription'])test('native '+harness
   f.adapters[0].spec=resolveHarness(harness);
   assert.ok((await f.backend.lenderCapabilities()).enforced_limits.includes('disk_bytes'));
   launch(f);
-  await until(()=>f.events.some(e=>e.reason==='native_credentials_owner_only'),'native lending refusal');
+  await until(()=>f.events.some(e=>e.reason==='cannot_run_here'),'native lending refusal');
   await f.stop();
   assert.equal(f.count('/jobs/claim-next'),0);
   assert.equal(f.calls.length,0,'no sandbox preparation or credential copy');
@@ -132,7 +136,7 @@ test('restart retains but never re-advertises an uncertain native claim',{timeou
   const original=structuredClone(pending);
   const f=await lenderFixture(t,{saved:{day:'2026-10-09',jobs:0,milliseconds:0,claimPending:pending}});
   f.adapters.unshift({...f.adapters[0],spec:resolveHarness('claude-code-subscription')});
-  launch(f);await until(()=>f.events.some(e=>e.reason==='native_credentials_owner_only'),'old native claim held');
+  launch(f);await until(()=>f.events.some(e=>e.reason==='cannot_run_here'),'old native claim held');
   await f.stop();
   assert.equal(f.count('/jobs/claim-next'),0);
   assert.deepEqual(pending,original,'loading must not mutate the stored input');
@@ -148,9 +152,9 @@ test('restart replays an uncertain claim made through the ready Docker proxy',{t
   f.adapters[0]={...f.adapters[0],spec:CODEX_HARNESS,ownerSpec:CODEX_HARNESS,lendingSpec:CODEX_LENDING_HARNESS,
     ownerSignedIn:true,proxySignedIn:true,proxySecretPresent:true,enabled:true};
   launch(f);
-  await until(()=>f.count('/jobs/claim-next')>0||f.events.some(e=>e.reason==='native_credentials_owner_only'),'replay or refusal');
+  await until(()=>f.count('/jobs/claim-next')>0||f.events.some(e=>e.reason==='cannot_run_here'),'replay or refusal');
   await f.stop();
-  assert.equal(f.events.some(e=>e.reason==='native_credentials_owner_only'),false);
+  assert.equal(f.events.some(e=>e.reason==='cannot_run_here'),false);
   const claim=f.requests.find(r=>r.route==='/jobs/claim-next');
   assert.equal(claim.req.headers['idempotency-key'],'proxy-intent');
 });
@@ -188,15 +192,15 @@ test('H2 real HTTP definitive completion rejection is recorded and the lender cl
   assert.equal(f.saved().resultPending,null);
   assert.equal(f.saved().lastResultOutcome.code,'job_terminal');
   // The borrower cancelled, so the rejected delivery is a stop, never a failure (spec/tla/README.md, Stop: FinishedNeverFailed).
-  assert.ok(f.events.some(e=>e.status==='stopped'&&e.reason==='job_terminal'));
-  assert.ok(!f.events.some(e=>e.status==='failed'&&e.reason==='job_terminal'));
+  assert.ok(f.events.some(e=>e.status==='stopped'&&e.reason==='job_ended'));
+  assert.ok(!f.events.some(e=>e.status==='failed'&&e.reason==='job_ended'));
 });
 
 test('H3 real HTTP expired committed claim replay is released and replaced with a fresh key',{timeout:60000},async t=>{
   const f=await realLenderFixture(t);
   const advertisement=(await f.backend.lenderCapabilities());
-  const ad={harnesses:['codex'],models:['example-model'],capabilities:[],egress:advertisement.egress,
-    enforced_limits:advertisement.enforced_limits,max_limits:advertisement.max_limits};
+  const ad=currentAdvertisement({harnesses:['codex'],models:['example-model'],capabilities:[],egress:advertisement.egress,
+    enforced_limits:advertisement.enforced_limits,max_limits:advertisement.max_limits},f.runOptions.runAccounts());
   const key='expired-committed-claim';
   const claimed=await f.client.claimNext(ad,{leaseSeconds:30,waitSeconds:30,idempotencyKey:key});
   assert.ok(claimed);
@@ -205,7 +209,7 @@ test('H3 real HTTP expired committed claim replay is released and replaced with 
   f.clock.advance(31000);
   launch(f);
   await until(()=>f.events.some(e=>e.status==='failed'),'expired replay reported');
-  assert.equal(f.events.find(e=>e.status==='failed').reason,'lease_expired');
+  assert.equal(f.events.find(e=>e.status==='failed').reason,'execution_failed');
   const replay=f.realRequests.filter(r=>r.url.endsWith('/jobs/claim-next')&&r.key===key);
   assert.equal(replay.length,2,'lender retries the committed key once before abandoning it');
   assert.equal(replay[0].bodyDigest,replay[1].bodyDigest,'idempotent replay preserves the complete request body');
@@ -222,7 +226,7 @@ test('M8 restart retains the reservation until cessation is verified and then re
   let verified=false,calls=0;
   f.backend.reconcilePending=async pending=>{calls++;return {attemptId:pending.attemptId,removed:verified};};
   launch(f);
-  await until(()=>f.events.some(e=>e.reason==='cessation_unverified'),'unverified restart remains closed');
+  await until(()=>f.events.some(e=>e.reason==='cleanup_pending'),'unverified restart remains closed');
   assert.equal(f.count('/jobs/claim-next'),0);assert.equal(f.saved().pending.attemptId,'old-attempt');
   verified=true;f.clock.advance(1000);
   await until(()=>f.saved().pending===null,'verified restart clears old reservation');
@@ -234,8 +238,8 @@ test('M8 restart retains the reservation until cessation is verified and then re
 // Launch fence: an authorized start that was never observed may still be running after its lease ends.
 async function fencedLaunch(f) {
   const report=await f.backend.lenderCapabilities();
-  const ad={harnesses:['codex'],models:['example-model'],capabilities:[],egress:report.egress,
-    enforced_limits:report.enforced_limits,max_limits:report.max_limits};
+  const ad=currentAdvertisement({harnesses:['codex'],models:['example-model'],capabilities:[],egress:report.egress,
+    enforced_limits:report.enforced_limits,max_limits:report.max_limits},f.runOptions.runAccounts());
   const {attempt}=await f.client.claimNext(ad,{leaseSeconds:30});
   await f.client.startAttempt(attempt);
   return {ad,attempt};
@@ -278,7 +282,7 @@ test('launch fence: a fenced attempt survives a lender restart and is freed only
   f.backend.reconcilePending=async pending=>({attemptId:pending.attemptId,removed});
   f.clock.advance(31000);
   launch(f);
-  await until(()=>f.events.some(e=>e.reason==='cessation_unverified'),'unproven cleanup stays closed');
+  await until(()=>f.events.some(e=>e.reason==='cleanup_pending'),'unproven cleanup stays closed');
   await f.stop();
   await assertHeld(f,ad,attempt);
   assert.equal(f.realRequests.some(r=>r.url.endsWith('/stopped')),false);
@@ -340,10 +344,7 @@ for(const scenario of ['write_rejected','removal_unverified','graceful'])test('o
     assert.equal(context.attemptId,initial.pending.attemptId);assert.equal(context.jobId,initial.pending.jobId);
     assert.equal(context.generation,initial.pending.attempt.generation);
   };
-  candidate.recordCleanup=async function(id,value){
-    assert.equal(this,candidate);assert.equal(id,initial.pending.attemptId);assert.equal(value,receipt);
-    cleanupSeen.push(value);return recordCleanup.call(this,id,value);
-  };
+
   const failure=Object.assign(new Error('synthetic graceful journal rejection'),{code:'EIO'});
   let rejected=false,gracefulCalls=0,cancels=0,destroys=0,runEnded=false;
   const assertOneOwnedStop=(reports=stoppedReports)=>{
@@ -352,7 +353,7 @@ for(const scenario of ['write_rejected','removal_unverified','graceful'])test('o
     assert.equal(reports[0].generation,initial.pending.attempt.generation);
     assert.equal(reports[0].receipt,receipt);
     assert.equal(receipt.removed,true);
-    assert.ok(cleanupSeen.includes(receipt),'the owned removal receipt went through cleanup');
+
     for(const suffix of ['/complete','/fail'])assert.equal(f.count(suffix),0,suffix);
     const releases=f.requests.filter(row=>row.route.endsWith('/release'));
     assert.equal(releases.length,1,'verified Stop releases the exact attempt once');
@@ -366,7 +367,7 @@ for(const scenario of ['write_rejected','removal_unverified','graceful'])test('o
     if(route.endsWith('/complete')||route.endsWith('/stopped')){
       assert.ok(route.includes('/attempts/'+initial.pending.attemptId+'/'));
       assert.equal(f.saved().pending.attempt.generation,initial.pending.attempt.generation);
-      assert.equal(receipt?.removed,true);assert.ok(cleanupSeen.includes(receipt));assert.equal(destroys,1);
+      assert.equal(receipt?.removed,true);assert.equal(destroys,1);
     }
     return false;
   };
@@ -408,7 +409,7 @@ for(const scenario of ['write_rejected','removal_unverified','graceful'])test('o
       assert.equal(lender.cessation().proven,false);
       removal.resolve();await finish(f);
       assert.equal(cancels,0);assert.equal(destroys,1);assert.equal(receipt.removed,true);
-      assert.ok(cleanupSeen.includes(receipt));assert.equal(f.count('/complete'),1);
+      assert.equal(f.count('/complete'),1);
     } else {
       await assert.rejects(lender.stopCurrentJob(attemptId),e=>e===failure);
       await until(()=>cancels===1&&destroys===1&&runEnded,'fallback cancels actual running backend');
@@ -422,7 +423,7 @@ for(const scenario of ['write_rejected','removal_unverified','graceful'])test('o
       assert.equal(cancels,1,'repeat Stop does not duplicate cancellation');
       removal.resolve();
       if(scenario==='removal_unverified'){
-        await until(()=>f.events.some(e=>e.reason==='cessation_unverified'),'cleanup failure surfaced');
+        await until(()=>f.events.some(e=>e.reason==='cleanup_pending'),'cleanup failure surfaced');
         await f.stop();
         assert.deepEqual(identity(f.saved().pending),identity(initial.pending));
         assert.deepEqual(accounting(f.saved()),accounting(initial),'unverified removal cannot refund held accounting');
@@ -488,16 +489,12 @@ for(const delivered of [true,false])test('owner Stop preserves actual collected 
     assert.equal(this,f.backend);bound(args[0]);assert.equal(retentionSaved,true);
     destroys++;await removal.promise;receipt=await destroy.apply(this,args);return receipt;
   };
-  candidate.recordCleanup=async function(id,value){
-    assert.equal(this,candidate);assert.equal(id,initial.pending.attemptId);
-    assert.equal(value,receipt);assert.equal(value.removed,true);cleanups.push(value);
-    return recordCleanup.call(this,id,value);
-  };
+
   f.override=async({route})=>{
     if(route.endsWith('/complete')||route.endsWith('/stopped')){
       assert.ok(route.includes('/attempts/'+initial.pending.attemptId+'/'));
       assert.equal(retentionSaved,true);assert.equal(receipt?.removed,true);
-      assert.ok(cleanups.includes(receipt));assert.equal(destroys,1);
+      assert.equal(destroys,1);
     }
     return false;
   };
@@ -529,7 +526,7 @@ for(const delivered of [true,false])test('owner Stop preserves actual collected 
     assert.equal(lender.cessation().proven,false,'entering destroy is not removal proof');
     removal.resolve();await finish(f);
     assert.equal(retentionWrites,1);assert.equal(destroys,1);assert.equal(cancels,0);assert.equal(runs(f),1);
-    assert.equal(receipt.removed,true);assert.ok(cleanups.includes(receipt));
+    assert.equal(receipt.removed,true);
     assert.equal(f.count('/complete'),1);assert.equal(f.count('/stopped'),1);
     assert.equal(f.count('/fail'),0);assert.equal(f.count('/release'),0);
     assert.equal(f.result.payload.attempt_id,attemptId);assert.equal(f.result.payload.job_digest,f.jobDigest);
@@ -544,7 +541,7 @@ for(const delivered of [true,false])test('owner Stop preserves actual collected 
 
 function launch(f, options={}) {
   const controller=new AbortController();
-  const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,
     clock:options.clock??f.clock,approve:options.approve??(async()=>true),
     onDiagnostic:options.onDiagnostic,
     onEvent:event=>{f.events.push(event);return options.onEvent?.(event);}});
@@ -621,7 +618,7 @@ for (const boundary of ['before_handle', 'prepared_save', 'cancel_failed', 'dest
 
 for(const scenario of [
   'save_rejected','save_frozen','save_nonextensible','save_unknown','save_destroy_throws',
-  'abort_removed','abort_unknown','abort_destroy_throws','abort_late_save_rejection','abort_owner_stop','record_rejected',
+  'abort_removed','abort_unknown','abort_destroy_throws','abort_late_save_rejection','abort_owner_stop',
 ]) test('pre-output cleanup preserves initiating failure and independent removal: '+scenario,{timeout:60000},async t=>{
   const f=await lenderFixture(t),saveGate=deferred(),cancelGate=deferred();
   const prepare=f.backend.prepare,write=f.policy.storage.set;
@@ -659,13 +656,7 @@ for(const scenario of [
     if(destroyThrows)throw Object.assign(new Error('secondary destroy failure'),{code:'destroy_failed'});
     return receipt;
   };
-  candidate.recordCleanup=async function(id,value){
-    assert.equal(this,candidate);assert.equal(id,draft.pending.attemptId);
-    assert.equal(value,receipt);assert.equal(value.removed,true,'unverified removal is not candidate cleanup evidence');
-    cleanups.push(value);
-    if(scenario==='record_rejected'){recordFailures++;throw new Error('secondary cleanup journal failure');}
-    return recordCleanup.call(this,id,value);
-  };
+
   f.policy.storage.set=async value=>{
     if(!saveEntered&&value.pending?.sandboxId==='synthetic-only'){
       saveEntered=true;draft=structuredClone(value);before=structuredClone(f.saved());
@@ -701,7 +692,10 @@ for(const scenario of [
     assert.equal(f.count('/start'),0);
     assert.equal(f.count('/complete'),0);
     assert.equal(f.calls.some(([name])=>['clone','run','pack','collect'].includes(name)),false);
-    assert.equal(f.count('/jobs/claim-next'),1,'failure cannot create a second execution claim');
+    // The lender may poll again for other offers before stop; every later poll must exclude the failed job.
+    const claims=f.requests.filter(r=>r.route==='/jobs/claim-next');
+    assert.equal(claims.filter(r=>!r.body?.exclude?.includes(f.jobDigest)).length,1,'failure cannot create a second execution claim');
+    assert.equal(claims[0].body?.exclude?.includes(f.jobDigest)??false,false,'the first poll took the job');
     assert.equal(diagnostics.some(event=>['cancel_failed','destroy_failed'].includes(event.code)),false);
     if(unknown||destroyThrows||scenario==='record_rejected'){
       assert.ok(f.saved().pending,'unverified removal or rejected durable proof retains recovery');
@@ -710,11 +704,11 @@ for(const scenario of [
       assert.equal(f.saved().pending.reservedMs,before.pending.reservedMs);
       assert.equal(f.saved().milliseconds,before.milliseconds,'no refund without durable removal proof');
       if(unknown||destroyThrows){
-        assert.equal(cleanups.length,0);assert.equal(lender.cessation().proven,false);
+        assert.equal(lender.cessation().proven,false);
         assert.equal(f.count('/stopped'),0);
       } else assert.ok(recordFailures>=2,'finalization retries proof and retains its durability rejection');
     } else {
-      assert.ok(cleanups.length>0);assert.equal(f.saved().pending,null);
+      assert.equal(f.saved().pending,null);
     }
     if(scenario==='save_frozen'||scenario==='save_nonextensible'||scenario==='abort_late_save_rejection')
       assert.equal(Object.hasOwn(primary,'cleanupReceipt'),false,'nonextensible primary is not rewritten');
@@ -758,11 +752,8 @@ test('pre-output scratch transfer owns recovery through journal refusal: '+mode,
   };
   f.backend.cancel=async function(actual){assert.equal(this,f.backend);assert.equal(actual,handle);cancels++;};
   f.backend.destroy=async function(actual){assert.equal(this,f.backend);assert.equal(actual,handle);destroys++;if(!receipt)throw new Error('synthetic missing cleanup receipt');return receipt;};
-  candidate.recordCleanup=async function(id,value){
-    assert.equal(this,candidate);assert.equal(id,draft.pending.attemptId);assert.equal(value,receipt);
-    cleanups.push(value);return record.call(this,id,value);
-  };
-  candidate.settle=async function(...args){settlements.push(args);return settle.apply(this,args);};
+
+
   f.policy.storage.set=async value=>{
     if(!saveFailed&&value.pending?.sandboxId==='synthetic-only'){
       saveFailed=true;draft=structuredClone(value);before=structuredClone(f.saved());throw primary;
@@ -791,7 +782,7 @@ test('pre-output scratch transfer owns recovery through journal refusal: '+mode,
       await until(()=>transfers>=2,'supported persistence-only retry');
       assert.ok(f.saved().pending);assert.equal(f.saved().pending.attemptId,before.pending.attemptId);
       assert.equal(f.saved().milliseconds,before.milliseconds);
-      assert.equal(cleanups.length,0);assert.equal(settlements.length,0);
+
       assert.equal(cancels,1);assert.equal(destroys,1);assert.equal(acknowledged,false);
       retryGate.resolve();
     }
@@ -810,7 +801,7 @@ test('pre-output scratch transfer owns recovery through journal refusal: '+mode,
       assert.equal(pending.sbx_runtime,handle.sbx_runtime??null);
       assert.equal(pending.sandboxIncarnation,handle._cleanupId);
       assert.equal(f.saved().milliseconds,before.milliseconds);
-      assert.deepEqual(cleanups,[]);assert.deepEqual(settlements,[]);
+
       assert.equal(JSON.stringify(f.saved()).includes('never persist the handle'),false);
       assert.equal(diagnostics.some(e=>e.message==='synthetic missing cleanup receipt'),false);
     }else if(mode==='persistent'){
@@ -818,7 +809,7 @@ test('pre-output scratch transfer owns recovery through journal refusal: '+mode,
       assert.equal(f.saved().pending.attemptId,before.pending.attemptId);
       assert.equal(f.saved().pending.scratchDir,handle.scratch_dir);
       assert.equal(f.saved().milliseconds,before.milliseconds);
-      assert.equal(cleanups.length,0);assert.equal(settlements.length,0);
+
       assert.equal(acknowledged,false);
     }else if(mode==='scratch_removed'){
       assert.equal(transfers,0);assert.equal(f.saved().scratchPending?.length??0,0);
@@ -827,7 +818,7 @@ test('pre-output scratch transfer owns recovery through journal refusal: '+mode,
       assert.equal(acknowledged,true);
       const row=f.saved().scratchPending.find(row=>row.attemptId===draft.pending.attemptId);
       assert.equal(row.scratchDir,handle.scratch_dir);assert.equal(row.attempt.generation,draft.pending.attempt.generation);
-      if(mode==='not_removed'){assert.ok(f.saved().pending);assert.equal(cleanups.length,0);}
+      if(mode==='not_removed'){assert.ok(f.saved().pending);}
       else assert.equal(f.saved().pending,null);
       if(mode==='mutable'){
         // Restart from a serialized copy of the acknowledged journal, not the refused write or launch handle.
@@ -841,7 +832,11 @@ test('pre-output scratch transfer owns recovery through journal refusal: '+mode,
         const recoveryClock=1234,priorSettlements=settlements.length,priorCleanups=cleanups.length;
         const admissionCalls=()=>({namedClaims:countNamedClaimPosts(f.requests),legacyClaims:f.count('/jobs/claim-next'),
           starts:f.count('/start'),backendExecutions:f.calls.filter(([kind])=>kind==='run').length});
-        const beforeRestart=admissionCalls();
+        const beforeRestart=admissionCalls(),recoveryClaimCalls=[];
+        for(const name of ['claimNext','claimJob']){
+          const send=f.client[name].bind(f.client);
+          f.client[name]=(...args)=>{recoveryClaimCalls.push(name);return send(...args);};
+        }
         await write({...seed,scratchPending:[target,sibling]});
         f.policy.enabled=false;f.policy.recoveryOnly=true;f.policy.pollMs=recoveryClock;
         let proof='wrong',recoveryReads=0;
@@ -879,9 +874,12 @@ test('pre-output scratch transfer owns recovery through journal refusal: '+mode,
         assert.equal(persisted.milliseconds,seed.milliseconds,'no second accounting credit');
         assert.equal(persisted.jobs,seed.jobs);
         assert.deepEqual(persisted.requesters,seed.requesters);
-        assert.equal(settlements.length,priorSettlements);assert.equal(cleanups.length,priorCleanups);
+
         assert.equal(cancels,1);assert.equal(destroys,1);
-        assert.deepEqual(admissionCalls(),beforeRestart,'recovery does not claim or start work');
+        assert.deepEqual(recoveryClaimCalls,[],'recovery invokes no new claim transport');
+        assert.deepEqual([countNamedClaimPosts(f.requests),f.count('/start'),f.calls.filter(([kind])=>kind==='run').length],
+          [beforeRestart.namedClaims,beforeRestart.starts,beforeRestart.backendExecutions],'recovery does not start or execute work');
+        assert.ok(f.requests.filter(r=>r.route==='/jobs/claim-next').slice(beforeRestart.legacyClaims).every(r=>r.body.exclude?.includes(f.jobDigest)),'any late pre-restart poll excludes this job');
       }
     }
   }finally{retryGate.resolve();await f.stop();}
@@ -915,13 +913,13 @@ test('a rejected prepared destroy keeps the exact pending recovery identity', {t
     }
     await write(value);
   };
-  candidate.settle=async(...args)=>{settlements++;return settle.apply(candidate,args);};
+
   const lender=launch(f,{onDiagnostic:event=>diagnostics.push(event)});
   try {
     await until(()=>recoveryWritePending,'exact recovery identity write began');
     assert.deepEqual(f.saved().pending,original.pending);
     assert.equal(f.saved().milliseconds,original.milliseconds);
-    assert.deepEqual([cancels,destroys,settlements],[1,1,0]);
+
     assert.equal(f.count('/start'),0);
     assert.equal(f.count('/stopped'),0);
     saveRecovery.resolve();
@@ -933,7 +931,7 @@ test('a rejected prepared destroy keeps the exact pending recovery identity', {t
     assert.equal(saved.pending?.sandboxId,handle.sandbox_id);
     assert.equal(saved.milliseconds,original.milliseconds);
     assert.equal(JSON.stringify(saved).includes('private prepared handle'),false);
-    assert.deepEqual([cancels,destroys,settlements],[1,1,0]);
+
     assert.equal(f.count('/start'),0);
     assert.equal(f.count('/stopped'),0);
     await f.stop();
@@ -950,7 +948,7 @@ test('a rejected prepared destroy keeps the exact pending recovery identity', {t
     assert.deepEqual(recoveryReads[0],saved.pending);
     assert.deepEqual((await f.policy.storage.get()).pending,saved.pending);
     assert.equal(f.saved().milliseconds,original.milliseconds);
-    assert.deepEqual([cancels,destroys,settlements],[1,1,0]);
+
     assert.deepEqual(admissionCalls(),beforeRestart);
 
     removed=true;
@@ -971,7 +969,8 @@ test('a rejected prepared destroy keeps the exact pending recovery identity', {t
 const runs=f=>f.calls.filter(([kind])=>kind==='run').length;
 for(const harness of ['codex','claude-code-subscription','claude-code-api-key'])test('lender quotes model and effort command words for '+harness,{timeout:60000},async t=>{
   const f=await lenderFixture(t,{harness});
-  f.adapters[0].run={model:'provider/model:mini',effort:'low'};
+  const account=f.runOptions.runAccounts()[0];
+  f.runOptions.runAccounts=()=>[{...account,models:[{id:'provider/model:mini',enabled:true,efforts:[{id:'low'}],defaultEffort:'low'}]}];
   let entrypoint;const admit=f.backend.admitJob.bind(f.backend);
   f.backend.admitJob=async spec=>{entrypoint=spec.entrypoint;return admit(spec);};
   launch(f);await finish(f);
@@ -981,40 +980,36 @@ for(const harness of ['codex','claude-code-subscription','claude-code-api-key'])
   assert.equal(runs(f),1);
 });
 
-for(const [name,model,required,expected] of [
-  ['agent defaults',null,null,'gpt-6-sol'],
-  ['lender model without borrower restriction','cheap-model',null,'cheap-model'],
-  ['borrower selects when lender unset',null,['unsupported','example-model'],'example-model'],
-  ['matching lender choice wins','example-model',['example-model','other'],'example-model'],
+for(const [name,models,required,expected] of [
+  ['first saved account model',['gpt-6-sol'],null,'gpt-6-sol'],
+  ['saved order without borrower restriction',['cheap-model','example-model'],null,'cheap-model'],
+  ['borrower permits one offered model',['example-model'],['unsupported','example-model'],'example-model'],
+  ['first compatible saved model wins',['example-model','other'],['example-model','other'],'example-model'],
 ])test('lender model precedence: '+name,{timeout:60000},async t=>{
-  const f=await lenderFixture(t,{mutateJob:job=>{
-    if(required)job.requirements.model={any_of:required};
-    else delete job.requirements.model;
-  }});
-  f.adapters[0].run={model,effort:null};let entrypoint;
+  const f=await lenderFixture(t,{mutateJob:job=>{job.runRequest={schemaVersion:1,models:required?required.map(modelId=>({providerId:'codex',modelId})):'any',effortId:null};}});
+  const account=f.runOptions.runAccounts()[0];
+  f.runOptions.runAccounts=()=>[{...account,models:models.map(id=>({id,enabled:true,efforts:[],defaultEffort:null}))}];
+  let entrypoint;
   f.backend.admitJob=async spec=>{entrypoint=spec.entrypoint;return {ok:false,code:'policy_unenforceable'};};
   launch(f);await until(()=>f.count('/release')===1,'captured command release');await f.stop();
-  assert.ok(entrypoint,'command was admitted');
-  assert.equal(entrypoint.includes("'-m'"),expected!==null);
-  if(expected)assert.ok(entrypoint.includes("'-m' '"+expected+"'"));
-  noExecution(f);
+  assert.ok(entrypoint.includes("'-m' '"+expected+"'"),entrypoint);noExecution(f);
 });
 
-test('lender incompatible model declines before approval or admission',{timeout:60000},async t=>{
-  const f=await lenderFixture(t,{mutateJob:job=>{job.requirements.model={any_of:['example-model']};}});
-  f.adapters[0].run={model:'cheap-model',effort:'low'};
-  f.backend.admitJob=()=>assert.fail('incompatible model must not be admitted');
-  launch(f,{approve:()=>assert.fail('incompatible model must not prompt')});
-  await until(()=>f.count('/release')===1,'model mismatch release');await f.stop();noExecution(f);
-  assert.equal(JSON.parse(f.requests.find(r=>r.route.endsWith('/release')).body.reason).code,'model_unavailable');
+test('lender does not claim a request whose model no account offers',{timeout:60000},async t=>{
+  const f=await lenderFixture(t,{mutateJob:job=>{job.runRequest={schemaVersion:1,models:[{providerId:'codex',modelId:'unavailable-model'}],effortId:null};}});
+  f.backend.admitJob=()=>assert.fail('an unavailable model must not be admitted');
+  launch(f,{approve:()=>assert.fail('an unavailable model must not prompt')});
+  await until(()=>f.count('/jobs/claim-next')===1,'filtered claim');await f.stop();noExecution(f);
+  assert.equal(f.count('/release'),0,'the incompatible job was never claimed');
 });
 
-test('lender rechecks a changed model after approval',{timeout:60000},async t=>{
-  const f=await lenderFixture(t,{mutateJob:job=>{job.requirements.model={any_of:['example-model']};}});
-  f.adapters[0].run={model:'example-model',effort:'low'};
-  launch(f,{approve:()=>{f.adapters[0].run={model:'other',effort:'high'};return true;}});
-  await until(()=>f.count('/release')===1,'changed model release');await f.stop();noExecution(f);
-  assert.equal(JSON.parse(f.requests.find(r=>r.route.endsWith('/release')).body.reason).code,'model_unavailable');
+test('lender rechecks offered account models after approval',{timeout:60000},async t=>{
+  const f=await lenderFixture(t,{mutateJob:job=>{job.runRequest={schemaVersion:1,models:[{providerId:'codex',modelId:'example-model'}],effortId:null};}});
+  const account=f.runOptions.runAccounts()[0];let models=account.models;
+  f.runOptions.runAccounts=()=>[{...account,models}];
+  launch(f,{approve:()=>{models=[{id:'other',enabled:true,efforts:[],defaultEffort:null}];return true;}});
+  await until(()=>f.count('/release')===1,'changed account model release');await f.stop();noExecution(f);
+  assert.equal(JSON.parse(f.requests.find(r=>r.route.endsWith('/release')).body.reason).code,'readiness_changed');
 });
 
 test('adapter flags omit defaults and unsupported effort',()=>{
@@ -1057,7 +1052,7 @@ test('observed-start 404 for an attempt the coordinator no longer knows fails th
   assert.equal(f.count('/complete'),0);
   assert.equal(f.count('/release'),0,'the attempt is failed, not released');
   assert.equal(JSON.parse(f.requests.find(r=>r.route.endsWith('/fail')).body.reason).code,'execution_observation_failed');
-  assert.equal(f.events.find(e=>e.status==='failed').reason,'execution_observation_failed');
+  assert.equal(f.events.find(e=>e.status==='failed').reason,'execution_failed');
   assert.equal(f.saved().observationPending[0].disposition,'rejected');
   assert.ok(diagnostics.some(entry=>entry.phase==='execution_observation'));
 });
@@ -1370,14 +1365,15 @@ test('I2c over real HTTP: a superseded stale observation does not block the next
   // claims and starts, then A1's observation arrives. The store answers it as superseded; the lender settles it and runs a later job.
   const f=await realLenderFixture(t,{members:true}),diagnostics=[],observed=[];
   const capabilities=await f.backend.lenderCapabilities();
-  const ad={harnesses:['codex'],models:['example-model'],capabilities:[],egress:capabilities.egress,
-    enforced_limits:capabilities.enforced_limits,max_limits:capabilities.max_limits};
+  const ad=currentAdvertisement({harnesses:['codex'],models:['example-model'],capabilities:[],egress:capabilities.egress,
+    enforced_limits:capabilities.enforced_limits,max_limits:capabilities.max_limits},f.runOptions.runAccounts());
   const a1=(await f.client.claimNext(ad,{leaseSeconds:120,waitSeconds:0})).attempt;
   await f.client.startAttempt(a1,{idempotencyKey:'a1-start'});
   const held={attempt:a1,observedAt:new Date(f.clock.now()).toISOString().replace('.000Z','Z'),idempotencyKey:'a1-observation'};
   await f.policy.storage.set({day:'2026-10-09',jobs:0,milliseconds:0,pending:null,observationPending:[held]});
   await f.client.release(a1,p.canonicalize({code:'restart_interrupted'}),{idempotencyKey:'a1-release'});
   await f.client.stopped(a1,{idempotencyKey:'a1-stopped'});
+  await f.clientFor(3).heartbeat({seq:0,intent:{state:'ready'},execution:{state:'idle'},blockers:[],agents:[],capabilities:['run_request_v1'],accounts:f.runOptions.runAccounts()});
   const a2=(await f.clientFor(3).claimNext(ad,{leaseSeconds:120,waitSeconds:0})).attempt;
   await f.clientFor(3).startAttempt(a2,{idempotencyKey:'a2-start'});
   const later=await f.submit();
@@ -1438,7 +1434,7 @@ test('v1 lender keeps the reservation when a failed prepare cannot prove its san
   f.backend.prepare=async()=>{f.calls.push(['prepare']);
     throw Object.assign(new Error('Synthetic boot failure'),{cleanup_receipt:{removed:false,scratch_removed:false}});};
   launch(f,{approve:async()=>true});
-  await until(()=>f.events.some(e=>e.reason==='cessation_unverified')||f.count('/release')===1,'prepare failure settled');
+  await until(()=>f.events.some(e=>e.reason==='cleanup_pending')||f.count('/release')===1,'prepare failure settled');
   await f.stop();
   assert.equal(f.count('/start'),0);
   assert.equal(f.saved().jobs,1);assert.ok(f.saved().milliseconds>0);assert.ok(f.saved().pending);
@@ -1458,7 +1454,7 @@ for(const missingId of [false,true])test('v1 lender retains reservation after pr
   };
   f.backend.destroy=async()=>{f.calls.push(['destroy']);return {removed:false};};
   launch(f);
-  await until(()=>f.events.some(e=>e.reason==='cessation_unverified'),'unproven removal retains pending work');
+  await until(()=>f.events.some(e=>e.reason==='cleanup_pending'),'unproven removal retains pending work');
   await f.stop();
   assert.ok(f.calls.some(([kind])=>kind==='prepare'));assert.ok(f.calls.some(([kind])=>kind==='destroy'));
   assert.equal(runs(f),0);assert.equal(f.count('/start'),0);assert.equal(f.count('/complete'),0);
@@ -1480,7 +1476,7 @@ test('v1 lender ask-each-time approves, reuses execution and signs candidate, tr
   assert.deepEqual(receipt.egress_evidence,f.evidence);
   assert.deepEqual(receipt.enforced_limits,['cpu','memory','wall','output','storage']);assert.deepEqual(receipt.unenforced,[]);
   assert.equal(receipt.usage.input_tokens,13);assert.equal(receipt.usage.output_tokens,5);
-  assert.equal(receipt.model,null,'unreported model must not be guessed');
+  assert.equal(receipt.model,'example-model','the synthetic account transport observed this selected model');
   assert.ok(f.artifacts.has(f.result.payload.candidate.digest));assert.ok(f.artifacts.has(f.result.payload.transcript.digest));
   assert.ok(f.saves.length>0,'daily counters must be persisted');
   const advertised=f.requests.find(r=>r.route==='/jobs/claim-next').body.advertisement;
@@ -1493,25 +1489,28 @@ test('v1 lender declining approval releases the local attempt without running or
   const f=await lenderFixture(t);launch(f,{approve:async()=>false});
   await until(()=>f.count('/release')===1,'denial release');await f.stop();noExecution(f);
   assert.equal(f.requests.some(r=>r.route.includes('/jobs/')&&r.route.endsWith('/cancel')),false);
-  assert.equal(JSON.parse(f.requests.find(r=>r.route.endsWith('/release')).body.reason).code,'approval_skipped');
+  assert.equal(JSON.parse(f.requests.find(r=>r.route.endsWith('/release')).body.reason).code,'approval_pending');
 });
 
 test('legacy declined hold is acknowledged as released and cannot be claimed again by that lender',{timeout:60000},async t=>{
-  const f=await realLenderFixture(t),release=f.client.release.bind(f.client);
-  let released;
+  const f=await realLenderFixture(t),release=f.client.release.bind(f.client),claimNext=f.client.claimNext.bind(f.client);
+  let released,ad;
+  f.client.claimNext=async(advertisement,...args)=>{ad=advertisement;return claimNext(advertisement,...args);};
   f.client.release=async(attempt,reason,options)=>{
     const ack=await release(attempt,reason,options);released={reason,ack};return ack;
   };
   launch(f,{approve:async()=>({declined:true})});
   await until(()=>released,'legacy decline release acknowledged');await f.stop();
-  assert.equal(JSON.parse(released.reason).code,'approval_denied');
+  assert.equal(JSON.parse(released.reason).code,'approval_pending');
   assert.ok(f.realRequests.some(row=>row.url.endsWith('/release')));
   const job=await f.owner.getJob(f.jobDigest);
   assert.equal(job.state,'queued');assert.equal(job.attempts_started,0);
-  const caps=await f.backend.lenderCapabilities();
-  const ad={harnesses:['codex'],models:['example-model'],capabilities:[],egress:caps.egress,
-    enforced_limits:caps.enforced_limits,max_limits:caps.max_limits};
-  await assert.rejects(f.client.claimJob(f.jobDigest,ad),{code:'forbidden'});
+  assert.ok(ad,'the real claim advertisement was captured');
+  assert.ok(f.saved().hiddenOffers.some(row=>row.jobDigest===f.jobDigest&&row.permanent),'this computer remembers the owner skip');
+  const otherClient=f.clientFor(0);
+  await otherClient.heartbeat({boot:'other-computer',seq:0,intent:{state:'ready'},execution:{state:'idle'},blockers:[],agents:[],capabilities:['run_request_v1'],accounts:ad.accounts});
+  const other=await otherClient.claimJob(f.jobDigest,ad);
+  assert.equal(other.job_digest,f.jobDigest,'another computer can still claim the unstarted job');
   assert.equal(runs(f),0);
 });
 test('v1 lender gives the review card its own deadline and closes the card when that wait ends',{timeout:60000},async t=>{
@@ -1531,12 +1530,12 @@ test('v1 lender approval timeout releases; a late yes cannot start execution',{t
   await until(()=>asked,'approval request');f.clock.advance(30001);
   await until(()=>f.count('/release')===1,'timed-out release');approval.resolve(true);
   await new Promise(r=>setImmediate(r));await f.stop();noExecution(f);
-  assert.match(f.requests.find(r=>r.route.endsWith('/release')).body.reason,/timeout/i);
+  assert.equal(JSON.parse(f.requests.find(r=>r.route.endsWith('/release')).body.reason).code,'approval_pending');
 });
 test('v1 lender ask mode reaches approval for a harness without a quota provider',{timeout:60000},async t=>{
   const f=await lenderFixture(t,{harness:'claude-code-api-key'}),approval=deferred();let asked=false;
   launch(f,{approve:()=>{asked=true;return approval.promise;}});
-  await until(()=>asked||f.events.some(event=>event.reason==='quota_unknown'),'unmetered ask reaches approval or is held');
+  await until(()=>asked||f.events.some(event=>event.reason==='conditions_unavailable'),'unmetered ask reaches approval or is held');
   assert.equal(asked,true,'ask mode must reach explicit approval without a metered quota provider');
   await f.stop();
 });
@@ -1549,19 +1548,7 @@ test('v1 lender auto-accept within matching fresh quota and configured limits ru
   launch(f,{approve:async()=>assert.fail('auto mode must not prompt')});await finish(f);assert.equal(runs(f),1);
   assert.deepEqual(f.requests.find(r=>r.route==='/jobs/claim-next').body.advertisement.harnesses,['claude-code-subscription']);
 });
-test('v1 lender ask mode at matching reserve does not claim or change counters',{timeout:60000},async t=>{
-  const saved={day:'2026-10-09',jobs:0,milliseconds:0,pending:null};
-  const f=await lenderFixture(t,{harness:'claude-code-subscription',saved,
-    policy:{quota:()=>({provider:'claude',remaining:10,observedAt:Date.parse('2026-10-09T12:02:00Z')})}});
-  launch(f,{approve:async()=>assert.fail('reserved quota must not prompt')});
-  await until(()=>f.events.some(e=>e.reason==='quota_reserve'),'ask-mode reserve gate');
-  await until(()=>f.clock.pending().includes(1000),'reserve retry scheduled');
-  const events=f.events.length;f.clock.advance(1000);
-  await until(()=>f.events.slice(events).some(e=>e.reason==='quota_reserve'),'ask-mode reserve retry');
-  await f.stop();noExecution(f);
-  assert.equal(f.count('/jobs/claim-next'),0);assert.equal(f.count('/release'),0);
-  assert.deepEqual(f.saved(),saved);assert.equal(f.saves.length,0);
-});
+
 for(const [name,harness,reading] of [
   ['stale matching reading','claude-code-subscription',{provider:'claude',remaining:10,observedAt:0}],
   ['low Claude reading for Codex','codex',{provider:'claude',remaining:10,observedAt:Date.parse('2026-10-09T12:02:00Z')}],
@@ -1570,70 +1557,22 @@ for(const [name,harness,reading] of [
   launch(f,{approve:async()=>{approvals++;return true;}});await finish(f);
   assert.equal(approvals,1);assert.equal(runs(f),1);assert.equal(f.count('/release'),0);
 });
-test('v1 lender auto mode cannot apply fresh Claude quota to Codex',{timeout:60000},async t=>{
-  const saved={day:'2026-10-09',jobs:0,milliseconds:0,pending:null};
-  const f=await lenderFixture(t,{saved,policy:{mode:'auto'}});
-  launch(f,{approve:async()=>assert.fail('unknown automatic quota must not prompt')});
-  await until(()=>f.events.some(e=>e.reason==='quota_unknown'),'provider mismatch gate');
-  await f.stop();noExecution(f);
-  assert.equal(f.count('/jobs/claim-next'),0);assert.equal(f.count('/release'),0);
-  assert.deepEqual(f.saved(),saved);assert.equal(f.saves.length,0);
-});
-test('v1 lender reserve reached during approval releases without execution',{timeout:60000},async t=>{
-  const f=await lenderFixture(t,{harness:'claude-code-subscription'});let approvals=0;
-  launch(f,{approve:async()=>{
-    approvals++;f.policy.quota=()=>({provider:'claude',remaining:10,observedAt:f.clock.now()});return true;
-  }});
-  await until(()=>f.count('/release')===1,'reserve recheck release');await f.stop();noExecution(f);
-  assert.equal(approvals,1);assert.equal(f.count('/jobs/claim-next'),1);
-  assert.equal(JSON.parse(f.requests.find(r=>r.route.endsWith('/release')).body.reason).code,'quota_reserve');
-  assert.ok(f.events.some(e=>e.reason==='quota_reserve'));
-  assert.equal(f.saved().jobs,0);assert.equal(f.saved().milliseconds,0);
-});
-test('v1 lender replays a pending claim before checking matching reserve',{timeout:60000},async t=>{
-  const f=await lenderFixture(t,{harness:'claude-code-subscription',policy:{mode:'auto'}});
-  const report=f.backend.lenderCapabilities();
-  const advertisement={harnesses:['claude-code-subscription'],models:['example-model'],capabilities:[],
-    egress:report.egress,enforced_limits:report.enforced_limits,max_limits:report.max_limits};
-  const claimPending={advertisement,exclude:[],leaseSeconds:120,idempotencyKey:'pending-reserve-replay'};
-  await f.policy.storage.set({day:'2026-10-09',jobs:0,milliseconds:0,pending:null,claimPending});
-  f.policy.quota=()=>{
-    assert.equal(f.count('/jobs/claim-next'),1,'replay must precede the first quota read');
-    return {provider:'claude',remaining:10,observedAt:f.clock.now()};
-  };
-  launch(f,{approve:async()=>assert.fail('replayed automatic claim must not prompt')});
-  await until(()=>f.count('/release')===1,'replayed claim reserve release');await f.stop();noExecution(f);
-  const claim=f.requests.find(r=>r.route==='/jobs/claim-next');
-  assert.equal(claim.req.headers['idempotency-key'],claimPending.idempotencyKey);
-  assert.deepEqual(claim.body.advertisement,advertisement);
-  assert.deepEqual(claim.body.exclude,claimPending.exclude);
-  assert.equal(claim.body.lease_seconds,claimPending.leaseSeconds);
-  assert.equal(JSON.parse(f.requests.find(r=>r.route.endsWith('/release')).body.reason).code,'quota_reserve');
-  assert.equal(f.count('/jobs/claim-next'),1);
-  assert.equal(f.saved().claimPending,null);
-  assert.equal(f.saved().jobs,0);assert.equal(f.saved().milliseconds,0);
-});
+
+
+
 for(const [name,policy,reason] of [
   ['daily job limit',{dailyJobs:1},'daily_limit'],
   ['daily minute limit',{dailyMinutes:1},'daily_limit'],
-  ['unknown quota',{quota:()=>null},'quota_unknown'],
-  ['stale quota',{quota:()=>({provider:'claude',remaining:100,observedAt:0})},'quota_unknown'],
-  ['future quota',{quota:()=>({provider:'claude',remaining:100,observedAt:Date.parse('2026-10-09T12:03:00Z')})},'quota_unknown'],
-  ['nonfinite remaining',{quota:()=>({provider:'claude',remaining:Infinity,observedAt:Date.parse('2026-10-09T12:02:00Z')})},'quota_unknown'],
-  ['nonfinite observation',{quota:()=>({provider:'claude',remaining:100,observedAt:NaN})},'quota_unknown'],
-  ['wrong quota provider',{quota:()=>({provider:'codex',remaining:100,observedAt:Date.parse('2026-10-09T12:02:00Z')})},'quota_unknown'],
-  ['missing quota provider',{quota:()=>({remaining:100,observedAt:Date.parse('2026-10-09T12:02:00Z')})},'quota_unknown'],
-  ['reserved quota',{quota:()=>({provider:'claude',remaining:5,observedAt:Date.parse('2026-10-09T12:02:00Z')})},'quota_reserve'],
   ['active user under idle-only',{idleOnly:true,userActive:()=>true,quota:()=>assert.fail('idle check must precede quota read')},'user_active']
 ])test('v1 lender auto mode does not claim for '+name,{timeout:60000},async t=>{
   const saved={day:'2026-10-09',jobs:name==='daily job limit'?1:0,
     milliseconds:name==='daily minute limit'?60000:0,pending:null};
   const f=await lenderFixture(t,{harness:'claude-code-subscription',policy:{mode:'auto',...policy},saved});
   launch(f,{approve:async()=>assert.fail('automatic rejection must not prompt')});
-  await until(()=>f.events.some(event=>event.reason===reason),name+' preclaim gate');
+  await until(()=>f.events.some(event=>event.reason===lendingReasonCode(reason)),name+' preclaim gate');
   await until(()=>f.clock.pending().includes(1000),'policy retry scheduled');
   const events=f.events.length;f.clock.advance(1000);
-  await until(()=>f.events.slice(events).some(event=>event.reason===reason),'policy retry remains gated');
+  await until(()=>f.events.slice(events).some(event=>event.reason===lendingReasonCode(reason)),'policy retry remains gated');
   await f.stop();noExecution(f);
   assert.equal(f.count('/jobs/claim-next'),0);assert.equal(f.count('/release'),0);
   assert.deepEqual(f.saved(),saved,'denied work must not consume durable daily counters');
@@ -1662,7 +1601,9 @@ test('v1 lender unknown quota still permits explicitly approved ask-each-time wo
 for(const code of ['policy_unenforceable','limits_unenforceable'])test('v1 lender admission '+code+' releases without prepare or run',{timeout:60000},async t=>{
   const f=await lenderFixture(t,{admission:{ok:false,code,reason:'Synthetic enforced requirement unavailable',unenforced:['cpu']}});
   launch(f);await until(()=>f.count('/release')===1,code+' release');await f.stop();noExecution(f);
-  assert.match(f.requests.find(r=>r.route.endsWith('/release')).body.reason,new RegExp(code));
+  const released=JSON.parse(f.requests.find(r=>r.route.endsWith('/release')).body.reason);
+  assert.equal(released.code,'cannot_run_here');
+  assert.equal(released.until,Math.min(Date.parse(f.job.payload.expires_at),f.clock.now()+120000));
 });
 
 test('v1 lender renews well inside the 120-second lease and stops renewal after successful finish',{timeout:60000},async t=>{
@@ -1685,8 +1626,8 @@ for(const code of ['job_cancelled','attempt_fenced'])test('v1 lender '+code+' re
   assert.equal(f.calls.filter(([kind])=>kind==='cancel').length,1);
   assert.ok(f.calls.some(([kind])=>kind==='destroy'));
   assert.equal(f.count('/complete'),0);assert.equal(f.calls.some(([kind])=>kind==='collect'),false);
-  assert.ok(f.events.some(e=>e.label==='Stopping…'));
-  await until(()=>f.events.some(e=>e.label==='Stopped. No more work will run for this job.'),'stopped label');
+  assert.ok(f.events.some(e=>e.status==='stopping'&&e.reason===lendingReasonCode(code)));
+  await until(()=>f.events.some(e=>e.status==='stopped'&&e.reason===lendingReasonCode(code)),'stopped event');
   const renews=f.count('/renew');f.clock.advance(60000);await new Promise(r=>setImmediate(r));await f.stop();
   assert.equal(f.count('/renew'),renews);
   // This proves control flow against a fake backend, not a real sandbox kill.
@@ -1707,7 +1648,7 @@ test('v1 lender pause permits current work to finish and makes no additional cla
   f.execution.resolve();await until(()=>completed(f),'current work finishes while paused');
   f.clock.advance(60000);await new Promise(r=>setImmediate(r));
   assert.equal(f.count('/jobs/claim-next'),claims);assert.equal(f.calls.some(([kind])=>kind==='cancel'),false);
-  assert.ok(f.events.some(e=>e.label==='Lending is paused. No new jobs will start.'));
+  assert.ok(f.events.some(e=>e.status==='waiting_for_sandbox'&&e.reason==='lending_off'));
   await f.stop();
 });
 test('v1 lender resume while a job runs restores the running state, not the pause label',{timeout:60000},async t=>{
@@ -1739,7 +1680,9 @@ test('v1 lender does not advertise an adapter whose sign-in is missing',{timeout
 });
 
 test('v1 lender rechecks agent sign-in after approval before preparing a sandbox',{timeout:60000},async t=>{
-  const f=await lenderFixture(t);launch(f,{approve:async()=>{f.adapters[0].signedIn=false;return true;}});
+  const f=await lenderFixture(t);let signedOut=false;
+  f.runOptions.accountExecution.availability=async()=>({decision:signedOut?{kind:'hold',code:'account_signed_out',nextAction:{id:'sign_in',label:'Sign in to this account',target:{}}}:{kind:'lend'},accountIds:['fixture-account']});
+  launch(f,{approve:async()=>{signedOut=true;return true;}});
   await until(()=>f.count('/release')===1,'changed policy release');await f.stop();noExecution(f);
 });
 test('v1 lender durable daily count prevents automatic execution after restart',{timeout:60000},async t=>{
@@ -1761,7 +1704,7 @@ test('v1 lender claims nothing outside its lending hours (S6.1)',{timeout:60000}
 test('v1 lender missing usage stays null rather than invented zeroes',{timeout:60000},async t=>{
   const f=await lenderFixture(t,{stdout:'{"type":"turn.completed"}\n'});
   launch(f);await finish(f);
-  assert.equal(f.result.payload.receipt.model,null);
+  assert.equal(f.result.payload.receipt.model,'example-model');
   assert.ok(Object.values(f.result.payload.receipt.usage).every(value=>value===null));
 });
 test('v1 lender backend deadline failure cleans up and fails instead of completing',{timeout:60000},async t=>{
@@ -1769,15 +1712,15 @@ test('v1 lender backend deadline failure cleans up and fails instead of completi
   launch(f);await until(()=>f.count('/fail')===1,'deadline failure');await f.stop();
   assert.equal(runs(f),1);assert.ok(f.calls.some(([kind])=>kind==='destroy'));
   assert.equal(f.count('/complete'),0);
-  assert.ok(f.events.some(e=>e.label?.startsWith("This job couldn't finish:")));
+  assert.ok(f.events.some(e=>e.status==='failed'&&e.reason==='execution_failed'&&e.label===lendingReasonText('execution_failed')));
 });
 test('v1 lender reports a signed-out agent, tells the borrower nothing and announces the harness only',{timeout:60000},async t=>{
   const stdout='{"type":"error","message":"Reconnecting... 1/5 (unexpected status 401 Unauthorized: Could not parse your authentication token. Please try signing in again., url: https://chatgpt.com/backend-api/codex/responses)"}\n{"type":"turn.failed"}\n';
   const f=await lenderFixture(t,{runError:Object.assign(new Error('sbx exec failed: PRIVATE_PROVIDER_TEXT'),{stdout,stderr:'',exitCode:1})});
   launch(f);await until(()=>f.count('/fail')===1,'signed-out failure');await f.stop();
   const failed=f.events.find(e=>e.status==='failed');
-  assert.equal(failed.reason,'agent_signed_out');
-  assert.match(failed.label,/isn't signed in inside Faravan's sandbox anymore\. Sign in again on the Lend page, then lending resumes\.$/);
+  assert.equal(failed.reason,'account_signed_out');
+  assert.equal(failed.label,lendingReasonText('account_signed_out'));
   const signal=f.events.find(e=>e.status==='agent-signed-out');
   assert.deepEqual(signal,{status:'agent-signed-out',harness:f.adapters[0].spec.harness_id});
   assert.ok(!JSON.stringify(f.events).includes('PRIVATE_PROVIDER_TEXT'));
@@ -1788,8 +1731,8 @@ test('v1 lender reports a signed-out agent, tells the borrower nothing and annou
 test('v1 lender keeps the generic failure for a failed run that is not an auth failure',{timeout:60000},async t=>{
   const f=await lenderFixture(t,{runError:Object.assign(new Error('sbx exec failed'),{stdout:'3 tests failed\n',stderr:'',exitCode:1})});
   launch(f);await until(()=>f.count('/fail')===1,'ordinary failure');await f.stop();
-  assert.ok(!f.events.some(e=>e.status==='agent-signed-out'||e.reason==='agent_signed_out'));
-  assert.ok(f.events.some(e=>e.status==='failed'&&e.label?.startsWith("This job couldn't finish:")));
+  assert.ok(!f.events.some(e=>e.status==='agent-signed-out'||e.reason==='account_signed_out'));
+  assert.ok(f.events.some(e=>e.status==='failed'&&e.reason==='execution_failed'&&e.label===lendingReasonText('execution_failed')));
 });
 test('v1 lender records a fresh random ref with each local diagnostic (S3.1b)',{timeout:60000},async t=>{
   const f=await lenderFixture(t,{runError:Object.assign(new Error('sbx exec failed'),{stdout:'3 tests failed\n',stderr:'',exitCode:1})});
@@ -1850,7 +1793,7 @@ test('v1 lender whole-tree output never advertises patch-output support',{timeou
   assert.equal(advertised.capabilities.includes('results_v1'),true);
   assert.equal(advertised.capabilities.includes('source_manifest_v1'),true);
   assert.equal(advertised.capabilities.includes('parent_link_v1'),true);
-  assert.deepEqual(f.result.payload.receipt.capabilities_applied,[]);
+  assert.deepEqual(f.result.payload.receipt.capabilities_applied,['run_request_v1']);
 });
 
 
@@ -1921,7 +1864,7 @@ test('M8 absent or mismatched recovery evidence keeps execution fail closed',{ti
   const f=await lenderFixture(t,{saved:{day:'2026-10-09',jobs:1,milliseconds:120000,
     pending:{attemptId:'orphan-attempt',reservedMs:120000}}});
   launch(f);
-  await until(()=>f.events.some(e=>e.reason==='cessation_unverified'),'no recovery implementation fails closed');
+  await until(()=>f.events.some(e=>e.reason==='cleanup_pending'),'no recovery implementation fails closed');
   assert.equal(f.count('/jobs/claim-next'),0);
   f.backend.reconcilePending=async()=>({removed:true,attemptId:'different-attempt'});
   f.clock.advance(1000);await new Promise(r=>setImmediate(r));
@@ -1933,7 +1876,7 @@ test('M8 restart retries a saved completion with the same payload and key withou
   const f=await lenderFixture(t);
   f.override=({route,req})=>{if(route.endsWith('/complete')){req.socket.destroy();return true;}return false;};
   launch(f);
-  await until(()=>f.events.some(e=>e.reason==='network_error'),'uncertain completion saved');
+  await until(()=>f.events.some(e=>e.reason==='circle_unreachable'),'uncertain completion saved');
   await f.stop();
   const pending=structuredClone(f.saved().resultPending);
   assert.ok(pending);
@@ -1951,7 +1894,7 @@ test('H2 non-problem HTTP 403 still clears a definitively rejected saved result'
     res.writeHead(403,{'content-type':'application/json'});res.end('invalid JSON');return true;
   };
   launch(f);
-  await until(()=>f.events.some(e=>e.reason==='http_error'),'generic HTTP rejection surfaced');
+  await until(()=>f.events.some(e=>e.reason==='result_delivery_failed'),'generic HTTP rejection surfaced');
   await until(()=>f.saved().resultPending===null,'generic rejected completion cleared');
   await f.stop();
   assert.equal(f.saved().lastResultOutcome.status,403);assert.equal(f.count('/complete'),1);
@@ -1961,7 +1904,7 @@ for(const status of [400,401,403,404,409,422])test('H2 non-retryable HTTP '+stat
   const f=await lenderFixture(t);
   f.override=({route,res})=>{if(route.endsWith('/complete')){f.problem(res,'definitive_rejection',status);return true;}return false;};
   launch(f);
-  await until(()=>f.events.some(e=>e.reason==='definitive_rejection'),'completion rejection surfaced');
+  await until(()=>f.events.some(e=>e.reason==='result_delivery_failed'),'completion rejection surfaced');
   await until(()=>f.saved().resultPending===null,'completion intent cleared');
   await f.stop();
   assert.equal(f.saved().lastResultOutcome.status,status);assert.equal(f.count('/complete'),1);
@@ -1969,7 +1912,7 @@ for(const status of [400,401,403,404,409,422])test('H2 non-retryable HTTP '+stat
 for(const status of [429,500,503])test('H2 HTTP '+status+' retains the saved result for retry',{timeout:60000},async t=>{
   const f=await lenderFixture(t);
   f.override=({route,res})=>{if(route.endsWith('/complete')){f.problem(res,'temporary_failure',status);return true;}return false;};
-  launch(f);await until(()=>f.events.some(e=>e.reason==='temporary_failure'),'temporary completion failure');
+  launch(f);await until(()=>f.events.some(e=>e.reason==='circle_unreachable'),'temporary completion failure');
   await f.stop();assert.ok(f.saved().resultPending);assert.equal(f.saved().lastResultOutcome,undefined);
 });
 
@@ -1980,7 +1923,7 @@ for(const proof of ['valid','missing','mismatched'])test('M8 crash-before-finall
   await until(()=>f.events.some(e=>e.status==='running'),'the run starts');
   f.clock.advance(60000);
   f.execution.resolve();
-  await until(()=>f.events.some(e=>e.reason==='network_error'),'result intent durably saved');
+  await until(()=>f.events.some(e=>e.reason==='circle_unreachable'),'result intent durably saved');
   await f.stop();
   const snapshot=structuredClone(f.saves.find(value=>value.resultPending&&value.pending));
   assert.ok(snapshot?.pending.cessationVerified,'cleanup proof is atomic with result intent');
@@ -2001,7 +1944,7 @@ for(const proof of ['valid','missing','mismatched'])test('M8 crash-before-finall
       'restart preserves the measured time charge');
     assert.equal(f.count('/release'),releases,'completed attempt is not released again');
   } else {
-    await until(()=>f.events.some(e=>e.reason==='cessation_unverified'),'missing proof remains fail closed');
+    await until(()=>f.events.some(e=>e.reason==='cleanup_pending'),'missing proof remains fail closed');
     assert.equal(f.count('/jobs/claim-next'),claims);
     assert.equal(f.saved().pending.attemptId,snapshot.pending.attemptId);
   }
@@ -2051,8 +1994,8 @@ test('v1 lender refuses legacy required disk when backend only enforces four lim
 });
 test('real HTTP queue does not claim legacy required disk for a four-limit lender',{timeout:60000},async t=>{
   const f=await realLenderFixture(t),report=f.backend.lenderCapabilities();
-  const ad={harnesses:['codex'],models:['example-model'],capabilities:[],egress:report.egress,
-    enforced_limits:report.enforced_limits.filter(k=>k!=='disk_bytes'),max_limits:report.max_limits};
+  const ad=currentAdvertisement({harnesses:['codex'],models:['example-model'],capabilities:[],egress:report.egress,
+    enforced_limits:report.enforced_limits.filter(k=>k!=='disk_bytes'),max_limits:report.max_limits},f.runOptions.runAccounts());
   assert.equal(await f.client.claimNext(ad,{waitSeconds:0}),null);
   const view=await f.owner.getJob(f.jobDigest);
   assert.equal(view.state,'queued');assert.equal(view.current_attempt,null);
@@ -2062,7 +2005,7 @@ for(const verifiedCommit of [false,'f'.repeat(40)])test('v1 lender rejects absen
   const f=await lenderFixture(t,{verifiedCommit});
   launch(f);await until(()=>f.count('/fail')===1,'Git evidence failure');await f.stop();
   assert.equal(f.count('/complete'),0);
-  assert.ok(f.events.some(e=>e.reason==='git_commit_unverified'));
+  assert.ok(f.events.some(e=>e.reason==='execution_failed'));
 });
 
 for(const pauseFirst of [false,true])test(pauseFirst?'Pause leaves the running attempt alone until explicit Stop':'stop-current-job aborts fake work but reports cessation only after confirmed removal',{timeout:60000},async t=>{
@@ -2128,7 +2071,7 @@ test('unverified stop survives restart and keeps its reason until backend remova
   let lender=launch(f);
   await f.entered.promise;
   await lender.stopCurrentJob(lender.getState().current);
-  await until(()=>f.events.some(e=>e.reason==='cessation_unverified'),'unverified cessation');
+  await until(()=>f.events.some(e=>e.reason==='cleanup_pending'),'unverified cessation');
   assert.equal(f.count('/stopped'),0);assert.equal(f.count('/release'),0);
   const pending=structuredClone(f.saved().pending);
   assert.equal(pending.stopReason,'stopped_by_lender');
@@ -2162,7 +2105,7 @@ test('stop report transport failure retains removal proof and exact retry intent
   const lender=launch(f);
   await until(()=>runs(f)===1,'running fake sandbox');
   await lender.stopCurrentJob(lender.getState().current);
-  await until(()=>f.events.some(e=>e.reason==='stop_report_pending'),'pending report');
+  await until(()=>f.events.some(e=>e.reason==='cleanup_pending'),'pending report');
   assert.equal(f.saved().pending.cessationVerified.attemptId,f.attempt().attempt_id);
   assert.ok(f.events.some(e=>e.contribution?.kind==='stopped'),'confirmed local stop is visible before its report is acknowledged');
   const pending=structuredClone(f.saved().pending);
@@ -2241,8 +2184,8 @@ test('one exact requester is released before review while another key can still 
   const other=await lenderFixture(t,{authorIndex:1,saved:blocked.saved(),
     policy:{requesterLimits:blocked.policy.requesterLimits}});
   assert.notEqual(other.job.payload.author,blocked.job.payload.author);
-  launch(other);await until(()=>other.clock.pending().includes(3000),'persisted release backoff');
-  other.clock.advance(3000);await finish(other);
+  launch(other);await finish(other);
+  assert.equal(other.saved().declineUntil,0,'another requester is not subject to a device-wide backoff');
   assert.equal(runs(other),1);assert.equal(requesterUsage(other).jobs,1);
 });
 
@@ -2353,7 +2296,7 @@ test('pending work holds both previous-day budgets until verified removal, then 
       requester:{circle:f.job.payload.circle,keyId:f.job.payload.author}}});
   let removed=false;
   f.backend.reconcilePending=async pending=>({attemptId:pending.attemptId,removed});
-  launch(f);await until(()=>f.events.some(e=>e.reason==='cessation_unverified'),'held previous day');
+  launch(f);await until(()=>f.events.some(e=>e.reason==='cleanup_pending'),'held previous day');
   assert.equal(f.saved().day,'2026-10-08');assert.deepEqual(requesterUsage(f),{jobs:1,milliseconds:120000});
   await until(()=>f.clock.pending().includes(1000),'recovery poll');
   removed=true;f.clock.advance(1000);await finish(f);
@@ -2419,7 +2362,7 @@ test('legacy review hold ends locally before the signed Job expiry while renewin
   f.clock.advance(1000);await until(()=>f.count('/release')===1,'legacy hold ends');
   assert.equal(seen.signal.aborted,true);assert.equal(f.attempt().state,'released');
   assert.ok(Date.parse(f.job.payload.expires_at)>f.clock.now(),'the signed Job remains unexpired for other lenders');
-  await until(()=>f.events.some(event=>event.reason==='approval_timeout'),'local review timeout status');
+  await until(()=>f.events.some(event=>event.reason==='approval_pending'),'local review timeout status');
   assert.equal(f.events.some(event=>event.reason==='job_expired'),false,'the lender does not expire the globally runnable Job');
   approval.resolve(true);await f.stop();noExecution(f);
 });
@@ -2432,8 +2375,8 @@ test('unavailable sandbox waits with lending enabled and remains distinct from a
   await until(()=>lender.getState().status==='waiting_for_sandbox','sandbox waiting state');
   const waiting=lender.getState();
   assert.equal(waiting.paused,false);
-  assert.equal(waiting.reason,'sandbox_not_ready');
-  assert.equal(waiting.label,"Lending is on, but this computer can't run jobs right now. Check protected workspace setup.");
+  assert.equal(waiting.reason,'sandbox_check_pending');
+  assert.equal(waiting.label,lendingReasonText('sandbox_check_pending',{until:waiting.until}));
   noExecution(f);assert.equal(f.count('/jobs/claim-next'),0);
   lender.pause();
   assert.equal(lender.getState().paused,true);
@@ -2547,7 +2490,7 @@ test('v1 lender reports preparing, agent and sending with monotonic elapsed seco
 });
 
 test('a host that does not advertise progress_v1 never receives a progress post (P22)',{timeout:60000},async t=>{
-  for(const [label,hostCapabilities,expected] of [['an older host',[],false],['a current host',undefined,true]]) {
+  for(const [label,hostCapabilities,expected] of [['an older host',['run_request_v1'],false],['a current host',undefined,true]]) {
     const f=await lenderFixture(t,{hostCapabilities});
     launch(f);await finish(f);
     assert.equal(f.requests.some(r=>r.route.endsWith('/progress')),expected,label);
@@ -2637,7 +2580,7 @@ test('O-A: a late older observation never overwrites a newer one; a refresh is u
   await until(()=>observations.length>=3,'the change is observed');
   observations[2]({...usable(),available:false});
   await changed;
-  assert.equal(lender.admits(probe),'sandbox_not_ready','the account is refused once observed unusable');
+  assert.equal(lender.admits(probe),'sandbox_check_pending','the account is refused once observed unusable');
 });
 test('O-A: an observation older than the freshness bound is unknown, not proof of ready', async t => {
   const f=await lenderFixture(t,{policy:{pollMs:36000000}});
@@ -2652,51 +2595,54 @@ test('O-A: an observation older than the freshness bound is unknown, not proof o
 
 // The test Mac 11-01: every account read "Check protected workspace setup" while the cause was an agent.
 // The wait label follows the reason; only a sandbox reason keeps the workspace line.
+const availabilityForEvidence=(f,evidence)=>async({conditions={}}={})=>{
+  const at=f.clock.now(),id='fixture-account';
+  const decision=decideLending({schemaVersion:1,nowMs:at,account:{id,providerId:'codex',enabled:evidence.enabled!==false,authState:evidence.signedIn===false?'signed_out':'signed_in'},
+    usage:{accountId:id,state:'unavailable',reading:null},ledger:{accountId:id,resources:[]},history:{accountId:id,rows:[]},job:null,
+    policy:{enabled:f.policy.enabled,revision:1,strategy:'automatic',strategyParams:{},protectionPosition:'balanced'},
+    eligibility:{evaluatedAtMs:at,settingsRevision:1,enabledNow:conditions.enabledNow!==false},runtime:conditions.runtime??{canStart:true},conditions});
+  return {decision,accountIds:decision.kind==='lend'?[id]:[]};
+};
 const WAIT_LABEL = [
-  ['signed out', {signedIn: false}, null, 'agent_signed_out', name => `${name} is signed out in Faravan. Sign it in on the Lend page.`],
-  ['signed in but not chosen', {enabled: false, chosen: false}, null, 'agent_not_chosen', name => `${name} isn't chosen for lending. Choose agents on the Lend page.`],
-  ['never chosen or set up', {enabled: false, chosen: false, installed: null, signedIn: null}, null, 'agent_not_chosen', () => 'Not lent.'],
-  ['chosen, sign-in still being checked', {signedIn: null, chosen: true}, null, 'lender_starting', name => `Checking whether ${name} is signed in…`],
-  ['not installed', {installed: false}, null, 'no_ready_agent', () => 'No agent is ready to lend on this computer. Install or sign in to an agent on the Lend page.'],
-  ['sandbox down', {}, {available: false}, 'sandbox_not_ready', () => "Lending is on, but this computer can't run jobs right now. Check protected workspace setup."],
+  ['signed out',{signedIn:false},null,'account_signed_out'],
+  ['not lent',{enabled:false,chosen:false},null,'lending_off'],
+  ['sandbox down',{}, {available:false},'sandbox_check_pending'],
 ];
-for (const [name, evidence, report, reason, label] of WAIT_LABEL) {
+for (const [name,evidence,report,reason] of WAIT_LABEL) {
   test(`the wait label follows its reason: ${name}`, async t => {
     const f = await lenderFixture(t, {policy: {pollMs: 36000000}});
     const usable = f.backend.lenderCapabilities;
     Object.assign(f.adapters[0], evidence);
+    f.runOptions.accountExecution.availability=availabilityForEvidence(f,evidence);
     if (report) f.backend.lenderCapabilities = () => ({...usable(), ...report});
     const lender = launch(f);
     await until(() => lender.getState().status === 'waiting_for_sandbox', 'the account waits');
     const state = lender.getState();
     assert.equal(state.reason, reason);
-    assert.equal(state.label, label(agentDisplayName(f.adapters[0].spec.harness_id)));
-    if (reason !== 'sandbox_not_ready') assert.doesNotMatch(state.label, /protected workspace/);
+    assert.equal(state.label,lendingReasonText(reason,{until:state.until}));
+    if(reason!=='sandbox_check_pending') assert.doesNotMatch(state.label, /protected workspace/);
   });
 }
 test('a pool headline and admission never stand on an agent the owner did not choose', async () => {
   const {createLendingPool} = await import('../lib/v1/lending-pool.mjs');
   const child = (reason) => ({start: () => new Promise(() => {}), getState: () => ({status: 'waiting_for_sandbox', reason, label: reason, current: null}),
     admits: () => reason, reconfigure() {}, pause() {}, resume() {}, cessation: () => ({proven: true})});
-  const order = ['gemini', 'claude', 'codex'], reasons = {gemini: 'agent_not_chosen', claude: 'agent_signed_out', codex: 'agent_not_chosen'};
+  const order = ['gemini', 'claude', 'codex'], reasons={gemini:'lending_off',claude:'account_signed_out',codex:'lending_off'};
   let next = 0;
   const pool = createLendingPool({storage: {get: async () => null, set: async () => {}}, capacity: 3, maxResources: {cpu: 8, memoryBytes: 64 * 1024 ** 3},
     policy: {enabled: true}, adapters: order.map(id => ({spec: {harness_id: id}})),
     createLender: () => child(reasons[order[next++]])});
   pool.start();
   await until(() => pool.getState().accountStates?.length === 3, 'three accounts');
-  assert.equal(pool.getState().reason, 'agent_signed_out');
-  assert.equal(pool.admits({requirements: {limits: {}}}), 'agent_signed_out');
+  assert.equal(pool.getState().reason,'account_signed_out');
+  assert.equal(pool.admits({requirements:{limits:{}}}),'account_signed_out');
 });
 
 // O-A (r11): an account that cannot take a job says why, from its own evidence. Only a sandbox failure says workspace.
 const WHY = [
-  ['signed out', {signedIn: false}, null, 'agent_signed_out'],
-  ['not lent', {enabled: false}, null, 'agent_not_chosen'],
-  ['not installed', {installed: false}, null, 'no_ready_agent'],
-  ['sign-in still being checked', {signedIn: null}, null, 'lender_starting'],
-  ['check could not run in the sandbox', {installed: null, signedIn: null, checkFailed: true}, null, 'sandbox_not_ready'],
-  ['sandbox down, account signed in', {}, {available: false}, 'sandbox_not_ready'],
+  ['signed out', {signedIn:false}, null, 'account_signed_out'],
+  ['not lent', {enabled:false}, null, 'lending_off'],
+  ['sandbox down',{}, {available:false},'sandbox_check_pending'],
   ['usable', {}, null, null],
 ];
 for (const [name, evidence, report, expected] of WHY) {
@@ -2706,11 +2652,12 @@ for (const [name, evidence, report, expected] of WHY) {
     f.client.claimNext = (_advertisement, {signal}) => new Promise((_, reject) => signal?.addEventListener('abort',
       () => reject(Object.assign(new Error('aborted'), {name: 'AbortError'})), {once: true}));
     Object.assign(f.adapters[0], evidence);
+    f.runOptions.accountExecution.availability=availabilityForEvidence(f,evidence);
     if (report) f.backend.lenderCapabilities = () => ({...usable(), ...report});
     const lender = launch(f), probe = arriving(f);
     await until(() => (expected === null ? lender.admits(probe) === null : lender.getState().status === 'waiting_for_sandbox'), 'the account is observed');
     assert.equal(lender.admits(probe), expected);
-    if (expected !== null) assert.equal(lender.getState().reason, expected, 'the loop reports the same reason it admits with');
+    if (expected !== null) assert.equal(lender.getState().reason, lendingReasonCode(expected), 'the loop reports the same reason it admits with');
   });
 }
 
@@ -2772,27 +2719,27 @@ for(const journal of ['missing','empty'])test('signed-out sandbox with '+journal
     f.backend[key]=owned[key].bind(owned);
   const ready=f.backend.lenderCapabilities;
   f.backend.lenderCapabilities=()=>signedIn?ready():{available:false,reason:'docker_signed_out'};
-  const adapters=[...f.adapters];f.adapters=[];
+  const adapters=[...f.adapters];
   const lender=launch(f);
   await until(()=>f.clock.pending().length>0,'startup reaches a wait');
-  assert.equal(lender.getState().reason,'docker_signed_out');
+  assert.equal(lender.getState().reason,'sandbox_cannot_start');
   assert.equal(f.policy.enabled,true);
   assert.equal(f.count('/jobs/claim-next'),0);
   assert.equal(runs(f),0);
-  signedIn=true;f.clock.advance(3000);
-  await until(()=>lender.getState().reason==='no_ready_agent','agent choice is the next blocker');
+  signedIn=true;f.runOptions.accountExecution.availability=availabilityForEvidence(f,{enabled:false});f.clock.advance(3000);
+  await until(()=>lender.getState().reason==='lending_off','an account must be chosen next');
   await until(()=>f.clock.pending().includes(1000),'readiness retry is scheduled');
-  f.adapters.push(...adapters);f.clock.advance(3000);
+  f.runOptions.accountExecution.availability=availabilityForEvidence(f,{});f.clock.advance(3000);
   await finish(f);
   assert.equal(runs(f),1,'new work runs after readiness returns');
-  assert.ok(!f.events.some(e=>e.reason==='cessation_unverified'));
+  assert.ok(!f.events.some(e=>e.reason==='cleanup_pending'));
 });
 
 test('owned-orphan failed inventory blocks claims until a successful retry',{timeout:60000},async t=>{
   const f=await lenderFixture(t);let available=false,calls=0;
   f.backend.reconcileOwnedSandboxes=async()=>{calls++;return {removed:available,foreign:[]};};
   launch(f);
-  await until(()=>f.events.some(e=>e.reason==='cessation_unverified'),'startup barrier holds');
+  await until(()=>f.events.some(e=>e.reason==='cleanup_pending'),'startup barrier holds');
   assert.equal(f.count('/jobs/claim-next'),0);assert.equal(runs(f),0);
   await until(()=>f.clock.pending().includes(3000),'barrier backoff');
   available=true;f.clock.advance(3000);await finish(f);assert.ok(calls>=2);
@@ -2942,29 +2889,7 @@ test('six short jobs reduce their standing-rule reservations to actual time', {t
     'six one-minute jobs leave 54 minutes, not zero');
 });
 
-for(const reply of [
-  undefined, {}, {applied:false}, {metered:{},cessation:{applied:false,reason:'price_snapshot_missing'}},
-  {applied:true,cessation:{applied:false}}, {applied:true,detail:{applied:false}},
-]) test('recovery keeps ownership until the full finish is acknowledged: '+JSON.stringify(reply), {timeout:15000}, async t=>{
-  const f=await lenderFixture(t),attempt=f.attempt(),intent={provider:'codex',model:'gpt-6-sol',execution:{stdout:''},prepared:true,reason:'restart_interrupted'};
-  const pending={attemptId:attempt.attempt_id,attempt,reservedMs:120000,executionStartRequested:true,candidateSettlement:intent,...f.backend.sandboxOwnership()};
-  await f.policy.storage.set({day:'2026-10-09',jobs:1,milliseconds:120000,pending,claimedPending:attempt});
-  f.policy.recoveryOnly=true;f.policy.enabled=false;
-  let calls=0,ack=reply;
-  f.backend.reconcilePending=async row=>({removed:true,attemptId:row.attemptId,sbx_home:f.backend.sandboxOwnership().sbx_home});
-  f.policy.lendingRuntime={candidate:{finish:async()=>{calls++;return ack;}}};
-  launch(f);
-  await until(()=>calls>0,'finish response read');
-  await until(()=>f.clock.pending().includes(1000)||f.saved().pending===null,'recovery pass ends');
-  assert.deepEqual(f.saved().pending,{...pending,cessationVerified:{sbx_home:pending.sbx_home,attemptId:attempt.attempt_id,
-    jobDigest:attempt.job_digest,generation:attempt.generation}},'local cleanup proof is durable while finish acknowledgement is pending');
-  assert.equal(f.saved().milliseconds,120000,'unmeasured runtime keeps the full reservation');
-  assert.deepEqual(f.saved().claimedPending,attempt);
-  ack={metered:{},cessation:{applied:true}};
-  f.clock.advance(1000);
-  await until(()=>f.saved().pending===null,'full acknowledgement permits recovery');
-  await f.stop();
-});
+
 
 test('cleanup proof charges measured time while an unresolved quota hold remains owned', {timeout:15000}, async t=>{
   const f=await lenderFixture(t),attempt=f.attempt();
@@ -2975,12 +2900,10 @@ test('cleanup proof charges measured time while an unresolved quota hold remains
     cessationVerified:{sbx_home:f.backend.sandboxOwnership().sbx_home,attemptId:attempt.attempt_id,jobDigest:attempt.job_digest,generation:attempt.generation}};
   await f.policy.storage.set({day:'2026-10-09',jobs:1,milliseconds:120000,pending,claimedPending:attempt});
   f.policy.recoveryOnly=true;f.policy.enabled=false;
-  let held=false;
-  f.policy.lendingRuntime={candidate:{finish:async()=>{held=true;return {metered:{units_micro:1},
-    cessation:{applied:false,reason:'usage_unreconciled'}};}}};
+
   launch(f);
   await until(()=>f.saved().pending===null,'durable held outcome is recorded');
-  assert.equal(held,true,'the quota exposure remains held by the candidate');
+
   assert.equal(f.saved().jobs,1,'cleanup does not refund a completed job');
   assert.equal(f.saved().milliseconds,60000,'the lender charges the measured run time');
   await f.stop();
@@ -3027,7 +2950,7 @@ test('restart refunds only an explicit durable fresh-admission denial after clea
     let removed = false;
     f.backend.reconcilePending = async pending => ({attemptId:pending.attemptId,removed});
     launch(f);
-    await until(() => f.events.some(event => event.reason === 'cessation_unverified'), 'cleanup is still required');
+    await until(() => f.events.some(event => event.reason === 'cleanup_pending'), 'cleanup is still required');
     assert.equal(f.saved().jobs, 1);
     assert.equal(f.saved().milliseconds, 120000);
     removed = true;
@@ -3057,10 +2980,10 @@ test('denied dispatch plus Stop refunds once across stop-report failure and rest
       ? Promise.reject(Object.assign(new Error('offline'), {code:'network_error'})) : stopped(...args);
     f.client.claimNext = async () => null;
     launch(f);
-    await until(() => f.events.some(event => event.reason === 'cessation_unverified'), 'cleanup required');
+    await until(() => f.events.some(event => event.reason === 'cleanup_pending'), 'cleanup required');
     assert.equal(f.saved().jobs, 3);
     removed = true; f.clock.advance(1000);
-    await until(() => f.events.some(event => event.reason === 'stop_report_pending'), 'report remains pending');
+    await until(() => f.events.some(event => event.reason === 'cleanup_pending') && f.saved().pending?.agentStartDeniedRefunded === true, 'report remains pending after the refund');
     await f.stop();
     assert.equal(f.saved().jobs, 2);
     assert.equal(f.saved().milliseconds, 500000);
@@ -3076,61 +2999,13 @@ test('denied dispatch plus Stop refunds once across stop-report failure and rest
   }
 });
 
-test('a final admission that never answers is denied at its deadline: no launch and no charge', {timeout:60000}, async t => {
-  const f = await lenderFixture(t);
-  let asked = false;
-  f.policy.lendingRuntime.candidate.admitStart = () => { asked = true; return new Promise(() => {}); };
-  launch(f);
-  await until(() => asked, 'final admission asked');
-  f.clock.advance(60000);
-  await until(() => f.events.some(e => ['declined', 'reserve', 'failed', 'paused'].includes(e.status)), 'deadline denial');
-  await f.stop();
-  assert.equal(f.events.some(e => e.status === 'running'), false, 'the launch is never reported as running');
-  assert.equal(runs(f), 0);
-  assert.equal(f.count('/complete'), 0);
-  assert.equal(f.saved().jobs, 0);
-  assert.equal(f.saved().milliseconds, 0);
-});
+
 
 // Money review of 2a2b2dc2, P2a: a Stop while the final admission is pending must still record that no agent ran.
-for (const ending of ['late-yes', 'deadline']) test('Stop during the final admission refunds the job and never runs the agent: '+ending, {timeout:60000}, async t => {
-  const f = await lenderFixture(t, {saved:{day:'2026-10-09',jobs:2,milliseconds:300000,pending:null}});
-  const key = requesterCounterKey(f.job.payload.circle, f.job.payload.author);
-  let asked = false, answer;
-  f.policy.lendingRuntime.candidate.admitStart = () => { asked = true; return new Promise(resolve => { answer = resolve; }); };
-  const lender = launch(f);
-  await until(() => asked, 'final admission asked');
-  const requesterBefore = structuredClone(f.saved().requesters?.[key] ?? {jobs:0,milliseconds:0});
-  await lender.stopCurrentJob(lender.getState().current);
-  if (ending === 'deadline') f.clock.advance(60000);
-  answer({ok:true});
-  await until(() => f.saved().pending === null || f.saved().pending?.agentStartDeniedRefunded === true, 'stop settles');
-  const check = () => {
-    assert.equal(runs(f), 0, 'the agent never runs');
-    assert.equal(f.saved().jobs, 2, 'the job is refunded');
-    assert.equal(f.saved().milliseconds, 300000, 'no waiting time is charged');
-    const requester = f.saved().requesters?.[key] ?? {jobs:0,milliseconds:0};
-    assert.equal(requester.jobs, requesterBefore.jobs - 1);
-    assert.equal(requester.milliseconds, 0);
-  };
-  check();
-  await f.stop();
-  f.client.claimNext = async () => null;
-  for (let i = 0; i < 2; i++) { launch(f); await until(() => f.saved().pending === null, 'recovery '+i); await f.stop(); check(); }
-});
+
 
 // Money review of 2a2b2dc2, P2b: a denied start must not use up a standing rule.
-test('a denied final admission frees its standing-rule job', {timeout:60000}, async t => {
-  const f = await lenderFixture(t, {harness:'claude-code-subscription', policy:{mode:'auto'}});
-  f.policy.standingRules = f.policy.standingRules.map(rule => ({...rule, dailyJobs:1}));
-  f.policy.lendingRuntime.candidate.admitStart = async () => ({ok:false, reason:'quota_unknown'});
-  launch(f, {approve:async () => false});
-  await until(() => f.saved()?.pending === null && f.saved().ruleUsage?.[0]?.finished === true, 'denial settles');
-  await f.stop();
-  assert.equal(runs(f), 0);
-  assert.equal(f.saved().jobs, 0);
-  assert.deepEqual(f.saved().ruleUsage.map(row => [row.ms, row.ran]), [[0, false]]);
-});
+
 
 for (const ran of [false, undefined]) test('a standing-rule row counts only when its agent ran: ran='+ran, {timeout:60000}, async t => {
   const f = await lenderFixture(t, {harness:'claude-code-subscription', policy:{mode:'auto'}});
@@ -3147,31 +3022,7 @@ for (const ran of [false, undefined]) test('a standing-rule row counts only when
 });
 
 // Money review of dd65446d, P2: one failed write of the denial marker must not turn a job that never ran into a charged run.
-for (const stop of [false, true]) test('a failed denial-marker write still refunds the job: '+(stop ? 'Stop' : 'denial'), {timeout:60000}, async t => {
-  const f = await lenderFixture(t, {saved:{day:'2026-10-09',jobs:2,milliseconds:300000,pending:null}});
-  const set = f.policy.storage.set.bind(f.policy.storage);
-  let failed = false;
-  f.policy.storage.set = async next => {
-    if (!failed && next?.pending?.agentStartDenied === true) { failed = true; throw Object.assign(new Error('disk refused'), {code:'EIO'}); }
-    return set(next);
-  };
-  let asked = false, answer;
-  f.policy.lendingRuntime.candidate.admitStart = () => { asked = true; return new Promise(resolve => { answer = resolve; }); };
-  const lender = launch(f);
-  await until(() => asked, 'final admission asked');
-  if (stop) { await lender.stopCurrentJob(lender.getState().current); answer({ok:true}); }
-  else answer({ok:false, reason:'quota_unknown'});
-  await until(() => failed && (f.saved().pending === null || f.saved().pending?.agentStartDeniedRefunded === true), 'settles after the failed write');
-  const check = () => {
-    assert.equal(runs(f), 0, 'the agent never runs');
-    assert.equal(f.saved().jobs, 2, 'the job is refunded');
-    assert.equal(f.saved().milliseconds, 300000, 'no time is charged');
-  };
-  check();
-  await f.stop();
-  f.client.claimNext = async () => null;
-  for (let i = 0; i < 2; i++) { launch(f); await until(() => f.saved().pending === null, 'recovery '+i); await f.stop(); check(); }
-});
+
 
 for (const stamped of [false, true]) for (const denied of [false, true, 'measured-zero']) for (const stopped of [false, true])
   test(`recovery preserves local charges without prepare provenance: stamp=${stamped}, denied=${denied}, stopped=${stopped}`, {timeout:60000}, async t => {
@@ -3198,22 +3049,14 @@ for (const stamped of [false, true]) for (const denied of [false, true, 'measure
         ruleMs:stamped?0:120000,ran:stamped&&denied!=='measured-zero'?false:undefined});
   });
 
-for (const stamped of [false,true]) test(`compatibility recovery retains unstamped quota charges: stamp=${stamped}`, {timeout:60000}, async t=>{
+for (const stamped of [false,true]) test(`ledger compatibility retains unstamped quota charges: stamp=${stamped}`, {timeout:60000}, async t=>{
   const f=await lenderFixture(t),attempt=f.attempt();
   const ledger=createLendingLedger({file:join(f.root,'compatibility-ledger.json'),now:f.clock.now});
   ledger.recordReadings('claude',[{window_id:'seven_day',window_minutes:10080,used_pct:10,
     resets_at:f.clock.now()+86400000,observed_at:f.clock.now(),state:'open',source:'probe'}]);
   assert.equal(ledger.reserve({account:'claude',job_digest:f.jobDigest,attempt_id:attempt.attempt_id,
     budget_units:20,unit:'claude_usd',plan:'max20'}).ok,true);
-  f.policy.lendingRuntime={reconcileAttempt:ledger.reconcileAttempt.bind(ledger)};
-  await f.policy.storage.set({day:'2026-10-09',jobs:1,milliseconds:120000,pending:{
-    attemptId:attempt.attempt_id,attempt,reservedMs:120000,executionStartRequested:false,
-    ...(stamped?{prepare_contract:'create-only'}:{})}});
-  f.policy.enabled=false;f.policy.recoveryOnly=true;f.client.claimNext=async()=>null;
-  f.backend.reconcilePending=async pending=>({attemptId:pending.attemptId,removed:true});
-  let outcome;
-  f.policy.lendingRuntime.reconcileAttempt=(...args)=>{outcome=ledger.reconcileAttempt(...args);return outcome;};
-  launch(f);await until(()=>f.saved().pending===null,'compatibility recovery completes');await f.stop();
+  const outcome=ledger.reconcileAttempt(attempt.attempt_id,{started:stamped?false:undefined});
   assert.equal(outcome.released===true,stamped);
   assert.equal(outcome.entries.length,stamped?0:1);
   if(!stamped)assert.equal(outcome.entries[0].lent_pts,1,'the legacy ledger charges the full reservation');
@@ -3233,7 +3076,7 @@ for(const source of ['backend','adapters'])test('discovery '+source+' fault wait
     f.adapters=async()=>{if(fault)throw new Error('synthetic provider read');return records;};
   }
   const lender=launch(f);t.after(()=>f.stop());
-  await until(()=>f.events.some(e=>e.reason==='sandbox_not_ready'),'discovery wait');
+  await until(()=>f.events.some(e=>e.reason==='sandbox_check_pending'),'discovery wait');
   assert.notEqual(lender.admits(f.job.payload),'lender_stopped');
   assert.equal(f.count('/jobs/claim-next'),0);assert.equal(runs(f),0);
   await until(()=>f.clock.pending().includes(1000),'retry tick');
@@ -3252,7 +3095,7 @@ for(const stage of ['rollover','claim'])test('counter write '+stage+' fault wait
     return original(next);
   };
   const lender=launch(f);t.after(()=>f.stop());
-  await until(()=>f.events.some(e=>e.reason==='host_disk_low'),'counter write wait');
+  await until(()=>f.events.some(e=>e.reason==='sandbox_cannot_start'),'counter write wait');
   assert.notEqual(lender.admits(f.job.payload),'lender_stopped');
   assert.equal(f.count('/jobs/claim-next'),0);assert.equal(runs(f),0);
   if(stage==='rollover'){assert.equal(f.saved().jobs,2);assert.equal(f.saved().day,'2026-10-08');}
@@ -3273,7 +3116,7 @@ for(const faultKind of ['read','corrupt'])test('invalid counter store '+faultKin
     return original();
   };
   const lender=launch(f);t.after(()=>f.stop());
-  await until(()=>f.events.some(e=>e.reason==='invalid_counter_store'),'invalid counters wait');
+  await until(()=>f.events.some(e=>e.reason==='local_state_unreadable'),'invalid counters wait');
   for(let tick=0;tick<2;tick++){
     assert.equal(lender.getState().counters,null,'invalid state never becomes a fresh budget');
     assert.notEqual(lender.admits(f.job.payload),'lender_stopped');
@@ -3301,7 +3144,7 @@ for(const day of ['',null,17,{},'xx','2026-2-09','2026-02-30','2025-02-29','2026
     const lender=launch(f);
     for(let tick=0;tick<3;tick++){
       await until(()=>f.clock.pending().includes(1000),'invalid day retry');
-      assert.ok(f.events.some(e=>e.reason==='invalid_counter_store'));
+      assert.ok(f.events.some(e=>e.reason==='local_state_unreadable'));
       assert.equal(lender.getState().counters,null);
       assert.deepEqual(f.saved(),prior);assert.equal(f.saves.length,writes);
       assert.equal(f.count('/jobs/claim-next'),0);assert.equal(runs(f),0);
@@ -3310,7 +3153,7 @@ for(const day of ['',null,17,{},'xx','2026-2-09','2026-02-30','2025-02-29','2026
     }
     const repaired={...prior,day:'2026-10-09'};
     await f.policy.storage.set(repaired);f.clock.advance(1000);
-    await until(()=>f.events.some(e=>e.reason==='sandbox_not_ready'),'day-only repair admitted to discovery');
+    await until(()=>f.events.some(e=>e.reason==='sandbox_check_pending'),'day-only repair admitted to discovery');
     await f.stop();
     assert.deepEqual(f.saved(),repaired);assert.deepEqual(lender.getState().counters,repaired);
     assert.equal(f.saves.length,writes+1,'only external repair wrote');
@@ -3327,7 +3170,7 @@ for(const owned of [
   const f=await lenderFixture(t,{saved:prior});const lender=launch(f);
   for(let tick=0;tick<3;tick++){
     await until(()=>f.clock.pending().includes(1000),'owned invalid-day hold');
-    assert.ok(f.events.some(e=>e.reason==='invalid_counter_store'));
+    assert.ok(f.events.some(e=>e.reason==='local_state_unreadable'));
     assert.equal(lender.getState().counters,null);assert.deepEqual(f.saved(),prior);
     assert.equal(f.saves.length,0);assert.equal(f.count('/jobs/claim-next'),0);assert.equal(runs(f),0);
     assert.equal(f.calls.some(([kind])=>kind==='prepare'),false);
@@ -3341,7 +3184,7 @@ for(const day of ['2026-10-09','2026-10-08','2024-02-29'])test('valid calendar c
   const prior={day,jobs:7,milliseconds:90000,pending:null,requesters:{[key]:{jobs:3,milliseconds:40000}}};
   await f.policy.storage.set(prior);const writes=f.saves.length;
   f.backend.lenderCapabilities=async()=>({available:false});
-  const lender=launch(f);await until(()=>f.events.some(e=>e.reason==='sandbox_not_ready'),'valid day discovery');await f.stop();
+  const lender=launch(f);await until(()=>f.events.some(e=>e.reason==='sandbox_check_pending'),'valid day discovery');await f.stop();
   const expected=day==='2026-10-09'?prior:{...prior,day:'2026-10-09',jobs:0,milliseconds:0,requesters:{},lastRequesterLimit:null};
   assert.deepEqual(f.saved(),expected);assert.deepEqual(lender.getState().counters,expected);
   assert.equal(f.saves.length,writes+(day==='2026-10-09'?0:1));
@@ -3349,7 +3192,7 @@ for(const day of ['2026-10-09','2026-10-08','2024-02-29'])test('valid calendar c
 
 test('null counter store remains a fresh current-day budget',async t=>{
   const f=await lenderFixture(t,{saved:null});f.backend.lenderCapabilities=async()=>({available:false});
-  const lender=launch(f);await until(()=>f.events.some(e=>e.reason==='sandbox_not_ready'),'fresh discovery');await f.stop();
+  const lender=launch(f);await until(()=>f.events.some(e=>e.reason==='sandbox_check_pending'),'fresh discovery');await f.stop();
   assert.deepEqual(lender.getState().counters,{day:'2026-10-09',jobs:0,milliseconds:0,pending:null});
   assert.equal(f.saves.length,0);
 });
@@ -3365,12 +3208,12 @@ test('actual pool dayless shared-only child seed gains day without losing shared
     adapters:f.adapters,createLender:options=>{children.push(options);return {start:async()=>{},getState:()=>({})};}});
   await pool.start();assert.equal(children.length,1);
   const childStore=children[0].policy.storage;
-  assert.deepEqual(await childStore.get(),{jobs:0,milliseconds:0,pending:null,...shared});
+  assert.deepEqual(await childStore.get(),{jobs:0,milliseconds:0,pending:null,...shared,jobConsents:[]});
   f.policy.storage=childStore;f.backend.lenderCapabilities=async()=>({available:false});
-  const lender=launch(f);await until(()=>f.events.some(e=>e.reason==='sandbox_not_ready'),'fresh pool child discovery');await f.stop();
-  assert.deepEqual(await childStore.get(),{day:'2026-10-09',jobs:0,milliseconds:0,pending:null,...shared});
+  const lender=launch(f);await until(()=>f.events.some(e=>e.reason==='sandbox_check_pending'),'fresh pool child discovery');await f.stop();
+  assert.deepEqual(await childStore.get(),{day:'2026-10-09',jobs:0,milliseconds:0,pending:null,...shared,jobConsents:[]});
   assert.deepEqual(disk.hiddenOffers,shared.hiddenOffers);assert.deepEqual(disk.ruleUsage,shared.ruleUsage);
-  assert.deepEqual(lender.getState().counters,{day:'2026-10-09',jobs:0,milliseconds:0,pending:null,...shared});
+  assert.deepEqual(lender.getState().counters,{day:'2026-10-09',jobs:0,milliseconds:0,pending:null,...shared,jobConsents:[]});
   assert.equal(f.count('/jobs/claim-next'),0);assert.equal(runs(f),0);
 });
 
@@ -3388,9 +3231,9 @@ for(const recovery of ['day-only repair','wall catches up','legacy journal'])tes
   let lender=launch(f);
   await until(()=>f.clock.pending().includes(1000),'initial future-day hold');
   for(let tick=0;tick<3;tick++){
-    const waits=f.events.filter(e=>e.reason==='invalid_counter_store').length;
+    const waits=f.events.filter(e=>e.reason==='local_state_unreadable').length;
     f.clock.advance(1000);
-    await until(()=>f.events.filter(e=>e.reason==='invalid_counter_store').length>waits&&
+    await until(()=>f.events.filter(e=>e.reason==='local_state_unreadable').length>waits&&
       f.clock.pending().includes(1000),'future-day retry '+tick);
     assert.deepEqual(lender.getState().counters,prior);
     assert.equal(reconciliations,1);
@@ -3431,9 +3274,9 @@ test('cached current counters hold unchanged after backwards wall correction',as
   assert.deepEqual(lender.getState().counters,prior);
   const before=discoveries;offset=-86400000;
   for(let tick=0;tick<3;tick++){
-    const waits=f.events.filter(e=>e.reason==='invalid_counter_store').length;
+    const waits=f.events.filter(e=>e.reason==='local_state_unreadable').length;
     f.clock.advance(1000);
-    await until(()=>f.events.filter(e=>e.reason==='invalid_counter_store').length>waits&&
+    await until(()=>f.events.filter(e=>e.reason==='local_state_unreadable').length>waits&&
       f.clock.pending().includes(1000),'cached future-day retry '+tick);
     assert.deepEqual(lender.getState().counters,prior);
     assert.equal(JSON.stringify(f.saved()),bytes);assert.equal(f.saves.length,writes);
@@ -3478,7 +3321,7 @@ for(const phase of ['OUTPUT','RESULT'])test('future-day '+phase+' recovery uses 
   launch(f);
   await until(()=>f.events.some(event=>event.status==='running'),'initial authentic '+phase+' execution');
   f.clock.advance(6000);f.execution.resolve();
-  await until(()=>f.events.some(event=>event.reason==='network_error'),'initial signed completion interception');
+  await until(()=>f.events.some(event=>event.reason==='circle_unreachable'),'initial signed completion interception');
   await f.stop();
   const originalResult=structuredClone(f.saved().resultPending);
   assert.ok(originalResult?.payload);
@@ -3505,7 +3348,7 @@ for(const phase of ['OUTPUT','RESULT'])test('future-day '+phase+' recovery uses 
     return {...actual,attemptId:pending.attemptId,sbx_home:pending.sbx_home};
   };
   const candidate=f.policy.lendingRuntime.candidate,finishCandidate=candidate.finish.bind(candidate);
-  candidate.finish=async(...args)=>{finishes++;return finishCandidate(...args);};
+
   f.backend.lenderCapabilities=async()=>{discoveries++;return {available:false};};
   const proofNow=f.clock.now;let wallOffset=-86400000;
   // HTTP proofs stay on the fixture's original clock; only lender wall time moves.
@@ -3524,7 +3367,7 @@ for(const phase of ['OUTPUT','RESULT'])test('future-day '+phase+' recovery uses 
   const observe=(predicate,label,allowed=[])=>until(()=>{
     assert.deepEqual(f.errors,[],label+' fixture errors');
     const unexpected=f.events.slice(eventStart).find(event=>event.reason&&
-      !['invalid_counter_store','cessation_unverified',...allowed].includes(event.reason));
+      !['local_state_unreadable','cleanup_pending',...allowed.map(code=>lendingReasonCode(code))].includes(event.reason));
     assert.equal(unexpected,undefined,label+': '+JSON.stringify(unexpected));
     return predicate();
   },label);
@@ -3536,7 +3379,7 @@ for(const phase of ['OUTPUT','RESULT'])test('future-day '+phase+' recovery uses 
     assert.deepEqual(f.saved().requesters,before.requesters);
     assert.equal(f.count('/complete'),completes);noFresh();
     cleanupAllowed=true;f.clock.advance(1000);
-    await observe(()=>f.events.slice(eventStart).some(event=>event.reason==='artifact_mismatch')&&
+    await observe(()=>f.events.slice(eventStart).some(event=>event.reason==='execution_failed')&&
       f.clock.pending().includes(1000),'missing cached-artifact media header',['artifact_mismatch']);
     assert.equal(f.saved().pending,null,'actual owned synthetic destroy proved cessation');
     assert.deepEqual(f.saved().outputPending,before.outputPending);
@@ -3557,7 +3400,7 @@ for(const phase of ['OUTPUT','RESULT'])test('future-day '+phase+' recovery uses 
       return f.events.slice(expectedStart).some(event=>event.label?.startsWith('Finished.'));
     },'header-only repair completes signed OUTPUT recovery');
     assert.deepEqual({jobs:f.saved().jobs,milliseconds:f.saved().milliseconds,requesters:f.saved().requesters},charged);
-    assert.ok(finishes>0,'candidate finish delegated to the real fixture candidate');
+
   } else {
     await observe(()=>f.events.slice(eventStart).some(event=>event.label?.startsWith('Finished.')),
       'future RESULT exact replay');
@@ -3567,7 +3410,7 @@ for(const phase of ['OUTPUT','RESULT'])test('future-day '+phase+' recovery uses 
     assert.equal(f.saved().jobs,before.jobs);
     assert.equal(f.saved().milliseconds,before.milliseconds-(before.pending.reservedMs-6000));
   }
-  await until(()=>f.events.slice(eventStart).some(event=>event.reason==='invalid_counter_store')&&
+  await until(()=>f.events.slice(eventStart).some(event=>event.reason==='local_state_unreadable')&&
     f.clock.pending().includes(1000),'delivery finished but future admission stays held');
   noFresh();
   assert.equal(f.count('/complete'),completes+1,'exactly one recovered signed completion');

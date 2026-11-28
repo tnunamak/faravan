@@ -216,13 +216,21 @@ test('Setup and blockers show the Docker sign-in step after a create refusal, wi
 
 test('a diagnose with no Authentication line does not block lending', async t => {
   const f = await appFixture(t);
-  const state = { auth: null };
+  const world = createWorld({createFails:false});
+  world.auth = null;
   const backend = syntheticBackend(f.root);
-  backend.probeCapabilities = async () => { const preflight = await probe(state); return { available: preflight.ok, preflight }; };
+  backend.probeCapabilities = () => world.report();
   const { lender } = await f.connect({ backend });
-  const readiness = await api(lender.app, '/api/ops/readiness.get', { method: 'POST', body: { refresh: true } });
-  assert.equal(readiness.checks.find(c => c.name === 'docker_login').ok, true);
-  assert.equal(readiness.ready, true);
+  const readiness = () => api(lender.app, '/api/ops/readiness.get', { method: 'POST', body: { refresh: true } });
+  const before = await readiness();
+  assert.equal(login(before).ok, true, 'missing diagnose line is not a sign-in refusal');
+  assert.equal(login(before).signinVerified, false);
+  assert.equal(before.ready, false, 'listing alone is not evidence of an accepted create');
+  assert.equal((await world.backend.testWorkspace()).ok, true);
+  const after = await readiness();
+  assert.equal(login(after).ok, true);
+  assert.equal(login(after).createAccepted, true);
+  assert.equal(after.ready, true);
 });
 
 // ---- Recovery, narrow classification, cache fences, refusal epochs, shared result boundary ----
@@ -478,7 +486,10 @@ test('recovery timeout while queued: the timed-out check never runs, and a repea
   assert.equal(deadline.milliseconds, 60000);
   assert.equal(world.backend.recoverSignIn(), first, 'a second click while waiting joins the flight');
   deadline.callback(); // the clock reaches the deadline while the check is still queued
-  assert.equal(await first, null);
+  const timedOut = await first;
+  assert.equal(timedOut?.ok, false);
+  assert.equal(timedOut?.cause, 'timeout');
+  assert.equal(world.backend.signInRefused(), true, 'timeout does not clear the saved refusal');
   assert.equal(creates(world), callsBefore, 'the timed-out check created nothing');
   const second = world.backend.recoverSignIn(); // queued behind the busy check, in order
   free();

@@ -12,7 +12,7 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {randomUUID} from 'node:crypto';
 import {createSharedSandboxWatcher,sharedWatchServing,sharedWatchBound} from '../lib/v1/sandbox-shared-watcher.mjs';
 import {createSandboxDeadlineManager,deadlineProcessStart,sandboxDeadlineClock} from '../lib/sandbox-deadline.mjs';
-import {processLockOwners} from '../lib/v1/lock.mjs';
+import {acquireProcessLock,acquireProcessLockSync,processLockOwners} from '../lib/v1/lock.mjs';
 import {durableWrite} from '../lib/durable-write.mjs';
 
 const enabled=process.platform==='linux';
@@ -72,6 +72,47 @@ function saveAck(f,row,ack) {
 
 
 const alive=pid=>{try{process.kill(pid,0);return true;}catch{return false;}};
+
+test('watcher lock observation rescans when a holder releases between listing and reading', async t=>{
+  const home=fs.mkdtempSync(path.join(os.tmpdir(),'watch-lock-scan-'));
+  t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
+  const lock=path.join(home,'watcher.lock'), owners=lock+'.owners-v1';
+  const release=acquireProcessLockSync(lock,{durable:false});
+  const readdir=fs.readdirSync;
+  let scans=0;
+  const mock=t.mock.method(fs,'readdirSync',(file,...args)=>{
+    const entries=readdir(file,...args);
+    if(file===owners&&++scans===1)release();
+    return entries;
+  });
+  try {
+    assert.deepEqual(processLockOwners(lock),[]);
+    assert.equal(scans,2,'a fresh listing is needed to establish that no owner remains');
+  } finally {mock.mock.restore();release();}
+  const acquired=await acquireProcessLock(lock);
+  try {assert.equal(processLockOwners(lock)[0].pid,process.pid);}
+  finally {acquired();}
+});
+
+test('watcher lock observation refuses a malformed registration without retry or removal', t=>{
+  const home=fs.mkdtempSync(path.join(os.tmpdir(),'watch-lock-malformed-'));
+  t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
+  const lock=path.join(home,'watcher.lock'), owners=lock+'.owners-v1';
+  fs.mkdirSync(owners);
+  const malformed=path.join(owners,randomUUID()+'.choosing');
+  fs.writeFileSync(malformed,'not a registration',{mode:0o600});
+  const readdir=fs.readdirSync;
+  let scans=0;
+  const mock=t.mock.method(fs,'readdirSync',(file,...args)=>{
+    if(file===owners)scans++;
+    return readdir(file,...args);
+  });
+  try {
+    assert.throws(()=>processLockOwners(lock),error=>error.reason==='lock_stale'&&error.retryable!==true);
+    assert.equal(scans,1);
+    assert.equal(fs.readFileSync(malformed,'utf8'),'not a registration');
+  } finally {mock.mock.restore();}
+});
 
 test('a watcher of another build is retired and replaced, and the names it held stay watched', {skip:!enabled,timeout:30000},async t=>{
   const f=fixture(t),old=f.watcher({build:'older-build'}),one=f.adopted(f.row());f.persist(one);

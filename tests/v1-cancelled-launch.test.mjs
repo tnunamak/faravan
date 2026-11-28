@@ -35,7 +35,7 @@ async function launchFixture(t, {beforeStart = false, replay = false, configure,
   };
   configure?.(f);
   const controller = new AbortController();
-  const lender = createLender({client: f.client, backend: f.backend, adapters: f.adapters,
+  const lender = createLender({...f.runOptions,client: f.client, backend: f.backend, adapters: f.adapters,
     policy: f.policy, clock: f.clock, approve: async () => true,
     onEvent: e => f.events.push(e)});
   const loop = lender.start(controller.signal);
@@ -194,7 +194,7 @@ for (const denied of [false, true]) test(`restart ${denied ? 'refunds durable de
   f.policy.enabled = false;
   f.backend.reconcilePending = async pending => ({removed: true, attemptId: pending.attemptId});
   const controller = new AbortController();
-  const lender = createLender({client: f.client, backend: f.backend, adapters: f.adapters,
+  const lender = createLender({...f.runOptions,client: f.client, backend: f.backend, adapters: f.adapters,
     policy: f.policy, clock: f.clock, approve: async () => true});
   const loop = lender.start(controller.signal);
   f.stop = async () => {controller.abort(); await loop;};
@@ -344,7 +344,7 @@ for (const phase of ['before start', 'between start and check']) {
     await f.stop();
     f.policy.enabled = false;
     const controller = new AbortController();
-    const lender = createLender({client: f.client, backend: f.backend, adapters: f.adapters,
+    const lender = createLender({...f.runOptions,client: f.client, backend: f.backend, adapters: f.adapters,
       policy: f.policy, clock: f.clock, approve: async () => false});
     const loop = lender.start(controller.signal);
     f.stop = async () => {controller.abort(); await loop;};
@@ -389,15 +389,14 @@ for (const refusal of ['stale reply', 'invalid reply', 'abort', 'denial save fai
   });
 }
 
-test('an account whose automatic checks stopped uses the blocker action instead of a checking label',async t=>{
+test('unknown adapter checks do not veto an account job',async t=>{
   const f=await realLenderFixture(t);
   const adapters=f.adapters.map(a=>({...a,signedIn:null,automaticChecksStopped:true}));
   const controller=new AbortController();
-  const lender=createLender({client:f.client,backend:f.backend,adapters,policy:f.policy,clock:f.clock,approve:async()=>true});
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters,policy:f.policy,clock:f.clock,approve:async()=>true});
   const loop=lender.start(controller.signal);
   f.stop=async()=>{controller.abort();await loop;};
-  await until(()=>lender.getState().status==='waiting_for_sandbox','account wait');
-  assert.match(lender.getState().label,/Automatic checks stopped after 3 failures/);
-  assert.match(lender.getState().label,/Check agents/);
-  assert.doesNotMatch(lender.getState().label,/Checking whether/);
+  await until(()=>f.calls.some(c=>c[0]==='run'),'the account job starts');
+  assert.equal(f.calls.filter(c=>c[0]==='run').length,1);
+  assert.equal(f.events.some(e=>e.reason==='account_signed_out'||e.reason==='sandbox_cannot_start'),false);
 });

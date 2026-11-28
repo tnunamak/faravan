@@ -23,6 +23,13 @@ const projectionText = (projection, usage) => {
 const explicitlyDoneForToday = home => Object.hasOwn(home ?? {}, 'lendingProjection') &&
   formatLendingProjection(lendingProjectionOf(home)).headline === 'Done for today';
 
+// The closed public list says `lending_off` for off and paused alike, and `sandbox_check_pending` or `sandbox_cannot_start` for any
+// sandbox hold. A person reads those differently: the projection's intent still tells off from paused, and Setup is the
+// place for both sandbox holds. Every other reason keeps its public code.
+const requestBlockKind = ({intent, admissionReason}) =>
+  admissionReason === 'lending_off' && ['off', 'paused'].includes(intent) ? intent :
+  ['sandbox_check_pending', 'sandbox_cannot_start'].includes(admissionReason) ? 'sandbox_not_ready' : admissionReason;
+
 // Compatibility boundary for old API fixtures only. Explicit card admission is
 // always authoritative and can never fall through to conflicting counters, except
 // for the lender's own "Done for today" (below).
@@ -40,7 +47,7 @@ export function requestCapacity(home = {}, lending = {}, now = Date.now(), card 
       else if (validated.admission === 'blocked') {
         if(validated.admissionReason==='daily_limit') projection={schemaVersion:2,kind:'request-admission',admission:'blocked',
           reasonCode:'minute_cap_reached',evidence:{jobCap:null,minuteCap:null}};
-        else lendingBlockedReason=validated.admissionReason;
+        else lendingBlockedReason=requestBlockKind(validated);
       } else projection={schemaVersion:2,kind:'request-admission',admission:'allowed',reasonCode:null,evidence:{jobCap:null,minuteCap:null}};
     }
   } else {

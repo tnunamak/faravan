@@ -1,3 +1,4 @@
+import {LENDING_REASONS} from '../lib/v1/lending-reasons.mjs';
 import './helpers/no-browser.mjs';
 // Where the catalog's enums come from, and how its history is kept (design §2.2, §3.6).
 import test from 'node:test';
@@ -99,9 +100,8 @@ test('the lending preset and plan lists are the ones the policy validates agains
   assert.throws(() => normalizeLendingPolicy({accountPlans: {claude: 'nope', codex: 'unknown'}}));
 });
 
-test('the offer reasons that are failure codes are failure codes', () => {
-  const notCodes = new Set(['machine_capacity','confirming_surplus', 'model_unsupported', 'git_unpinned', 'not_evaluated', 'none']);
-  assert.deepEqual(ENUMS.offer_reason.extra.filter(reason => !notCodes.has(reason) && !FAILURE_CODES.includes(reason)), []);
+test('public offer reasons come from the one closed lending vocabulary',()=>{
+  assert.deepEqual(ENUMS.offer_reason.extra,Object.keys(LENDING_REASONS));
 });
 
 test('error_type is exactly the failure codes, the problem codes and unknown', () => {

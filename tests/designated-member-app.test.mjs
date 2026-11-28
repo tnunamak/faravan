@@ -1,12 +1,13 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
+import {fixtureAccounts,accountHeartbeat} from './helpers/run-request-fixture.mjs';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createPrivateKey,randomBytes} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import * as p from '../lib/protocol/index.mjs';
-import {appFixture,api} from './helpers/v1-app-fixture.mjs';
+import {appFixture} from "./helpers/v1-app-fixture.mjs";
 import {createJobOperations} from '../lib/v1/cli.mjs';
 
 // The real-app owner-offline witness (design 1119 continuation): the circle's host never sees the
@@ -15,7 +16,7 @@ import {createJobOperations} from '../lib/v1/cli.mjs';
 // uncertain reply is recovered by replaying the same durable intent to the same store, and only the
 // designated member's store dispatches.
 
-const advertisement={harnesses:['claude-code-subscription'],models:[],capabilities:['filtered_git_v1','designated_member_v1'],
+const advertisement={harnesses:['claude-code-subscription'],models:[],accounts:fixtureAccounts('claude'),capabilities:['filtered_git_v1','designated_member_v1','run_request_v1'],
   egress:['provider-only','internet'],enforced_limits:['cpu','memory_bytes','disk_bytes','output_bytes','wall_seconds'],
   max_limits:{wall_seconds:1800,cpu:2,memory_bytes:8589934592,disk_bytes:17179869184,output_bytes:33554432}};
 
@@ -104,6 +105,7 @@ test('the app hands a designated submission to the member\u2019s real endpoint a
   await assert.rejects(()=>borrowerAtLender.claimJob(digest,advertisement,{leaseSeconds:120,idempotencyKey:'borrower-claim'}),
     error=>error.code==='not_designated','no other member may dispatch the designated job');
   // The designated member's own store claims: one execution authority.
+  await lenderClient.heartbeat(accountHeartbeat(advertisement.accounts));
   const claim=await lenderClient.claimJob(digest,advertisement,{leaseSeconds:120,idempotencyKey:'member-claim'});
   assert.equal(claim.attempt.holder,lenderId,'one execution authority: the designated lender');
   const second=await (await owner.app.device.memberClient(circle.id,lenderId)).getJob(digest);

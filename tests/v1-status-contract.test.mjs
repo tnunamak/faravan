@@ -171,7 +171,7 @@ test('a passing pre-start decline tells the sender the computer can try again',(
 });
 test('a review reported by an old heartbeat does not stay fresh through job polls',()=>{
   const at=ms=>new Date(now-ms).toISOString();
-  const review={device:'a',personName:'Sam',online:true,intent:{state:'ready',reason:'reviewing_offer'},agents:[{adapter:'codex',readiness:'ready'}]};
+  const review={device:'a',personName:'Sam',online:true,intent:{state:'ready',reason:'approval_pending'},agents:[{adapter:'codex',readiness:'ready'}]};
   assert.equal(waitingSummary({devices:[{...review,source:'heartbeat',last_heartbeat_at:at(5000)}]},{now}),'Waiting for Sam to approve');
   // The heartbeat is ten minutes old; only the polls are fresh. The card may be long gone.
   const polled=waitingSummary({devices:[{...review,source:'poll',last_heartbeat_at:at(600000),last_poll_at:at(2000)}]},{now});

@@ -6,10 +6,7 @@ import {join} from 'node:path';
 import {createLender} from '../lib/v1/lender.mjs';
 import {createJobOperations} from '../lib/v1/cli.mjs';
 import {adaptLegacyJob, jobStatusLabel} from '../lib/v1/state-projection.mjs';
-import {createPace50Candidate} from '../lib/v1/lender-pace50.mjs';
-import {createLendingRuntime} from '../lib/v1/lending-runtime.mjs';
-import {normalizeLendingPolicy} from '../lib/v1/lending-policy.mjs';
-import {createSyntheticPace50Source} from './helpers/pace50-synthetic-source.mjs';
+
 import {realLenderFixture} from './helpers/v1-real-lender-fixture.mjs';
 import {until, deferred} from './helpers/v1-lender-fixture.mjs';
 
@@ -17,7 +14,7 @@ import {until, deferred} from './helpers/v1-lender-fixture.mjs';
 const runs = f => f.calls.filter(([k]) => k === 'run').length;
 function launch(f) {
   const controller = new AbortController();
-  const lender = createLender({client:f.client, backend:f.backend, adapters:f.adapters, policy:f.policy,
+  const lender = createLender({...f.runOptions,client:f.client, backend:f.backend, adapters:f.adapters, policy:f.policy,
     clock:f.clock, approve:async () => true, onEvent:event => f.events.push(event)});
   const task = lender.start(controller.signal);
   let failure;
@@ -56,7 +53,7 @@ test(`${delivery}: coordinator accepts completion -> HTTP 200 ${format} reply ->
   let from = f.events.length;
   launch(f);
   if (delivery === 'recovery') {
-    await until(() => f.events.some(e => e.reason === 'network_error'), 'lost completion acknowledgement');
+    await until(() => f.events.some(e => e.reason === 'circle_unreachable'), 'lost completion acknowledgement');
     await f.stop();
     assert.ok(f.saved().resultPending, 'exact signed result survives the first ambiguous reply');
     mode.value = format;
@@ -117,7 +114,7 @@ test('lost and late completion acknowledgement -> lender restart -> exact retry 
   const mode = {value:'lost'};
   const f = await realLenderFixture(t, {intercept:completionWire(mode)});
   launch(f);
-  await until(() => f.events.some(e => e.reason === 'network_error'), 'first reply lost');
+  await until(() => f.events.some(e => e.reason === 'circle_unreachable'), 'first reply lost');
   await f.stop();
   const intent = structuredClone(f.saved().resultPending);
   mode.value = 'good'; launch(f);
@@ -130,23 +127,10 @@ test('lost and late completion acknowledgement -> lender restart -> exact retry 
   assert.equal((await f.clientFor(0).getJob(f.jobDigest)).state, 'result-accepted');
 });
 
-function durableRuntime(f, sourceStart = f.clock.now()) {
-  const runtime = createLendingRuntime({directory:join(f.root,'quota'),
-    settings:() => ({intent:'on', limits:{lendingPolicy:normalizeLendingPolicy({providerConsent:{codex:true}}),
-      dailyJobs:10, dailyMinutes:60, maxWallSeconds:300, idleOnly:false}}),
-    backend:{}, presence:() => false, lastActiveAt:() => null, selfKey:() => null, now:() => f.clock.now(),
-    pace50:{account:'synthetic-account', account_week_id:'synthetic-week-1',
-      source:createSyntheticPace50Source({start:sourceStart})}});
-  f.policy.lendingRuntime = runtime;
-  return runtime;
-}
-for (const origin of ['borrower','lender','owner'])
-test(`${origin} Stop -> removal pending -> lender restart -> cessation and quota closure -> borrower final state`, {timeout:25000}, async t => {
+for (const origin of ['borrower','lender'])
+test(`${origin} Stop -> removal pending -> lender restart -> confirmed cessation -> borrower final state`, {timeout:25000}, async t => {
   const f = await realLenderFixture(t, {hold:true, run:{model:'gpt-6-sol'}});
   f.policy.userActive = async () => false;
-  const sourceStart = f.clock.now();
-  let runtime = durableRuntime(f, sourceStart);
-  t.after(() => runtime.close());
   let removed = false;
   f.backend.destroy = async () => {f.calls.push(['destroy']); return {removed};};
   f.backend.reconcilePending = async pending => ({attemptId:pending.attemptId, removed});
@@ -158,46 +142,20 @@ test(`${origin} Stop -> removal pending -> lender restart -> cessation and quota
     const ack = await f.owner.cancelJob(f.jobDigest);
     assert.equal(ack.compute_stopped, false, 'cancel ACK revokes authority without claiming cessation');
     f.clock.advance(30_000);
-  } else if (origin === 'owner') {
-    assert.equal((await runtime.candidate.ownerStop({attemptId:attempt.attempt_id,
-      event_id:attempt.attempt_id + ':owner-stop', at:f.clock.now()})).applied, true);
   } else await lender.stopCurrentJob(attempt.attempt_id);
-  await until(() => f.events.some(e => e.reason === 'cessation_unverified'), 'removal not yet proven');
+  await until(() => f.events.some(e => e.reason === 'cleanup_pending'), 'removal not yet proven');
   assert.ok(f.saved().pending);
-  assert.notEqual(runtime.pace50.state().attempts[0].hold_closed, true);
   assert.equal(f.events.some(e => e.stopCompletion), false, 'no stopped-success event without removal proof');
   await f.stop();
-  await runtime.close();
-  runtime = durableRuntime(f, sourceStart);
   removed = true; lender = launch(f);
   await until(() => f.saved().pending === null, 'restart consumes backend removal proof');
   if (origin === 'borrower') await until(() => f.saved().stoppedPending === null, 'borrower cancellation cessation report acknowledged');
-  // Unknown usage may outlive cessation. Every window reset supplies the independent settlement opportunity.
-  f.clock.advance(43 * 3600e3);
-  await runtime.candidate.probeHeld();
-  assert.equal(runtime.pace50.state().attempts[0].hold_closed, true);
   await f.stop();
   const view = await f.clientFor(0).getJob(f.jobDigest);
   assert.ok(['cancelled','failed','expired','result-accepted'].includes(view.state));
   assert.equal(view.current_attempt.compute_stopped, true);
   assert.equal(runs(f), 1);
 });
-
-test('measurement sink failure during an observation is not silently discarded', {}, async t => {
-  const directory = join((await realLenderFixture(t, {publish:false})).root, 'measurement');
-  let attempted = 0, persisted = 0;
-  const pace = createPace50Candidate({directory, now:() => 1792663200000, account:'synthetic-account', account_week_id:'synthetic-week-1',
-    source:createSyntheticPace50Source({start:1792663200000}),
-    measurementHistory:{record() {attempted++; throw new Error('synthetic measurement write failure');}}});
-  // Close before the fixture removes its directory (test hooks run in registration order).
-  let surfaced = false;
-  try {await pace.candidate.observe({provider:'claude', model:'claude-haiku-5-5', now:1792663200000});}
-  catch {surfaced = true;}
-  finally {await pace.adapter.close();}
-  assert.ok(attempted > 0);
-  assert.ok(surfaced || persisted === attempted || pace.candidate.measurementStatus().failedWrites === attempted, 'measurement rows must persist or expose the write failure');
-});
-
 
 test('borrower cancel intent -> lost reply -> borrower restart -> same cancellation is replayed and cessation is not invented', {timeout:20000}, async t => {
   const f = await realLenderFixture(t, {hold:true});
@@ -257,7 +215,6 @@ test('graceful lender Stop -> job finishes while Stop notification is delayed ->
   assert.equal(f.events.some(e => e.status === 'failed'), false);
 });
 
-
 test('Stop request lost -> cessation reply lost -> lender restart retries the exact report without reporting premature success', {timeout:20000}, async t => {
   const f = await realLenderFixture(t, {hold:true});
   let notifications = 0, reports = 0;
@@ -275,7 +232,7 @@ test('Stop request lost -> cessation reply lost -> lender restart retries the ex
   await until(() => runs(f) === 1, 'running before lost Stop message');
   const id = lender.getState().current;
   await lender.stopCurrentJob(id);
-  await until(() => f.events.some(e => e.reason === 'stop_report_pending'), 'lost stopped acknowledgement retains journal');
+  await until(() => f.events.some(e => e.reason === 'cleanup_pending'), 'lost stopped acknowledgement retains journal');
   assert.equal(f.events.some(e => e.stopCompletion), false);
   const saved = structuredClone(f.saved().pending);
   assert.ok(saved.cessationVerified);

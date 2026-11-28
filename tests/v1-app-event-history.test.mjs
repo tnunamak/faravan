@@ -7,7 +7,7 @@ import * as p from '../lib/protocol/index.mjs';
 import { appFixture, api } from './helpers/v1-app-fixture.mjs';
 
 const jobPath = digest => '/api/jobs/' + encodeURIComponent(digest);
-const submit = (owner, circle) => api(owner.app, '/api/jobs', { method: 'POST', body: { circle: circle.id,
+const submit = (owner, circle) => api(owner.app, '/api/jobs', { method: 'POST', headers: { 'faravan-confirm': 'yes' }, body: { circle: circle.id,
   git: 'https://github.com/example/synthetic.git', commit: '1'.repeat(40), prompt: 'SECRET-PROMPT task', harness: 'codex' } });
 
 test('activity history survives an app restart, filters by circle and job, and never stores the prompt or source', { timeout: 30000 }, async t => {

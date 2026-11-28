@@ -73,7 +73,6 @@ for (const installed of vals) for (const running of vals) for (const signedIn of
 assert.deepEqual([...new Set(fails)].slice(0, 15), [], `${n - fails.length}/${n} checks pass`);
 });
 
-
 test('unknown agent sign-in or installation never reports lending ready', () => {
   const ready = {id:'codex', name:'Codex', enabled:true, installed:true, signedIn:true};
   const good = {docker:{installed:true, running:true, signedIn:true},intent:{on:true}};
@@ -137,10 +136,10 @@ for(const kind of ['offers','claim'])test('repeated '+kind+' refusals block the 
   let calls=0,refusing=true,rateLimited=false;
   const read=()=>{calls++;if(refusing)throw Object.assign(new Error('busy'),{code:'rate_limited',status:429,retryable:true,outcome:'not_applied'});return null;};
   if(kind==='offers'){
-    f.client.capabilities=async()=>({capabilities:['offers_v1']});
+    f.client.capabilities=async()=>({capabilities:['offers_v1','run_request_v1']});
     f.client.listOffers=async function*(){read();};
   }else f.client.claimNext=async()=>read();
-  const lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,
     approve:async()=>true,onPoll:state=>{rateLimited=state.rateLimited;},onEvent:e=>f.events.push(e)});
   const loop=lender.start(stop.signal);f.stop=async()=>{stop.abort();await loop;};
   const model=()=>lendingBlockers({docker:{installed:true,running:true,signedIn:true},intent:{on:true},

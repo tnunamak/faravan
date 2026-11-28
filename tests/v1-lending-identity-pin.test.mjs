@@ -5,7 +5,7 @@ import {mkdtempSync, writeFileSync, readFileSync, rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createIdentityPinStore} from '../lib/v1/lending-identity-pin.mjs';
-import {claudeAccountMatch} from '../lib/v1/lending-pace50-source.mjs';
+import {claudeAccountMatch} from '../lib/v1/lending-readiness.mjs';
 
 const A = {account_sha256_16: '1111222233334444', email_sha256_16: 'aaaa0000bbbb1111'};
 const B = {account_sha256_16: '9999888877776666', email_sha256_16: 'cccc2222dddd3333'};

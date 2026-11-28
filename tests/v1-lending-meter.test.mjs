@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseCodexRateLimits, parseClaudeStream, parseClaudeRateLimit, parseCodexRollout, parseClaudeUsage, parseCodexUsage, parseGuardMeterLine,
   normalizeGuardUsage, priceListUsd, priceCodexCredits, meterJob, publicBudgetReceipt, modelFamily, emptyTokens, PRICE_CATALOG, jobUsage } from '../lib/v1/lending-meter.mjs';
-import { lendingBudgetFor, usageUnits } from '../lib/v1/lender-pace50.mjs';
+
 import { lendingQuotaLinesVM } from '../ui/v1/src/view-models.mjs';
 
 const fixture = name => readFileSync(new URL('./fixtures/lending/' + name, import.meta.url), 'utf8');
@@ -193,39 +193,10 @@ test('Claude usage without the 5m/1h split prices its cache writes at 1h, the ra
   assert.equal(meterJob({ provider: 'claude', model: parsed.model, tokens: parsed.tokens, calls: parsed.calls }).list_usd_micros, ARTIFACT_LIST_MICROS);
 });
 
-test('usageUnits: a Claude job whose stream carries no usage is priced from the guard tokens it observed, not from zero', () => {
-  // The run completed: its guard reading is final, so its counted tokens are the run's total.
-  const execution = { stdout: '', lending_meter: { model: 'claude-haiku-5-5', cost_usd: null, final: true, tokens: ARTIFACT_EMITTED } };
-  const { metered, units_micro } = usageUnits({ provider: 'claude', model: 'claude-haiku-5-5', execution });
-  assert.equal(metered.list_usd_micros, ARTIFACT_LIST_MICROS);
-  assert.equal(units_micro, ARTIFACT_LIST_MICROS);
-});
-
-test('usageUnits: the stream own usage, with its 5m/1h split, wins over the guard tokens', () => {
-  const stdout = JSON.stringify({ type: 'assistant', message: { id: 'm1', model: 'claude-haiku-5-5', usage: {
-    input_tokens: 2, output_tokens: 259, cache_read_input_tokens: 11236, cache_creation_input_tokens: 18154,
-    cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 18154 } } } });
-  // The stream ends with a successful result, so its own usage is the run's complete total, and it wins over the guard reading.
-  const complete = stdout + '\n' + JSON.stringify({ type: 'result', subtype: 'success', is_error: false });
-  const execution = { stdout: complete, lending_meter: { model: 'claude-haiku-5-5', cost_usd: null, final: true, tokens: { input: 1, cached_input: 1, cache_write: 1, output: 1, reasoning_output: 0 } } };
-  assert.equal(usageUnits({ provider: 'claude', model: 'claude-haiku-5-5', execution }).metered.list_usd_micros, ARTIFACT_LIST_MICROS);
-});
-
 test('priceListUsd and jobUsage refuse a foreign key even beside calls, and calls must add up to the aggregate', () => {
   assert.throws(() => priceListUsd('claude-haiku-5-5', { input: 100 }, { calls: [{ ...emptyTokens(), output: 1, prompt: 100 }] }), /unknown token key "input"/);
   assert.throws(() => priceListUsd('claude-haiku-5-5', { ...emptyTokens(), output: 259 }, { calls: [{ ...emptyTokens(), prompt: 0 }] }), /do not add up/);
   assert.throws(() => jobUsage({ provider: 'claude', stream: { tokens: { input: 100 }, calls: null } }), /unknown token key "input"/);
-});
-
-test('usageUnits: an unpriced model with no provider cost has unknown units, never zero', () => {
-  const stdout = JSON.stringify({ type: 'assistant', message: { id: 'm1', model: 'mystery-model', usage: { input_tokens: 2, output_tokens: 259 } } });
-  const { units_micro } = usageUnits({ provider: 'claude', model: 'mystery-model', execution: { stdout, lending_meter: { model: 'mystery-model', cost_usd: null } } });
-  assert.equal(units_micro, null);
-});
-
-test('lendingBudgetFor: an unpriced Claude model is refused at admission; a priced one gets the chunk budget', () => {
-  assert.equal(lendingBudgetFor({ provider: 'claude', model: 'mystery-model' }), null);
-  assert.equal(lendingBudgetFor({ provider: 'claude', model: 'claude-haiku-5-5' }).budget.unit, 'claude_usd');
 });
 
 test('worstCallUsd: the most one call can cost at the prompt sizes it can reach; Haiku 5.5 is priced at its higher tier above 100k', async () => {
@@ -244,32 +215,6 @@ test('a cache_creation object without an explicit 1h count prices its writes at 
   assert.deepEqual([bare.tokens.cache_write_5m, bare.tokens.cache_write_1h], [0, 18154]);
   const explicit = streamWith({ ephemeral_5m_input_tokens: 18154, ephemeral_1h_input_tokens: 0 });
   assert.deepEqual([explicit.tokens.cache_write_5m, explicit.tokens.cache_write_1h], [18154, 0]);
-});
-
-test('P2-3: missing inband limit fields stay unknown and cannot prove clear funding', async () => {
-  const {codexSubscriptionFunding} = await import('../lib/v1/lending-pace50-source.mjs');
-  const verdict = fields => parseCodexRateLimits(fields, T).limit_reached;
-  for (const fields of [{}, {rate_limit_reached_type: null}, {spend_control_reached: false},
-    {rate_limit_reached_type: false, spend_control_reached: false}]) {
-    assert.equal(verdict(fields), undefined);
-    assert.equal(codexSubscriptionFunding({plan_type: 'pro', limit_reached: verdict(fields)}).subscription_only, 'unknown');
-  }
-  const clear = {rate_limit_reached_type: null, spend_control_reached: false};
-  assert.equal(verdict(clear), false);
-  assert.equal(verdict({rate_limit_reached_type: 'weekly'}), true);
-  assert.equal(verdict({spend_control_reached: true}), true);
-  const line = fields => JSON.stringify({payload: {type: 'token_count', rate_limits: fields}});
-  assert.equal(parseCodexRollout('').limit_reached, undefined);
-  assert.equal(parseCodexRollout(line(clear)).limit_reached, false);
-  assert.equal(parseCodexRollout([line(clear), line({}), line(clear)].join('\n')).limit_reached, undefined);
-  assert.equal(parseCodexRollout([line({spend_control_reached: true}), line({}), line(clear)].join('\n')).limit_reached, true);
-  for (const [fields, expected] of [[{}, undefined], [{limit_reached: null}, undefined],
-    [{limit_reached: false}, false], [{limit_reached: true}, true]]) {
-    const parsed = parseGuardMeterLine(JSON.stringify({type: 'faravan.meter', v: 1, windows: [], ...fields}));
-    assert.equal(parsed.limit_reached, expected);
-    assert.equal(codexSubscriptionFunding({plan_type: 'pro', limit_reached: parsed.limit_reached}).subscription_only,
-      expected === false ? 'proven' : 'unknown');
-  }
 });
 
 test('Codex fractional window minutes retain their provider id and duration', () => {

@@ -25,6 +25,15 @@ function requestJob(runRequest = {schemaVersion: 1, models: 'any', effortId: nul
 }
 const model = (id, over = {}) => ({id, label: id, enabled: true, rank: 0, pareto: null, efforts: [{id: 'low', label: 'Low'}, {id: 'high', label: 'High'}], defaultEffort: 'low', ...over});
 
+test('new designated work requires its capability while historical signed bytes remain readable',()=>{
+  const job=requestJob(undefined,{designated_member:'sha256:'+'a'.repeat(64)});
+  job.requirements.capabilities=job.requirements.capabilities.filter(value=>value!=='designated_member_v1');
+  assert.equal(p.checkNewJob(job).ok,false);
+  assert.equal(p.verifyEnvelope('job',rawSign('job',job),pub[0]).ok,true);
+  job.requirements.capabilities.push('designated_member_v1');
+  assert.equal(p.checkNewJob(job).ok,true);
+});
+
 test('a job may carry a run request only together with its capability, and the signature covers it', () => {
   const ok = requestJob({schemaVersion: 1, models: [{providerId: 'claude', modelId: 'opus'}], effortId: 'high'});
   const signed = p.signEnvelope('job', ok, keys[0]);
@@ -103,4 +112,12 @@ test('a signed receipt cannot report a different model from its selection', () =
   result.receipt.capabilities_applied = [...result.receipt.capabilities_applied, CAP];
   result.receipt.model = 'other-model';
   assert.throws(() => p.signEnvelope('result', result, keys[1]));
+});
+
+
+test('new signed jobs require a run request and reject removed dollar caps',()=>{
+  const missing=requestJob();delete missing.runRequest;
+  assert.throws(()=>p.signEnvelope('job',missing,keys[0]));
+  for(const removed of [{budget_v1:{max_list_usd:1}},{auto_run_v1:{intent:'cheapest'}}])
+    assert.throws(()=>p.signEnvelope('job',requestJob(undefined,removed),keys[0]));
 });

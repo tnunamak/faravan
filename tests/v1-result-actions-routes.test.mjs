@@ -16,8 +16,9 @@ const gitInput = circle => ({circle:circle.id,git:'https://github.com/example/sy
 
 test('Apply to working tree: the route checks its input and the job; a refusal is a 409 with its code',testOptions,async t=>{
   const f=await appFixture(t),{owner,circle}=await f.connect();
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:gitInput(circle)});
-  const post=(body,status)=>api(owner.app,jobPath(sent.jobDigest)+'/working-tree',{method:'POST',body,status});
+  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:gitInput(circle),headers:{'faravan-confirm':'yes'}});
+  // The client models a confirmed HTTP client, so input checks are reached past the confirmation rule.
+  const post=(body,status)=>api(owner.app,jobPath(sent.jobDigest)+'/working-tree',{method:'POST',body,status,headers:{'faravan-confirm':'yes'}});
   await post({circle:circle.id,repo:'/x'},400);                                         // dry_run is required
   await post({circle:circle.id,dry_run:true,repo:'/x',surprise:1},400);                 // no unknown fields
   await post({circle:circle.id,dry_run:false,repo:'/x',files:'src/a.txt'},400);         // files is a list
@@ -30,7 +31,7 @@ test('Apply to working tree: the route checks its input and the job; a refusal i
 
 test('Remove this branch: only the recorded, untouched branch of this job is removed, and the record goes with it',testOptions,async t=>{
   const f=await appFixture(t),{owner,circle}=await f.connect();
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:gitInput(circle)}),digest=sent.jobDigest;
+  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:gitInput(circle),headers:{'faravan-confirm':'yes'}}),digest=sent.jobDigest;
   const post=(body,status)=>api(owner.app,jobPath(digest)+'/remove-branch',{method:'POST',body,status});
   const view=()=>api(owner.app,jobPath(digest)+'?circle='+circle.id);
   await post({circle:circle.id},400);

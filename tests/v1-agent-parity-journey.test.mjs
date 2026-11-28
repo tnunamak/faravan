@@ -29,7 +29,8 @@ function mcpPeer(t, opsClient, roots, home) {
       if (!message.method && waiting.has(message.id)) { waiting.get(message.id)(message); waiting.delete(message.id); }
     }
   });
-  const running = runMcpServer({input, output, opsClient, roots, home, toolsets:['all']});
+  // The app home is outside the checkout; the parity journey tests confirmation, not the repository fence.
+  const running = runMcpServer({input, output, opsClient, roots, home, cwd:home, toolsets:['all']});
   t.after(async () => { input.end(); await running; });
   const request = (method, params = {}) => new Promise(resolve => {
     const n = ++id; waiting.set(n, resolve);

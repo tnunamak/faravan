@@ -39,7 +39,7 @@ test('a host older than this build needs is the circle row of the blockers model
   const { lender, circle } = await f.connect({ backend: healthy(f.root), faravanVersion: '0.12.0', minHostVersion: '0.12.0', hostProfileMs: 50, blockerRecheckMs: 50 });
   await lending(lender.app, circle);
   const status = await waitFor(async () => { const s = await api(lender.app, '/api/status'); return s.lending_blockers?.first?.key === 'circle' && s; }, 'the host row blocks');
-  assert.equal(status.reason, 'circle_update_needed');
+  assert.equal(status.reason, 'cannot_run_here', 'the closed lending list names a host older than this build needs like any host too old');
   assert.match(status.lending_blockers.first.detail, /runs Faravan 0\.11\.2\. This computer needs 0\.12\.0 or later/);
   assert.equal(status.intent.on, true);
 });
@@ -67,7 +67,8 @@ test('during a host outage, Lending names the unreachable circle and never blame
   await lending(lender.app, circle);
   f.override = async record => { if (record.route === '/capabilities' && f.hostDown) { record.res.writeHead(503, { 'content-type': 'application/problem+json' }); record.res.end(JSON.stringify({ type: 'urn:faravan:problem:unavailable', title: 'unavailable', status: 503, code: 'unavailable', retryable: true, outcome: 'not_applied' })); return true; } return false; };
   f.hostDown = true;
-  const down = await waitFor(async () => { const s = await api(lender.app, '/api/status'); return s.reason === 'circle_unreachable' && s.host?.reachable === false && s; }, 'two misses make the host unreachable', 30000);
+  // The lender re-proves its account after the host is seen down; until then the projection reads 'sandbox_check_pending' (app.mjs admissionChanged).
+  const down = await waitFor(async () => { const s = await api(lender.app, '/api/status'); return s.reason === 'circle_unreachable' && s.host?.reachable === false && s.lendingProjection.admissionReason === 'circle_unreachable' && s; }, 'two misses make the host unreachable', 30000);
   // The status names the circle and its host, so Lending can say who is unreachable instead of blaming checks that passed.
   assert.equal(down.lendingProjection.admissionReason, 'circle_unreachable');
   assert.equal(down.lending_blockers.first.label, circle.name);

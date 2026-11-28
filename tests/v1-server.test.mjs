@@ -1,4 +1,5 @@
 import './helpers/no-browser.mjs';
+import {currentAdvertisement,accountHeartbeat,selectionForJob,currentReceipt} from './helpers/current-job-advertisement.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, request as httpRequest } from 'node:http';
@@ -60,11 +61,11 @@ const circle = vectors.job.payload.circle;
 const base = '/v1/circles/' + circle;
 const start = Date.parse('2026-10-09T12:00:00Z') / 1000;
 const iso = n => new Date(n * 1000).toISOString().replace('.000Z', 'Z');
-const ad = {
+const ad = currentAdvertisement({
   harnesses: ['codex'], models: ['example-model'], capabilities: ['patch-output'],
   egress: ['provider-only'], enforced_limits: Object.keys(vectors.job.payload.requirements.limits),
   max_limits: vectors.job.payload.requirements.limits,
-};
+});
 const sourceBytes = Buffer.from('test-only compressed source fixture');
 const promptBytes = Buffer.from('test-only prompt');
 const candidate = Buffer.from('--- a/test\n+++ b/test\n');
@@ -117,9 +118,11 @@ async function fixture(t, options = {}) {
       let snapshot = bootstrap ? { current: null, history: [], highestAcceptedEpoch: 0 } :
         { current: roster, history: [], highestAcceptedEpoch: roster.payload.epoch,
           highestAcceptedDigest: p.digest(roster.payload) };
-      return createClient({ origin, circle, deviceKey: keys[index], pinnedRootFingerprint: ids[2],
+      const client=createClient({ origin, circle, deviceKey: keys[index], pinnedRootFingerprint: ids[2],
         rosterCache: { get: async () => snapshot, set: async value => { snapshot = value; } },
         clock: () => now, retry: { maxAttempts: 1 }, ...extra });
+      if(extra.accountClaims!==false){const claim=client.claimNext;client.claimNext=async(...args)=>{await client.heartbeat(accountHeartbeat(ad));return claim(...args);};}
+      return client;
     },
     signed(index, method, route, body, options = {}) {
       const bytes = body === undefined ? Buffer.alloc(0) :
@@ -131,7 +134,7 @@ async function fixture(t, options = {}) {
         method, target: origin + base + route, body: bytes, content_type: contentType,
         artifact_media_type: options.mediaType ?? '', idempotency_key: key,
         created: now, nonce: randomBytes(24).toString('base64url'), ...options.proof }, keys[index]);
-      const headers = { 'Faravan-Proof': proof };
+      const headers = { 'Faravan-Proof': proof, 'Faravan-Client-Capabilities':'run_request_v1' };
       if (contentType) headers['Content-Type'] = contentType;
       if (!['GET', 'HEAD'].includes(method)) headers['Content-Length'] = String(options.length ?? bytes.length);
       if (options.mediaType) headers['Faravan-Media-Type'] = options.mediaType;
@@ -143,6 +146,7 @@ async function fixture(t, options = {}) {
     },
     async quota(index = 0) { return (await f.raw(index, 'GET', '/quotas')).json(); },
     async job(client, overrides = {}) {
+
       const source = { kind: 'archive', artifact: await client.uploadArtifact(sourceBytes, 'application/gzip') };
       const prompt = await client.uploadArtifact(promptBytes, 'text/plain');
       return { ...structuredClone(vectors.job.payload), source, prompt, roster_epoch: f.epoch,
@@ -371,7 +375,7 @@ test('v1 HTTP client enrolls, approves, long-polls, renews, completes and verifi
     const result = { ...structuredClone(vectors.result.payload), ...outputs,
       executor: ids[1], roster_epoch: f.epoch, job_digest: submitted.jobDigest,
       attempt_id: renewed.attempt_id, generation: renewed.generation, submitted_at: iso(f.now),
-      receipt: { ...vectors.result.payload.receipt, source: payload.source,
+      receipt: { ...currentReceipt(vectors.result.payload.receipt,selectionForJob(payload,ad)), source: payload.source,
         started_at: iso(start), finished_at: iso(f.now), duration_ms: 10000 } };
     const waiting = borrower.waitForJob(submitted.jobDigest, { timeoutMs: 2000, pollMs: 10 });
     assert.equal((await lender.completeAttempt(renewed, result)).status, 'result-accepted');
@@ -1134,6 +1138,7 @@ test('v1 HTTP null optional durations are invalid while omitted durations still 
       await problem(await f.raw(1, 'POST', route, { advertisement: ad, [field]: null }), 400, 'invalid_request');
     }
   }
+  await f.client(1).heartbeat(accountHeartbeat(ad));
   const claimed = await f.raw(1, 'POST', claimRoute, { advertisement: ad });
   assert.equal(claimed.status, 200); const { attempt } = await claimed.json();
   assert.equal(Date.parse(attempt.lease_expires_at) / 1000 - f.now, 120);
@@ -1174,7 +1179,7 @@ test('v1 HTTP unknown artifact commit outcome keeps installed bytes for reconcil
 test('v1 HTTP response byte limits bound pages and reject oversized control replies', async t => {
   const f = await fixture(t), borrower = f.client(0);
   const requirements = { ...vectors.job.payload.requirements,
-    model: { any_of: Array.from({ length: 36 }, (_, i) => i + 'é'.repeat(2040)) } };
+    harness: Array.from({ length: 36 }, (_, i) => i + 'é'.repeat(2040)) };
   for (let i = 0; i < 2; i++) {
     const job = p.signEnvelope('job', await f.job(borrower, { requirements }), keys[0]);
     assert.equal((await f.raw(0, 'POST', '/jobs', job)).status, 201);
@@ -1888,7 +1893,7 @@ const hb = (seq, extra = {}) => ({ seq, intent: { state: 'ready', reason: null, 
 
 test('v1 presence: heartbeat online for 90 s by server time, blocked and paused devices stay visible, old lenders fall back to polls',
   { timeout: 10000 }, async t => {
-    const f = await fixture(t), author = f.client(0), lender = f.client(1);
+    const f = await fixture(t), author = f.client(0), lender = f.client(1,false,{accountClaims:false});
     const find = async id => (await author.fetchPresence()).devices.find(d => d.device === id);
     // Nobody has reported: both members are listed, offline, with no capabilities.
     let page = await author.fetchPresence();
@@ -1921,7 +1926,7 @@ test('v1 presence: heartbeat online for 90 s by server time, blocked and paused 
   });
 
 test('v1 presence: a restarted lender (new boot, seq back at 0) replaces the stored heartbeat; the same boot stays ordered', { timeout: 10000 }, async t => {
-  const f = await fixture(t), author = f.client(0), lender = f.client(1);
+  const f = await fixture(t), author = f.client(0), lender = f.client(1,false,{accountClaims:false});
   const find = async () => (await author.fetchPresence()).devices.find(d => d.device === ids[1]);
   await lender.heartbeat(hb(2880, { boot: 'bootAAAAAAAA1', intent: { state: 'ready', reason: null, until: null } }));
   // Same boot, older seq: acknowledged, not stored.
@@ -1942,7 +1947,7 @@ test('v1 presence: a restarted lender (new boot, seq back at 0) replaces the sto
 });
 
 test('v1 presence: a poll alone is online with source poll; malformed heartbeats are rejected', { timeout: 10000 }, async t => {
-  const f = await fixture(t), author = f.client(0), lender = f.client(1);
+  const f = await fixture(t), author = f.client(0), lender = f.client(1,false,{accountClaims:false});
   await author.submitJob(await f.job(author));
   await lender.claimNext(ad, { waitSeconds: 0 });
   const d = (await author.fetchPresence()).devices.find(x => x.device === ids[1]);
@@ -2044,7 +2049,7 @@ async function finish(f, author, lender, overrides = {}) {
   const outputs = await lender.uploadResultArtifacts({ candidate, transcript });
   const result = { ...structuredClone(vectors.result.payload), ...outputs, executor: ids[1], roster_epoch: f.epoch, job_digest: submitted.jobDigest,
     attempt_id: started.attempt_id, generation: started.generation, submitted_at: iso(f.now),
-    receipt: { ...vectors.result.payload.receipt, source: payload.source, started_at: iso(f.now - 10), finished_at: iso(f.now), duration_ms: 10000 } };
+    receipt: { ...currentReceipt(vectors.result.payload.receipt,selectionForJob(payload,ad)), source: payload.source, started_at: iso(f.now - 10), finished_at: iso(f.now), duration_ms: 10000 } };
   assert.equal((await lender.completeAttempt(started, result)).status, 'result-accepted');
   return { digest: submitted.jobDigest, payload, outputs };
 }

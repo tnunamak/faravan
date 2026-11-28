@@ -6,8 +6,9 @@ import {fileURLToPath} from 'node:url';
 import {join,resolve} from 'node:path';
 // Private repositories are refused by name; the public repository is allowed. GitHub names are case-insensitive, and
 // a repository is its owner and name segments, so a longer name that starts the same way is another repository.
-// The names are assembled so the exported text does not spell them.
-const PRIVATE_REPOSITORIES=[['faravan'],['faravan','mirror']].map(parts=>['tnunamak',parts.join('-')].join('/'));
+// The names are assembled so the exported text does not spell them, and so the export's rename (which turns the
+// private repository's name into the public one) leaves them as they are.
+const PRIVATE_REPOSITORIES=[['feder'+'ation'],['faravan','mirror']].map(parts=>['tnunamak',parts.join('-')].join('/'));
 const REPOSITORY_HOSTS=new Set(['github.com','www.github.com','raw.githubusercontent.com','codeload.github.com']);
 export function privateRepository(url) {
   if(!REPOSITORY_HOSTS.has(url.hostname))return false;

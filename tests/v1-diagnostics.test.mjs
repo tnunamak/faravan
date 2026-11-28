@@ -96,7 +96,7 @@ test('real saved archive excludes planted private content in every input store a
   assertBoundary(preview);
   const facts = factsOf(preview);
   assert.equal(facts.settings.limits.dailyJobs, 3);
-  assert.equal(facts.owner_limit.maxJobUsd, 2);
+  assert.equal(Object.hasOwn(facts,'owner_limit'), false);
   assert.equal(facts.readiness.checks[0].name, 'docker_login');
   assert.equal(facts.errors[0].code, 'network_error');
   assert.equal(facts.lending.state, 'paused');

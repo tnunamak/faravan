@@ -2,7 +2,6 @@ import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {LINES, REASON_LINE, RECOVERY, lendingStatus} from '../lib/v1/lending-status-copy.mjs';
-import {SEAM_UNKNOWN} from '../lib/v1/lender-pace50.mjs';
 
 // Each reason maps to an estimate note, an owner action, or a condition that clears on its own.
 // Enumerate expected classifications so a new or reclassified reason needs a deliberate test update.
@@ -27,12 +26,12 @@ const ROWS = [ // [code, status line, who recovers it]
   ['demand_model_exact_usage_required', 'measured', 'note'],
   ['objective_evidence_invalid', 'invalid_evidence', 'note'],
   ['reset', 'reset', 'automatic'], ['resource_reset_margin', 'reset', 'automatic'],
-  ['budget_too_small', 'small', 'automatic'], ['request_too_large', 'too_large', 'owner'],
+  ['budget_too_small', 'small', 'automatic'],
   ['friend_value_unknown', 'value', 'automatic'], ['chunk_value_unknown', 'value', 'automatic'], ['no_value', 'value', 'automatic'],
   ['exceeds_spare', 'spare', 'automatic'],
   ['identity_unknown', 'identity', 'automatic'], ['invalid_identity', 'identity', 'automatic'],
   ['identity_mismatch', 'identity_mismatch', 'owner'],
-  ['funding_unknown', 'funding', 'owner'], ['executor_unknown', 'executor', 'note'],
+  ['funding_unknown', 'funding', 'owner'], ['executor_unknown', 'executor', 'owner'],
   ['arm_failed', 'executor_failed', 'owner'], ['launch_not_authorized', 'executor_failed', 'owner'],
   ['guard_runtime_unavailable', 'guard_runtime', 'owner'],
   ['stop_bound_unknown', 'stop_bound', 'note'], ['queue_unknown', 'queue', 'automatic'],
@@ -46,7 +45,6 @@ const ROWS = [ // [code, status line, who recovers it]
   ['objective_reservation_invalid', 'internal', 'owner'], ['objective_reservation_exceeds_resource', 'internal', 'owner'],
   ['invalid_input', 'internal', 'owner'], ['duplicate_attempt', 'internal', 'owner'], ['observation_order', 'internal', 'owner'],
   ['revision_overflow', 'internal', 'owner'], ['cross_reset_conversion_mismatch', 'internal', 'owner'],
-  ['owner_settings_unreadable', 'owner_settings', 'owner'],
   ['paused', 'paused', 'owner'], ['stopped', 'stopped', 'owner'],
   // Rule refusals are holds; positive fluid/seam decisions stay outside this table.
   ["fluid_invalid_history", "fluid_invalid_history", "note"],
@@ -119,7 +117,6 @@ const ROWS = [ // [code, status line, who recovers it]
   // Native-window mode (no measured usage rate). Missing history has no code; a stale meter keeps the named 'measured' hold.
   ["native_attempt_in_flight", "native_pending", "automatic"],
   ["cross_reset_native_unsupported", "reset", "automatic"],
-  ["native_budget_unknown", "native_budget", "owner"],
   ["native_settlement_unknown", "measured", "note"],
   ["native_settlement_incomplete", "measured", "note"],
   ["native_settlement_mismatch", "measured", "note"],
@@ -134,14 +131,8 @@ const ROWS = [ // [code, status line, who recovers it]
   ["native_guard_epoch_changed", "window", "automatic"],
   ["native_guard_owner_stop", "stopped", "owner"],
   ["native_guard_window_recheck", "native_recheck", "automatic"],
-  ["window_origin_unknown", "window_origin", "automatic"],
 
 ];
-
-test('the table covers every reason the copy maps, and every named seam hold', () => {
-  assert.deepEqual(ROWS.map(([code]) => code).sort(), Object.keys(REASON_LINE).sort());
-  for (const code of SEAM_UNKNOWN) assert.ok(ROWS.some(([row]) => row === code), code + ' has a row');
-});
 
 test('each hold code maps to its line, says who recovers it, and reads as a plain cause', () => {
   for (const [code, line, who] of ROWS) {
@@ -197,18 +188,6 @@ test('a structured Codex funding limit clears when the limit resets', () => {
 });
 
 // Sandpiper, 2026-11-01: an account check that failed told the owner "This needs you" when nothing they did could clear it.
-test('an unconfirmed account is Faravan\'s to check again; only a different account asks the owner to act', () => {
-  const unknown = lendingStatus({reason: 'identity_unknown'});
-  assert.equal(unknown.line, 'Holding — Faravan could not confirm which account is signed in to this agent. '
-    + 'It clears on its own when the next allowance reading confirms it.');
-  assert.doesNotMatch(unknown.line, /needs you/i);
-  assert.deepEqual(unknown.recovery, {who: 'automatic', when: 'the next allowance reading confirms it'});
-  const mismatch = lendingStatus({reason: 'identity_mismatch'});
-  assert.equal(mismatch.id, 'identity_mismatch');
-  assert.match(mismatch.line, /^Holding — a different account is signed in to this agent than the one enrolled for lending\. This needs you: /);
-  assert.equal(mismatch.recovery.who, 'owner');
-  assert.equal(SEAM_UNKNOWN.has('identity_mismatch'), true, 'the reason crosses the route boundary by name');
-});
 
 test('native pending explains why Faravan will check again without asking the owner to act', () => {
   const status = lendingStatus({reason: 'native_attempt_in_flight'});

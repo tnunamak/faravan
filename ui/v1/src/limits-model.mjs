@@ -63,16 +63,3 @@ export function guardUnsavedLimits(win, doc, confirmLeave = () => win.confirm('D
   return () => { win.removeEventListener('beforeunload', unload); win.removeEventListener('hashchange', hash, true); doc.removeEventListener('click', click, true); };
 }
 
-// Owner money input is canonical cents, not a rounded binary-float comparison.
-// Exponent notation is deliberately not accepted by this decimal-dollar field.
-export function ownerLimitAmount(value, minimum) {
-  const text = String(value).trim();
-  const range = 'Enter an amount from $' + minimum + ' to $1,000,000.';
-  if (!text || !Number.isFinite(Number(text)) || Number(text) < minimum || Number(text) > 1000000)
-    return {amount: null, error: range};
-  if (!/^\d+(?:\.\d{1,2})?$/.test(text))
-    return {amount: null, error: 'Enter a dollar amount with no more than two decimal places.'};
-  const [whole, fraction = ''] = text.split('.');
-  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
-  return {amount: cents / 100, error: ''};
-}

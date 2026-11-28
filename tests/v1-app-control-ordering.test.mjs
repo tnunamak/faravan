@@ -7,6 +7,7 @@ import {AppLifetime} from '../lib/v1/app-lifetime.mjs';
 import {clientFailure} from '../lib/v1/client.mjs';
 function runInNewContext(source,context) {
   context.lifetime??=new AppLifetime();
+  context.stopCheckCoordinator??=null;
   context.clientFailure=clientFailure;
   context.resumeRetryAt??=0;context.resumeRetryDelay??=0;
   return runVM(source,context);
@@ -200,8 +201,8 @@ for(const timed of [false,true])test('held Pause settlement cannot override '+(t
     approvals:new Map(),acceptedApprovalPromises:new Set(),clearTimeout:()=>{},now:()=>time,
     paceEventId:type=>type,emit:(kind,event)=>{if(kind==='lending-action')actions.push(event.action);},readinessChanged:()=>{},closeReadingSandboxes:async()=>{},
     settleWithin,save:async()=>{},lendingTarget:async()=>({id:'circle'}),fail,pendingAttempts,counterStore:{get:async()=>null},
-    lendingRuntime:{pace50:{deliver:async e=>{events.push(e.type);durable=e.type==='on'?'on':e.type==='pause'?'paused':'off';return {applied:true};}}},
     lender:{getState:()=>({current:null}),pause:()=>{},resume:()=>{},settleAcceptedOffers:()=>{entered.resolve();return release.promise;}}};
+  c.save=async()=>{const event=c.settings.paused||c.settings.pause_until?'pause':c.settings.intent;events.push(event);durable=event==='pause'?'paused':event;};
   c.lendingView=()=>({enabled:c.settings.enabled,intent:c.settings.intent});
   const start=runInNewContext(starts+'\nstartLending;',c);
   // Capture the production timer callback, then fire it at the deadline with a
@@ -224,7 +225,7 @@ for(const timed of [false,true])test('held Pause settlement cannot override '+(t
   assert.equal(c.settings.intent,'on');
   assert.equal(c.settings.paused,false);
   assert.equal(c.settings.pause_until,null);
-  assert.equal(durable,'on','the older continuation cannot pause the resumed candidate');
+  assert.equal(durable,'on','the older continuation cannot overwrite the resumed settings');
   assert.deepEqual(events,['pause','on'],'durable Pause precedes settlement and Resume');
   assert.equal(actions.at(-1),'resumed','no stale paused action follows Resume');
 });
@@ -233,8 +234,8 @@ test('Pause closes waiting reviews without hiding offers before durable storage'
   const durable=gate();let hidden=false,finished=false;
   const c={updateAdmissionHeld:()=>false,cancelResumes:()=>{},parts:['api','lending','pause'],settings:{enabled:true,intent:'on'},policy:{enabled:true},
     safetyEpoch:0,safetyIntentEpoch:0,timedResume:null,closed:false,approvals:new Map([['offer-a',{finish:()=>{finished=true;}}]]),acceptedApprovalPromises:new Set(),schedulePauseEnd:()=>{},
-    now:()=>100,paceEventId:type=>type,save:async()=>{},emit:()=>{},readinessChanged:()=>{},closeReadingSandboxes:async()=>{},settleWithin,fail,
-    lendingRuntime:{pace50:{deliver:()=>durable.promise}},
+    now:()=>100,paceEventId:type=>type,emit:()=>{},readinessChanged:()=>{},closeReadingSandboxes:async()=>{},settleWithin,fail,
+    save:()=>durable.promise,
     lender:{pause:()=>{},hideWaitingOffers:async()=>{hidden=true;},settleAcceptedOffers:async()=>{}},
     lendingView:()=>({enabled:false})};
   const pause=runInNewContext(`(async function(input){${pauseRoute}})`,c);
@@ -249,8 +250,8 @@ test('a refused Resume cannot discard the earlier Pause save',async()=>{
     policy:{enabled:true},safetyEpoch:0,safetyIntentEpoch:0,timedResume:null,closed:false,quitting:false,lenderInit:null,pauseTimer:null,clearTimeout:()=>{},resumeFailed:null,
     checkSignInBeforeClaim:async()=>{},
     approvals:new Map(),acceptedApprovalPromises:new Set(),schedulePauseEnd:()=>{},now:()=>100,paceEventId:type=>type,
-    save:async value=>{writes.push(structuredClone(value??c.settings));},emit:()=>{},readinessChanged:()=>{},closeReadingSandboxes:async()=>{},settleWithin,fail,
-    lendingTarget:async()=>fail('circle_required',409),lendingRuntime:{pace50:{deliver:()=>durable.promise}},
+    save:async value=>{writes.push(structuredClone(value??c.settings));await durable.promise;},emit:()=>{},readinessChanged:()=>{},closeReadingSandboxes:async()=>{},settleWithin,fail,
+    lendingTarget:async()=>fail('circle_required',409),
     lender:{getState:()=>({current:null}),pause:()=>{},hideWaitingOffers:async()=>{},settleAcceptedOffers:async()=>{}}};
   c.lendingView=()=>({enabled:c.settings.enabled,intent:c.settings.intent});
   const pause=runInNewContext(`(async function(input){${pauseRoute}})`,c);
@@ -278,7 +279,7 @@ test('Off preserves a rule save already ahead of it in the production settings q
   const c={updateAdmissionHeld:()=>false,cancelResumes:()=>{},parts:['api','lending','off'],settings:{enabled:true,intent:'on',modes:{},standingRules:[]},policy:{enabled:true},
     safetyEpoch:0,safetyIntentEpoch:0,timedResume:null,closed:false,settingsFile:'synthetic-settings',atomic:async(_file,value)=>{disk=structuredClone(value);},
     approvals:new Map(),schedulePauseEnd:()=>{},now:()=>100,paceEventId:type=>type,
-    lendingRuntime:{pace50:{deliver:async()=>{}}},lender:{pause:()=>{}},emit:()=>{},readinessChanged:()=>{},closeReadingSandboxes:async()=>{},fail};
+    lender:{pause:()=>{}},emit:()=>{},readinessChanged:()=>{},closeReadingSandboxes:async()=>{},fail};
   c.lendingView=()=>({enabled:c.settings.enabled,intent:c.settings.intent});
   const writes=slice('  let settingsWrites=Promise.resolve();','  const counterStore=createLenderCounterStorage');
   const queue=runInNewContext(writes+'\n({save,persistSettings});',c);c.save=queue.save;

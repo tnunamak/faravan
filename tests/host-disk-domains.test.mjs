@@ -203,23 +203,19 @@ test('app readiness, blocker headline and machine hold preserve unreadable disk 
     appSection('const checks=(report?.preflight?.checks??[])', 'const names=value=>') + 'return checks;');
   const checks = normalize({ preflight: { checks: [failed] } }, x => typeof x === 'string' ? x.slice(0, 1024) : '', c => c.fix);
   assert.equal(checks[0].reason, 'host_disk_unreadable');
-  const requirements = new Function('readinessCache', 'daemonRestart',
-    appSection('const readinessRequirements=', 'const hold=recoveryReadHold()') + 'return readinessRequirements;')({ checks }, null);
+  const requirements = new Function('readiness', 'daemonRestart',
+    appSection('const readinessRequirements=', 'const within=started=>') + 'return readinessRequirements;')({ checks }, null);
   assert.equal(requirements[0].cause, 'host_disk_unreadable');
   const model = lendingBlockers({docker: { installed: true, running: true, signedIn: true },readinessRequirements: requirements,intent: { on: true },agents: [{ id: 'claude', enabled: true, installed: true, signedIn: true }]});
   assert.match(model.headline, /could not read free disk space/);
   assert.doesNotMatch(model.headline, /low on disk space/);
-  const hold = new Function('createGate', 'preflight',
-    'const deadlineRecovery=createGate(); const updateAdmissionHeld=()=>false, hostProfiles=new Map(), settings={}, automaticTest=false, sandboxHealth={}, memberTooOld=()=>false;' +
-    appSection('function machineHold()', 'let blockerCheck=') + 'return machineHold();').bind(null, recoveryGate);
   const record = new Function('createGate', 'checks',
     'let preflight; const deadlineRecovery=createGate(); const sandboxHealth={observe(){}}, settings={}, now=()=>1, noteDocker=()=>{}, dockerSignedOutFrom=()=>false;' +
-    appSection('function noteChecks(checks)', 'async function checkDocker(') +
+    appSection('function noteChecks(checks)', 'const DOCKER_CONFIRMATION_BACKOFF_MS=') +
     'noteChecks(checks); return preflight;').bind(null, recoveryGate);
   for (const input of [checks, [failed]]) {
     const preflight = record(input);
     assert.equal(preflight.checks[0].reason, 'host_disk_unreadable');
-    assert.equal(hold(preflight), 'host_disk_unreadable');
   }
   // Exercise the raw checkDocker report path through its real readiness and noteChecks bodies.
   // checkDocker reads through the shared default-readiness observation; the stub forwards to the real readiness().
@@ -229,16 +225,37 @@ test('app readiness, blocker headline and machine hold preserve unreadable disk 
     'backend={protectionSummary:async()=>report}, JOB_DEFAULTS={}, refreshAbort={signal:undefined},' +
     'safeLine=x=>typeof x==="string"?x.slice(0,1024):"", appRemedy=c=>c.fix, boundaryVerified=()=>null, boundaryRecords=[],' +
     'refreshTestCache=async()=>{}, dockerProblem=()=>({}), defaultReadiness=({observation})=>readiness(undefined,{observation});' +
-    appSection('function noteChecks(checks)', "const SIGNED_OUT_REMEDY=") +
+    appSection('function noteChecks(checks)', 'const DOCKER_CONFIRMATION_BACKOFF_MS=') +
+    appSection('async function checkDocker(', "const SIGNED_OUT_REMEDY=") +
     appSection('async function readiness(', 'async function jobReadiness(') +
     'await checkDocker({force:true}); return preflight; })();').bind(null, recoveryGate);
-  assert.equal(hold(await raw({ preflight: { checks: [failed] } })), 'host_disk_unreadable');
-  assert.equal(hold(record([{ ...failed, reason: 'host_disk_low' }])), 'host_disk_low');
-  assert.equal(hold(record([{ name: 'host_disk', ok: false }])), 'host_disk_low');
+  assert.equal((await raw({ preflight: { checks: [failed] } })).checks[0].reason, 'host_disk_unreadable');
+  assert.equal(record([{ ...failed, reason: 'host_disk_low' }]).checks[0].reason, 'host_disk_low');
   for (const reason of [{}, 1, 'host_disk_unreadable\\nforged', 'other_reason']) {
     const preflight = record([{ ...failed, reason }]);
     assert.equal(Object.hasOwn(preflight.checks[0], 'reason'), false, 'only known reasons survive');
   }
+});
+
+test('claim gating: an unreadable disk does not stop lending, a low disk does', async () => {
+  const { dockerFacts } = await import('../lib/v1/docker-state.mjs');
+  const { LOW_DISK_ACTION, LOW_DISK_DETAIL } = await import('../lib/v1/lending-reasons.mjs');
+  const healthy = ['sbx_install', 'sbx_cli_contract', 'sbx_daemon', 'docker_runtime', 'kvm_access', 'sbx_credential_store',
+    'socket_path_length', 'hypervisor_platform', 'docker_login'].map(name => ({ name, ok: true }));
+  const facts = preflight => new Function('dockerFacts', 'LOW_DISK_ACTION', 'LOW_DISK_DETAIL', 'preflight',
+    'const deadlineRecovery={current:()=>null}, updateAdmissionHeld=()=>false, hostProfiles=new Map(), settings={}, memberTooOld=()=>false, now=()=>1, readinessCache=null;' +
+    appSection('function machineLendingFacts()', 'function machineSetupReason()') + 'return machineLendingFacts();')(dockerFacts, LOW_DISK_ACTION, LOW_DISK_DETAIL, preflight);
+  const unreadable = await readiness(diskWith({ '/data': new Error('EIO synthetic read failure') }));
+  assert.equal(unreadable.reason, 'host_disk_unreadable');
+  const open = facts({ checks: [...healthy, unreadable] });
+  assert.equal(open.runtime.canStart, true, 'an unreadable disk is unknown, so this computer still lends');
+  assert.deepEqual(open.waits, []);
+  const low = await readiness(diskWith({ '/data': { bavail: 1 * GiB / 4096, bfree: 1 * GiB / 4096, bsize: 4096 } }));
+  assert.equal(low.reason, 'host_disk_low');
+  const closed = facts({ checks: [...healthy, low] });
+  assert.equal(closed.runtime.canStart, false, 'a real low-disk reading holds claims');
+  assert.deepEqual(closed.runtime.nextAction, LOW_DISK_ACTION);
+  assert.equal(closed.runtime.detail, LOW_DISK_DETAIL);
 });
 
 test('resolved app home and cleanup reach backend watch on independent devices', async () => {

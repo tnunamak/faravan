@@ -32,7 +32,7 @@ async function finishedJob(t) {
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
   t.after(()=>{globalThis.fetch=realFetch;});
   const control=hostControl(f.origin);
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,
+  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',headers:{'faravan-confirm':'yes'},body:{circle:circle.id,
     git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic offline task',harness:'codex'}});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
@@ -78,9 +78,10 @@ test('saved reads stay within their byte budget; delete and leave forget what th
   for(const [circle,digest] of [['c1','j1'],['c1',null],['c2',null],['c2','j9']])big.remember(digest?jobReadKey(circle,digest,'changes?x'):jobListKey(circle),{n:1});
   big.forgetJob('j1','c1');
   assert.equal(big.recall(jobReadKey('c1','j1','changes?x')),null);assert.equal(big.recall(jobListKey('c1')),null,'its circle list goes too');
-  assert.ok(big.recall(jobListKey('c2'))&&big.recall(jobReadKey('c2','j9','changes?x')),'other circles stay');
+  assert.equal(big.recall(jobListKey('c2')),null,'deleting a digest invalidates every saved list');
+  assert.ok(big.recall(jobReadKey('c2','j9','changes?x')),'unrelated job copies stay');
   big.remember(jobReadKey('c1','j1','changes?x'),{n:2});assert.equal(big.recall(jobReadKey('c1','j1','changes?x')),null,'a read that finishes after the delete is not saved');
-  big.remember(jobListKey('c1'),[{job_digest:'j1'},{job_digest:'j7'}]);
+  big.remember(jobListKey('c1'),[{job_digest:'j1'},{job_digest:'j7'}],big.ticket(jobListKey('c1')));
   assert.deepEqual(big.recall(jobListKey('c1')).value,[{job_digest:'j7'}],'a list saved after the delete does not bring the job back');
   big.forgetCircle('c2');assert.equal(big.recall(jobListKey('c2')),null);assert.equal(big.recall(jobReadKey('c2','j9','changes?x')),null);
   assert.deepEqual(markSaved([{a:1},2],'T'),[{a:1,savedAt:'T',savedReason:'unreachable'},2]);
@@ -130,7 +131,8 @@ test('O5: saved copies outlive an app restart on disk, and delete and leave remo
   assert.deepEqual(again.recall(other).value,{job_digest:'j9'},'other circles stay');
   again.forgetCircle('c2');
   assert.equal(createSavedReads({directory}).recall(other),null,'leaving a circle removes its files');
-  assert.deepEqual(await readdir(directory),[],'nothing is left behind');
+  assert.deepEqual((await readdir(directory,{recursive:true})).filter(path=>path.endsWith('.json')),['authority.json'],
+    'payload copies are removed; durable invalidation authority stays');
 });
 
 test('O5: a result read before an app restart opens cold while its host is down',{timeout:90000},async t=>{
@@ -209,7 +211,7 @@ test('O-C: saved job rows project their last known status while the host is down
 test('one missing circle cannot hide healthy jobs or replay its saved list',{timeout:90000},async t=>{
   const {f,owner,circle,jobDigest}=await finishedJob(t);
   const missing=await api(owner.app,'/api/circles',{method:'POST',body:{origin:f.origin,name:'Synthetic removed circle'}});
-  const stale=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:missing.id,
+  const stale=await api(owner.app,'/api/jobs',{method:'POST',headers:{'faravan-confirm':'yes'},body:{circle:missing.id,
     git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic stale-circle task',harness:'codex'}});
   // Prime actual app caches from successful API reads, not injected cache entries.
   const primed=await api(owner.app,'/api/jobs');

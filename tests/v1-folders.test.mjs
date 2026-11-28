@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { git } from './helpers/git-guest.mjs';
-import { appFixture, api } from './helpers/v1-app-fixture.mjs';
+import { appFixture, api, browserApi } from './helpers/v1-app-fixture.mjs';
 import { inspectRepo, inspectProject, RepoError } from '../lib/v1/repo-source.mjs';
 import { expandPath, listFolders, scanRepos, createFolderService, FolderError } from '../lib/v1/folders.mjs';
 import { OPS } from '../lib/v1/ops/registry.mjs';
@@ -182,6 +182,7 @@ test('app API: folders.suggest and folders.list are registered read ops; refusal
     const op = OPS.find(o => o.id === id); assert.ok(op, id); assert.equal(op.safety, 'read'); assert.equal(op.rest.method, 'GET');
   }
   const f = await appFixture(t), {owner, circle} = await f.connect();
+  const ui=await browserApi(owner.app);
   const home = await tempHome(t);
   const {app, home:configHome} = await f.start('folders', {userHome:home});
   const r = await repo(join(home, 'code', 'proj'));
@@ -202,12 +203,12 @@ test('app API: folders.suggest and folders.list are registered read ops; refusal
   assert.deepEqual(refused.refusal, {code:'repo_missing', state:'compose.repo-missing', message:'No folder at ' + join(home, 'code', 'prj'),
     path:join(home, 'code', 'prj'), suggestions:[{path:r, name:'proj', branch:'main'}]});
   // the send refusal carries the same fields
-  const sent = await api(owner.app, '/api/jobs', {method:'POST', body:{circle:circle.id, prompt:'x', harness:'codex', repo:{path:join(home, 'missing')}}, status:409});
+  const sent = await ui('/api/jobs', {method:'POST', body:{circle:circle.id, prompt:'x', harness:'codex', repo:{path:join(home, 'missing')}}, status:409});
   assert.deepEqual([sent.code,sent.repo_code,sent.path],['repo_refused','repo_missing',join(home,'missing')]);
   const plain = await api(owner.app, '/api/repo/inspect', {method:'POST',body:{path:join(home,'code')}});
   assert.equal(plain.kind,'folder','plain folders retain the send-as-files path');
   // a successful send is remembered as its repository root too
-  await api(owner.app, '/api/jobs', {method:'POST', body:{circle:circle.id, prompt:'x', harness:'codex', repo:{path:r + '/sub/'}, draft_id:'draft-folders-0001'}});
+  await ui('/api/jobs', {method:'POST', body:{circle:circle.id, prompt:'x', harness:'codex', repo:{path:r + '/sub/'}, draft_id:'draft-folders-0001'}});
   assert.deepEqual(await persisted(owner.home), [r,join(home,'code')]);
 });
 

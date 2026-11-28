@@ -30,14 +30,12 @@ const requestState = saved => ({
 // The composer's draft lives on this computer (EXPERIENCE M7, R3-05): the text, the folder and the choices are kept
 // until the job is sent, and one draft carries one idempotency key. A definite refusal starts a new send identity;
 // an uncertain outcome and an explicit Send anyway response keep the original identity.
-// The two intents the lender understands (lib/v1/versions.mjs AUTO_RUN_INTENTS; the browser bundle cannot import that file).
-const AUTO_INTENTS = Object.freeze(['cheapest', 'strongest']);
 const PREFIX = 'faravan-compose-draft:';
 export const COMPOSE_DRAFT_PREFIX = PREFIX;
 const FOLDER = 'faravan-compose-folder';
 const SOURCE = 'faravan-compose-source';
 export const newDraftId = () => (globalThis.crypto?.randomUUID?.() ?? 'd-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12)).replace(/[^A-Za-z0-9-]/g, '').slice(0, 64);
-const fresh = (folder = '') => ({id: newDraftId(), prompt: '', path: folder, sourceKind:'folder', workingDirectory:'', gitUrl:'', gitCommit:'', gitBranch:'', files:[], zip:null, includeUncommitted: false, agent: '', model: '', effort: '', auto: '', verifyCmd: '', verifyEdited: false, sending: false, uncertainSince: null, retryNotBefore: null, sendAnyway: false, agentRefusal: null});
+const fresh = (folder = '') => ({id: newDraftId(), prompt: '', path: folder, sourceKind:'folder', workingDirectory:'', gitUrl:'', gitCommit:'', gitBranch:'', files:[], zip:null, includeUncommitted: false, agent: '', model: '', effort: '', verifyCmd: '', verifyEdited: false, sending: false, uncertainSince: null, retryNotBefore: null, sendAnyway: false, agentRefusal: null});
 const read = (storage, key) => { try { return storage?.getItem(key) ?? null; } catch { return null; } };
 const write = (storage, key, value) => { try { if (!storage) return false; storage.setItem(key, value); return storage.getItem(key) === value; } catch { return false; } };
 const followupOf = value => typeof value?.parentJob === 'string' && typeof value?.parentResult === 'string'
@@ -49,7 +47,7 @@ export function loadDraft(storage, circle) {
   try {
     const saved = JSON.parse(read(storage, PREFIX + circle) ?? 'null');
     if (saved && typeof saved === 'object' && typeof saved.id === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(saved.id))
-      return {...fresh(folder), ...requestState(saved), id: saved.id, sourceExpectedDigest:typeof saved.sourceExpectedDigest==='string'?saved.sourceExpectedDigest:null, attachmentId:typeof saved.attachmentId==='string'?saved.attachmentId:null, workingDirectory:String(saved.workingDirectory??''), sourceKind:['none','folder','git','files'].includes(saved.sourceKind)?saved.sourceKind:'folder', gitUrl:String(saved.gitUrl??''), gitCommit:String(saved.gitCommit??''), gitBranch:String(saved.gitBranch??''), files:Array.isArray(saved.files)?saved.files:[], zip:saved.zip??null, prompt: String(saved.prompt ?? ''), path: String(saved.path ?? folder), includeUncommitted: saved.includeUncommitted === true, agent: String(saved.agent ?? ''), model: String(saved.model ?? ''), effort: String(saved.effort ?? ''), auto: typeof saved.auto === 'string' ? saved.auto.slice(0, 40) : '', verifyCmd: String(saved.verifyCmd ?? ''), verifyEdited: saved.verifyEdited === true, sending: saved.sending === true, retryNotBefore: saved.sending === true && Number.isSafeInteger(saved.retryNotBefore) && saved.retryNotBefore > 0 ? saved.retryNotBefore : null, uncertainSince: Number.isFinite(saved.uncertainSince) ? saved.uncertainSince : null, sendAnyway: saved.sendAnyway === true, ...(saved.sourceUnknown === true ? {sourceUnknown:true} : {}), agentRefusal: typeof saved.agentRefusal?.label === 'string' && typeof saved.agentRefusal?.message === 'string' ? {label:saved.agentRefusal.label.slice(0,80),message:saved.agentRefusal.message.slice(0,300)} : null,
+      return {...fresh(folder), ...requestState(saved), id: saved.id, sourceExpectedDigest:typeof saved.sourceExpectedDigest==='string'?saved.sourceExpectedDigest:null, attachmentId:typeof saved.attachmentId==='string'?saved.attachmentId:null, workingDirectory:String(saved.workingDirectory??''), sourceKind:['none','folder','git','files'].includes(saved.sourceKind)?saved.sourceKind:'folder', gitUrl:String(saved.gitUrl??''), gitCommit:String(saved.gitCommit??''), gitBranch:String(saved.gitBranch??''), files:Array.isArray(saved.files)?saved.files:[], zip:saved.zip??null, prompt: String(saved.prompt ?? ''), path: String(saved.path ?? folder), includeUncommitted: saved.includeUncommitted === true, agent: String(saved.agent ?? ''), model: String(saved.model ?? ''), effort: String(saved.effort ?? ''), verifyCmd: String(saved.verifyCmd ?? ''), verifyEdited: saved.verifyEdited === true, sending: saved.sending === true, retryNotBefore: saved.sending === true && Number.isSafeInteger(saved.retryNotBefore) && saved.retryNotBefore > 0 ? saved.retryNotBefore : null, uncertainSince: Number.isFinite(saved.uncertainSince) ? saved.uncertainSince : null, sendAnyway: saved.sendAnyway === true, ...(saved.sourceUnknown === true ? {sourceUnknown:true} : {}), agentRefusal: typeof saved.agentRefusal?.label === 'string' && typeof saved.agentRefusal?.message === 'string' ? {label:saved.agentRefusal.label.slice(0,80),message:saved.agentRefusal.message.slice(0,300)} : null,
         ...(followupOf(saved.followup) && baseOf(saved.base) ? {followup:followupOf(saved.followup),base:baseOf(saved.base)} : {})};
   } catch { /* an unreadable draft starts over */ }
   const defaults=fresh(folder);
@@ -126,12 +124,10 @@ export function clearDraftIfCurrent(storage, circle, id) {
     return storage.getItem(key) === null;
   } catch { return false; }
 }
-// A saved choice this screen does not know could mean something else to a newer or older one. It is never sent as the lender default.
-function refuseUnknownAutoChoice(auto) { throw new Error('The saved automatic choice “' + auto + '” is not one this screen can send. Choose Cheapest that fits or Strongest offered, or clear the choice.'); }
 /** The body of the one request this draft makes. The same draft always yields the same body. */
 export const draftBody = (draft, circle) => {
   if (!validRequestState(draft)) throw new Error('The saved request is malformed. Reopen the saved draft before sending.');
-  return (draft.requestMode !== 'signed' && draft.auto && !AUTO_INTENTS.includes(draft.auto) ? refuseUnknownAutoChoice(draft.auto) : {
+  return {
   circle, prompt: draft.prompt.trim(), draft_id: draft.id,
   ...(!draft.followup ? ((draft.sourceKind || 'folder')==='none' ? {noSource:true} : draft.sourceKind==='git' ? {git:{url:draft.gitUrl.trim(),commit:draft.gitCommit}} : draft.sourceKind==='files' ? (draft.zip ? {zip:draft.zip} : {files:draft.files}) : {repo: {path: draft.path.trim(), ...(draft.sourceExpectedDigest?{expected_digest:draft.sourceExpectedDigest}:{}), ...(draft.includeUncommitted ? {includeUncommitted: true} : {})}}) : {}),
   ...(followupOf(draft.followup) ? {followup:followupOf(draft.followup)} : {}),
@@ -139,14 +135,13 @@ export const draftBody = (draft, circle) => {
   ...(!draft.followup && draft.workingDirectory?.trim() && draft.sourceKind!=='none' ? {working_directory:draft.workingDirectory.trim()} : {}),
   ...(draft.agent ? {harness: draft.agent} : {}),
   // A model and effort are one request to the agent the lenders offered them for. A model is never sent alone: Send waits for its effort. Blank fields are the lender's choice.
-  // "Cheapest that fits" and "Strongest offered" are the lender's choice of both, so they replace the model and effort.
   ...(draft.requestMode === 'signed' ? {runRequest:structuredClone(draft.runRequest)} : {}),
-  ...(draft.requestMode !== 'signed' && draft.agent && AUTO_INTENTS.includes(draft.auto) ? {auto_run_v1: {intent: draft.auto}} : {}),
-  ...(draft.requestMode !== 'signed' && draft.agent && !draft.auto && draft.model ? {model: draft.model} : {}),
-  ...(draft.requestMode !== 'signed' && draft.agent && !draft.auto && draft.effort ? {budget_v1: {effort: draft.effort}} : {}),
+
+  ...(draft.requestMode !== 'signed' && draft.agent && draft.model ? {model: draft.model} : {}),
+  ...(draft.requestMode !== 'signed' && draft.agent && draft.effort ? {effort: draft.effort} : {}),
   ...(draft.sourceKind !== 'none' && draft.verifyCmd?.trim() ? {verify: {cmd: draft.verifyCmd.trim()}} : {}),
   ...(draft.sendAnyway ? {send_anyway:true} : {}),
-});
+};
 };
 /** Did the request reach the person's own app and get a definite answer? Anything else leaves it uncertain (T21: never guess, never resend blindly). */
 /** How long a send refused by a busy host waits before it is asked again: the host's Retry-After, 1–30 s. */

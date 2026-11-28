@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {isDeepStrictEqual} from 'node:util';
 import {lenderFixture,deferred,until} from './helpers/v1-lender-fixture.mjs';
+import {RUN_REQUEST_CAPABILITY} from '../lib/v1/versions.mjs';
 import {journalLender} from './helpers/lender-journal.mjs';
 
 const tick=()=>new Promise(resolve=>setTimeout(resolve,2));
@@ -29,9 +30,11 @@ test('journal transitions survive a failed write followed by a queued unrelated 
   const createLender=await journalLender(suite);
   for(const row of cases)await suite.test(row.kind,{timeout:15000},async t=>{
     const f=await lenderFixture(t),report=f.backend.lenderCapabilities();
-    const attempt=f.attempt(),expired={...attempt,claimed_at:new Date(f.clock.now()-121000).toISOString(),lease_expires_at:new Date(f.clock.now()-1000).toISOString()};
-    const advertisement={harnesses:['codex'],models:['example-model'],capabilities:[],egress:report.egress,
+    const accounts=f.runOptions.runAccounts();
+    const advertisement={accounts,harnesses:['codex'],models:['example-model'],capabilities:[RUN_REQUEST_CAPABILITY],egress:report.egress,
       enforced_limits:report.enforced_limits,max_limits:report.max_limits};
+    const {attempt}=await f.client.claimNext(advertisement);
+    const expired={...attempt,claimed_at:new Date(f.clock.now()-121000).toISOString(),lease_expires_at:new Date(f.clock.now()-1000).toISOString()};
     const claim={job_digest:f.jobDigest,job:f.job,attempt:row.expired?expired:attempt,accepted:true,automatic:false,acceptedHarness:'codex'};
     const intent={jobDigest:f.jobDigest,job:f.job,advertisement,leaseSeconds:120,idempotencyKey:'accepted-claim',
       ...(row.state?{state:row.state}:{}),acceptedAt:f.clock.now(),ruleId:row.manual?null:'removed-rule'};
@@ -83,7 +86,7 @@ test('journal transitions survive a failed write followed by a queued unrelated 
     };
     const start=()=>{
       controller=new AbortController();
-      lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,
+      lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,
         approve:async()=>true,onEvent:event=>f.events.push(event)});
       loop=lender.start(controller.signal);loop.catch(()=>{});
       f.stop=async()=>{controller.abort();lender.reconfigure();await loop.catch(()=>{});};

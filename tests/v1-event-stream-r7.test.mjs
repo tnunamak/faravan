@@ -1,12 +1,10 @@
 import './helpers/no-browser.mjs';
-import {legacyProxyHarness} from './helpers/legacy-proxy-harness.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {appFixture,api,waitFor} from './helpers/v1-app-fixture.mjs';
 
 test('unchanged lending on two accounts emits no events over ten seconds',{timeout:60000},async t=>{
-  const adapters=['claude-code-subscription','codex'].map(id=>({spec:legacyProxyHarness(id),installed:true,signedIn:true,harnessVersion:'synthetic-only',models:['example-model'],capabilities:[]}));
-  const f=await appFixture(t),{lender,circle}=await f.connect({adapters,pollMs:500});
+  const f=await appFixture(t),{lender,circle}=await f.connect({syntheticAccounts:['claude','codex'],pollMs:500});
   const post=(path,body)=>api(lender.app,'/api/'+path,{method:'POST',body});
   await post('lending/limits',{idleOnly:false});
   for(const id of ['claude-code-subscription','codex'])await post('agents/'+id,{useForLending:true});

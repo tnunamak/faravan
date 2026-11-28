@@ -856,13 +856,25 @@ test('a Docker sign-in that fails writes a diagnostic row with its class and exi
   const docker = async () => { throw new SbxLoginError('Docker sign-in ended before showing a browser link (exit 1).', { diagnosticReason: 'login_browser_unavailable', exitCode: 1 }); };
   const f = await appFixture(t);
   const { app } = await f.start('owner', { backend: dockerBackend(f.root, { docker: false, signedIn: false }), identityProbe: async () => ({}), signin: { startDocker: docker } });
-  await post(app, '/api/signin/docker').catch(() => {});
+  const failed = await post(app, '/api/signin/docker', 409);
+  assert.equal(failed.code, 'signin_failed');
   const file = join(await f.home('owner'), 'v1', 'lending-errors.jsonl');
-  const rows = await waitFor(async () => {
-    try { const r = (await readFile(file, 'utf8')).trim().split('\n').map(JSON.parse).filter(e => e.phase === 'signin' && e.target === 'docker'); return r.length ? r : null; } catch { return null; }
-  }, 'a docker sign-in diagnostic row');
-  assert.equal(rows[0].code, 'login_browser_unavailable');
-  assert.equal(rows[0].exit_code, 1);
+  let last = { state: 'not read', rows: [] };
+  const row = await waitFor(async () => {
+    try {
+      const rows = (await readFile(file, 'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse)
+        .filter(entry => entry.phase === 'signin' && entry.target === 'docker');
+      last = { state: 'read', rows: rows.map(({code, exit_code}) => ({code, exit_code})) };
+      return rows[0] ?? null;
+    } catch (error) {
+      last = { state: error.code ?? error.name, rows: [] };
+      return null;
+    }
+  }, 'a docker sign-in diagnostic row').catch(cause => {
+    throw new Error('Docker sign-in diagnostic not observed; last read: ' + JSON.stringify(last), {cause});
+  });
+  assert.equal(row.code, 'login_browser_unavailable');
+  assert.equal(row.exit_code, 1);
 });
 
 // Every server receipt is serialized by view(), including wait's nested flow.

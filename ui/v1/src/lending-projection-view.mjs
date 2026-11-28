@@ -1,3 +1,4 @@
+import {lendingReasonCode} from '../../../lib/v1/lending-reasons.mjs';
 import {createLendingProjection, projectLendingState} from '../../../lib/v1/state-projection.mjs';
 import {formatLendingProjection as formatShared} from '../../../lib/v1/lending-summary.mjs';
 import {formatDate} from './dates.mjs';
@@ -12,14 +13,15 @@ export function lendingProjectionOf(status = {}) {
 
   const lending = isRecord(status.lending) ? status.lending : status;
   const legacyStatus = lending.status ?? status.status;
-  const legacyReason = status.intent?.reason ?? status.reason ?? lending.reason;
+  const rawReason=status.intent?.reason??status.reason??lending.reason;
+  const legacyReason=rawReason?lendingReasonCode(rawReason):null;
   const stateFromStatus = ({
-    idle: 'ready', paused: ['daily_limit','quota_reserve','user_active'].includes(legacyReason) ? 'resting' : 'paused',
-    daily_limit: 'resting', quota_reserve: 'resting', user_active: 'resting',
+    idle: 'ready', paused: ['daily_limit','no_spare','owner_active'].includes(legacyReason) ? 'resting' : 'paused',
+    daily_limit: 'resting', no_spare: 'resting', owner_active: 'resting',
     outside: 'outside', resting: 'resting', blocked: 'blocked', starting: 'starting', update: 'update', off: 'off',
     contributing: 'ready', running: 'ready', 'sending-result': 'ready', pausing: 'ready', stopping: 'ready',
   })[legacyStatus];
-  const stateFromReason = ({paused:'paused',daily_limit:'resting',quota_reserve:'resting',user_active:'resting'})[legacyReason] ??
+  const stateFromReason = ({paused:'paused',daily_limit:'resting',no_spare:'resting',owner_active:'resting'})[legacyReason] ??
     (legacyReason ? 'blocked' : undefined);
   const legacyPaused = lending.paused === true && Boolean(lending.circle);
   const legacyState = status.intent?.state ?? status.state ?? lending.state ?? stateFromStatus ?? stateFromReason ??

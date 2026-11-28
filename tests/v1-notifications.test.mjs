@@ -12,7 +12,6 @@ const own=(status,extra={})=>({job_digest:digest,borrowerCircle:circle,state:STA
  ...(status==='Cancelled'?{current_attempt:null}:{}),...extra});
 async function feed(t){const dir=await mkdtemp(join(tmpdir(),'faravan-notify-test-'));t.after(()=>rm(dir,{recursive:true,force:true}));return {dir,feed:await createNotificationFeed(dir)};}
 
-
 test('cancellation notifications distinguish nothing ran from confirmed stopped execution',async t=>{
  const {adaptLegacyJob}=await import('../lib/v1/state-projection.mjs');
  const at='2026-10-20T00:00:00Z';
@@ -129,7 +128,7 @@ test('one-time job handoff validates exact app routes and never carries a durabl
 test('app feed observes only locally sent jobs from coordinator state, including claimed execution start',async t=>{
  const f=await appFixture(t),{owner,lender,circle}=await f.connect();
  const input={circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Secret task content',harness:'codex'};
- const sent=await api(owner.app,'/api/jobs',{method:'POST',body:input});
+ const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:input});
  const after=(await api(owner.app,'/api/notifications')).cursor;
  const otherAfter=(await api(lender.app,'/api/notifications')).cursor;
  const raw=f.jobs.get(sent.jobDigest);
@@ -218,7 +217,7 @@ test('active run deduplication survives completed-history eviction and restart',
 
 test('app records a delayed result after observing a temporary expired failure',async t=>{
  const f=await appFixture(t),{owner,circle}=await f.connect();
- const sent=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://example.test/synthetic.git',commit:'1'.repeat(40),prompt:'Delayed result',harness:'codex'}});
+ const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://example.test/synthetic.git',commit:'1'.repeat(40),prompt:'Delayed result',harness:'codex'}});
  const after=(await api(owner.app,'/api/notifications')).cursor,raw=f.jobs.get(sent.jobDigest);
  const at=new Date(Math.floor(Date.now()/1000)*1000).toISOString().replace('.000Z','Z');
  const attempt={attempt_id:'22222222-2222-4222-8222-222222222222',job_digest:sent.jobDigest,generation:1,state:'released',holder:owner.app.device.keyId,

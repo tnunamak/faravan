@@ -3,7 +3,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { appFixture, api, waitFor } from './helpers/v1-lifecycle-fixture.mjs';
 import { createSlots } from '../lib/v1/client.mjs';
-import { createSavedReads, markSaved } from '../lib/v1/saved-reads.mjs';
 
 // Judge r7 O4, O5 and O7 at the app boundary: a finished job read in parallel, then read again with its host down.
 const realFetch=globalThis.fetch;
@@ -31,7 +30,7 @@ async function finishedJob(t) {
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
   t.after(()=>{globalThis.fetch=realFetch;});
   const control=hostControl(f.origin);
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,
     git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic offline task',harness:'codex'}});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});

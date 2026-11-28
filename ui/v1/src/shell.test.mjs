@@ -125,20 +125,16 @@ test('the machine chip says "Needs you" while a blocker stops lending, even with
   assert.doesNotMatch(renderedText(out), /Ready for requests/);
 });
 
-test('Circles drops unhelpful machine status but retains actionable owner limits', () => {
+test('Circles keeps the computer link when lending is blocked', () => {
   const unavailable = withLendingProjection({...home, lending:{enabled:true}},
     {intent:'on',intentState:'blocked',admission:'blocked',admissionReason:'docker_signed_out'});
-  const limited = withLendingProjection({...home, lending:{enabled:true}, lendingPolicy:{accounts:[
-    {provider:'codex', decision:{availability:{admitted:false,reason:'owner_limit_too_low'}}},
-  ]}}, {intent:'on',intentState:'blocked',admission:'blocked',admissionReason:'owner_limit_too_low'});
+
 
   for (const route of [{page:'circles'}, {page:'circle',id:'crew'}]) {
     const unknownBlocker = shell({route, home:unavailable});
     assert.doesNotMatch(renderedText(unknownBlocker), /Needs you|Raise limit/i);
     assert.match(renderedText(unknownBlocker), /Ana's MacBook/);
-    const ownerLimit = shell({route, home:limited});
-    assert.match(ownerLimit, /href="#\/lend\/limits\/owner-limit">Raise limit for /);
-    assert.doesNotMatch(renderedText(ownerLimit), /Needs you/i);
+
   }
 });
 

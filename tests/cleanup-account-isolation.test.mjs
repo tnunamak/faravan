@@ -1,3 +1,4 @@
+import {poolFactCache} from './helpers/pool-fact-cache.mjs';
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -32,10 +33,11 @@ function fixture(t,{count=1,kit=true,live=false,fenced=true,listingFailed=false,
 for(const count of [1,20])test(count+' unresolvable rows reserve A/fallback slot but B admits',async t=>{
  const f=fixture(t,{count,kit:false,live:true}),workers=[];let disk={jobs:0,milliseconds:0,accounts:{'claude:0':{jobs:0,milliseconds:0,pending:{attemptId:'old-attempt',resources:{cpu:2,memoryBytes:4*1024**3}}}}};
  const controller=new AbortController();
- const pool=createLendingPool({backend:f.backend,storage:{get:async()=>disk,set:async v=>{disk=v;},acquire:async()=>()=>{}},capacity:2,policy:{enabled:true,dailyJobs:null,dailyMinutes:null},adapters:[{spec:{harness_id:'claude-code-subscription'}},{spec:{harness_id:'codex'}}],createLender:opts=>{const worker={start:signal=>new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true})),getState:()=>({status:opts.accountKey==='claude'?'stopping':'idle',reason:opts.accountKey==='claude'?'cessation_unverified':null,current:null}),admits:()=>opts.policy.hold(null),cessation:()=>({proven:true})};workers.push(worker);return worker;}});
+ const pool=createLendingPool({backend:f.backend,storage:{get:async()=>disk,set:async v=>{disk=v;},acquire:async()=>()=>{}},capacity:2,policy:{enabled:true,dailyJobs:null,dailyMinutes:null},adapters:[{spec:{harness_id:'claude-code-subscription'}},{spec:{harness_id:'codex'}}],createLender:opts=>{const facts=poolFactCache(opts.policy);const worker={start:async signal=>{await facts.refresh();if(!signal.aborted)await new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));},refreshAdmission:()=>facts.refresh(),getState:()=>({status:opts.accountKey==='claude'?'stopping':'idle',reason:opts.accountKey==='claude'?'cleanup_pending':null,current:null}),admits:()=>facts.reason,cessation:()=>({proven:true})};workers.push(worker);return worker;}});
  const running=pool.start(controller.signal);t.after(async()=>{controller.abort();await running;});
  while(workers.length<2)await new Promise(resolve=>setImmediate(resolve));
- assert.equal(workers[0].admits(),'cessation_unverified');assert.equal(workers[1].admits(),null);assert.equal(pool.admits(),null);assert.equal(pool.getState().status,'idle');
+ await pool.refreshAdmission();
+ assert.equal(workers[0].admits(),'cleanup_pending');assert.equal(workers[1].admits(),null);assert.equal(pool.admits(),null);assert.equal(pool.getState().status,'idle');
  assert.throws(()=>f.backend.assertDeadlineTargetClear(f.rows[0]),/cleanup|reserved/);
 });
 for(const mode of ['kit','non-kit','live','unfenced'])test('stopped watched residue: '+mode,async t=>{
@@ -51,7 +53,7 @@ test('row text names its sandbox and home, never undefined',()=>{
 test('blockers uses the same blocked admission as lending summary',async()=>{
  const status={intent:{on:true,state:'ready'},execution:{state:'stopping'},admission:{reason:'cessation_unverified'},summary:{headline:"Jobs can't start",phase:'waiting'},headline:'Lending is on',blockers:[]};
  const result=await opById('status.blockers').handler({call:async id=>id==='status.get'?status:id==='readiness.get'?{ready:true,checks:[]}:[]},{});
- assert.equal(result.can_lend,false);assert.equal(result.headline,status.summary.headline);assert.ok(result.blockers.some(b=>b.kind==='cessation_unverified'));
+ assert.equal(result.can_lend,false);assert.equal(result.headline,status.summary.headline);assert.ok(result.blockers.some(b=>b.kind==='cleanup_pending'));
 });
 test('unavailable listing stays global',async t=>{const f=fixture(t,{listingFailed:true});await assert.rejects(f.backend.recoverSandboxDeadlines());assert.equal(f.backend.deadlineRecoveryHold().error_code,'sbx_daemon_unavailable');});
 
@@ -76,7 +78,6 @@ test('cleanup retry and status expose one honest item for each retained row',{ti
  const retry=await api(started.app,'/api/cleanup/retry',{method:'POST',body:{}});assert.equal(retry.items.length,1);assert.match(retry.items[0].message,/access rules/);assert.equal(retry.hold,null);
 });
 
-
 test('a retained stopped row holds its own slot again when its name reappears',async t=>{
  const f=fixture(t,{kit:false});await f.backend.reapCleanup();f.setListed(true);await f.backend.reapCleanup();
  assert.ok(f.removals()>0);assert.equal(f.backend.cleanupSlotHold('claude'),'cessation_unverified');assert.equal(f.backend.cleanupSlotHold('codex'),null);
@@ -97,7 +98,6 @@ test('unreadable journal status stays responsive with one fallback obligation',t
  assert.equal(f.backend.cleanupSlotHold('claude',{fallback:true}),'cessation_unverified');assert.equal(f.backend.cleanupSlotHold('codex'),null);
 });
 
-
 test('kit residue recognizes the strict provisioned JSON form used by older sbx',async t=>{
  const f=fixture(t,{kitProvenance:true});await f.backend.reapCleanup();
  assert.equal(fs.existsSync(path.join(f.directory,f.rows[0]._cleanupId+'.json')),false);
@@ -117,7 +117,6 @@ test('a resolved row leaves its name fenced against direct and storage create',a
  assert.throws(()=>f.backend.assertDeadlineTargetClear({sandbox_id:row.sandbox_id,sbx_home:row.sbx_home}),{code:'cessation_unverified'});
  await assert.rejects(f.backend._runStorageCommand(['create','--name',row.sandbox_id]),{code:'cessation_unverified'});
 });
-
 
 test('cleanup in progress keeps its row visible until the final step finishes',{timeout:10000},async t=>{
  let resume;const storageWait=new Promise(resolve=>{resume=resolve;}),f=fixture(t,{storageWait});const work=f.backend.reapCleanup();
@@ -155,7 +154,6 @@ test('workspace readiness does not wait for account cleanup to finish',{timeout:
  finally{clearTimeout(timer);resume();await reading.catch(()=>{});}
 });
 
-
 test('a real B worker starts while another account recovery is stalled',{timeout:15000},async t=>{
  const {lenderFixture}=await import('./helpers/v1-lender-fixture.mjs'),{createLender}=await import('../lib/v1/lender.mjs');
  const debt=fixture(t,{kit:false,live:true}),f=await lenderFixture(t);let entered,resume;
@@ -167,8 +165,8 @@ test('a real B worker starts while another account recovery is stalled',{timeout
  f.backend.isOwnedSandboxAdmissionCurrent=proof=>debt.backend.isOwnedSandboxAdmissionCurrent(proof);
  f.backend.deadlineRecoveryPending=()=>debt.backend.deadlineRecoveryPending();
  f.backend.sandboxAdmissionPending=debt.backend.sandboxAdmissionPending?.bind(debt.backend);
- const previous=f.policy.hold;f.policy.hold=(job,context)=>previous?.(job,context)??debt.backend.cleanupSlotHold('codex');
- const controller=new AbortController(),worker=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,approve:async()=>true,credentialValues:async()=>[],accountKey:'codex'}),running=worker.start(controller.signal);
+ f.policy.observeLending=()=>({waits:debt.backend.cleanupSlotHold('codex')?[{reason:'cleanup_pending',nextEvaluationAtMs:f.clock.now()+120000}]:[]});
+ const controller=new AbortController(),worker=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,approve:async()=>true,credentialValues:async()=>[],accountKey:'codex'}),running=worker.start(controller.signal);
  try{const until=Date.now()+3000;while(!f.calls.some(([kind])=>kind==='run')&&Date.now()<until){f.clock.advance(250);await new Promise(resolve=>setTimeout(resolve,10));}assert.ok(f.calls.some(([kind])=>kind==='run'),'B starts before A recovery is released');}
  finally{controller.abort();resume();await recovery;await running;}
 });
@@ -176,9 +174,10 @@ test('a real B worker starts while another account recovery is stalled',{timeout
 test('B can persist a fresh reservation while A has unproven cleanup',{timeout:10000},async t=>{
  const f=fixture(t,{kit:false,live:true}),workers=[],options=[],controller=new AbortController();
  let disk={jobs:0,milliseconds:0,accounts:{'claude:0':{jobs:0,milliseconds:0,pending:{attemptId:'old-A',resources:{cpu:2,memoryBytes:4*1024**3}}}}};
- const pool=createLendingPool({backend:f.backend,storage:{get:async()=>disk,set:async v=>{disk=v;},acquire:async()=>()=>{}},capacity:2,maxResources:{cpu:2,memoryBytes:4*1024**3},policy:{enabled:true,dailyJobs:null,dailyMinutes:null},adapters:[{spec:{harness_id:'claude-code-subscription'}},{spec:{harness_id:'codex'}}],createLender:opts=>{options.push(opts);const worker={start:signal=>new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true})),getState:()=>({status:opts.accountKey==='claude'?'stopping':'idle',reason:opts.accountKey==='claude'?'cessation_unverified':null,current:null}),admits:()=>opts.policy.hold(null),cessation:()=>({proven:true})};workers.push(worker);return worker;}});
+ const pool=createLendingPool({backend:f.backend,storage:{get:async()=>disk,set:async v=>{disk=v;},acquire:async()=>()=>{}},capacity:2,maxResources:{cpu:2,memoryBytes:4*1024**3},policy:{enabled:true,dailyJobs:null,dailyMinutes:null},adapters:[{spec:{harness_id:'claude-code-subscription'}},{spec:{harness_id:'codex'}}],createLender:opts=>{options.push(opts);const facts=poolFactCache(opts.policy);const worker={start:async signal=>{await facts.refresh();if(!signal.aborted)await new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));},refreshAdmission:()=>facts.refresh(),getState:()=>({status:opts.accountKey==='claude'?'stopping':'idle',reason:opts.accountKey==='claude'?'cleanup_pending':null,current:null}),admits:()=>facts.reason,cessation:()=>({proven:true})};workers.push(worker);return worker;}});
  const running=pool.start(controller.signal);t.after(async()=>{controller.abort();await running;});
  while(workers.length<2)await new Promise(resolve=>setImmediate(resolve));
+ await pool.refreshAdmission();
  const store=options[1].policy.storage,current=await store.get();assert.equal(pool.admits(),null);
  await assert.doesNotReject(store.set({...current,pending:{attemptId:'fresh-B',resources:{cpu:2,memoryBytes:4*1024**3}}}));
  assert.equal(disk.accounts['codex:0'].pending.attemptId,'fresh-B');assert.equal(disk.accounts['claude:0'].pending.attemptId,'old-A');

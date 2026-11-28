@@ -39,7 +39,7 @@ test('upgrade startup migrates every legacy policy shape before validation and p
   'personWeeklyPct'];
  for(const [name,legacy,strategy,position,intent] of legacyShapes){
   const home=await f.home('upgrade-'+name),directory=join(home,'v1');
-  await mkdir(join(directory,'owner-settings'),{recursive:true});
+  await mkdir(directory,{recursive:true});
   const expiresAt=Date.now()+86400000;
   const rule={id:'preserve-rule',circle:'synthetic-circle',people:['sha256:person'],agents:['codex'],expiresAt,
    maxWallSeconds:1200,dailyJobs:3,weeklyJobs:21,dailyMinutes:60,weeklyMinutes:420,schedule:null};
@@ -48,15 +48,10 @@ test('upgrade startup migrates every legacy policy shape before validation and p
     timeZone:'UTC',schedule:null,lendingPolicy:{...legacy,providerConsent:{claude:true,codex:false},
      accountPlans:{claude:'max20',codex:'pro'},watchOnlyUntil:expiresAt}},standingRules:[rule]};
   await writeFile(join(directory,'app-settings.json'),JSON.stringify(saved));
-  await writeFile(join(directory,'owner-settings','owner-settings.json'),JSON.stringify({version:1,
-   values:{maxJobUsd:17.25,weeklyOverrunPoints:null,shortOverrunPoints:null},audit:[]}));
   let backendFactoryCalls=0;
   const backend=syntheticBackend(f.root);
   const {app}=await f.start('upgrade-'+name,{backend,backendFactory:async()=>{backendFactoryCalls++;return backend;}});
   assert.equal(backendFactoryCalls,1,`${name} legacy settings must reach backend creation`);
-  const ownerSettings=JSON.parse(await readFile(join(directory,'owner-settings','owner-settings.json'),'utf8'));
-  assert.equal(ownerSettings.values.maxJobUsd,17.25,`${name} owner per-job cap is unchanged`);
-  assert.deepEqual(Object.keys(ownerSettings.values),['maxJobUsd'],`${name} deleted overrun knobs do not survive migration`);
   const migrated=JSON.parse(await readFile(join(directory,'app-settings.json'),'utf8'));
   assert.equal(migrated.intent,intent,`${name} lending intent is unchanged`);
   assert.deepEqual(migrated.agents,{codex:false},`${name} agent choice is unchanged`);
@@ -68,9 +63,9 @@ test('upgrade startup migrates every legacy policy shape before validation and p
   if(strategy==='custom')assert.deepEqual(migrated.limits.lendingPolicy.strategyParams,
    {e0:0.4,fixedSharePct:13,keepPct:42,perJobPct:5},'custom keeps its legacy numbers in typed strategy parameters');
   if(strategy==='automatic')assert.deepEqual(migrated.limits.lendingPolicy.strategyParams,
-   legacy.perJobPct===undefined?{}:{perJobPct:legacy.perJobPct},
-   'automatic keeps only the owner per-job cap; deleted volume knobs do not become strategy settings');
-  assert.deepEqual(migrated.limits.lendingPolicy.providerConsent,{claude:true,codex:false},`${name} consent is unchanged`);
+   {perJobPct:legacy.perJobPct??10},
+   'automatic keeps the per-job percentage; deleted volume knobs do not become strategy settings');
+  assert.equal(Object.hasOwn(migrated.limits.lendingPolicy,'providerConsent'),false,`${name} does not restore provider-wide consent`);
   assert.deepEqual(migrated.limits.lendingPolicy.accountPlans,{claude:'max20',codex:'pro'},`${name} account plans are unchanged`);
   assert.equal(migrated.limits.lendingPolicy.watchOnlyUntil,expiresAt,`${name} policy expiry is unchanged`);
   assert.deepEqual(Object.keys(migrated.limits.lendingPolicy).filter(key=>removedKeys.includes(key)),[],

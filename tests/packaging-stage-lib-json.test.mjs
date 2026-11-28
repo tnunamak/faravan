@@ -7,6 +7,7 @@ import { join, dirname, relative, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { stagingFixture } from './helpers/staging-fixture.mjs';
 
 const run = promisify(execFile);
 const repo = fileURLToPath(new URL('..', import.meta.url));
@@ -24,14 +25,17 @@ async function modules(dir) {
 test('the staged app contains every JSON file that a lib module imports', async t => {
   const root = await mkdtemp(join(tmpdir(), 'faravan-stage-json-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  // Staging ends with an offline npm install of production dependencies; this test checks Faravan's own files only.
+  // Staging verifies a pinned Linux guest payload (99930b7a8) and ends with an offline npm install of production dependencies.
+  // This test checks Faravan's own files only, so it stages a disposable checkout pinned to a synthetic guest payload, with a
+  // no-op npm. The disposable checkout holds a copy of this repository's lib, which is what the scan below reads.
+  const {stage, payload} = stagingFixture(root);
   const fakeBin = join(root, 'bin');
   await mkdir(fakeBin);
   await writeFile(join(fakeBin, 'npm'), '#!/bin/sh\nexit 0\n');
   await chmod(join(fakeBin, 'npm'), 0o755);
   const dest = join(root, 'stage');
-  await run('bash', [join(repo, 'packaging/stage-app.sh'), dest, '0.0.0-test'],
-    { env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FARAVAN_REFRESH_PRICES: '0' } });
+  await run('bash', [stage, dest, '0.0.0-test'],
+    { env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FARAVAN_PI_PAYLOAD: payload, FARAVAN_REFRESH_PRICES: '0' } });
 
   const imports = [];
   for (const file of await modules(join(repo, 'lib'))) {

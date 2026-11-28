@@ -7,7 +7,7 @@ import { gzipSync } from 'node:zlib';
 import { join } from 'node:path';
 import { fixture, parseOne } from './helpers/v1-journey.mjs';
 import { createJobOperations } from '../lib/v1/cli.mjs';
-import { HOST_CAPABILITIES } from '../lib/v1/versions.mjs';
+import { HOST_CAPABILITIES, RUN_REQUEST_CAPABILITY } from '../lib/v1/versions.mjs';
 import { canonicalize } from '../lib/protocol/index.mjs';
 import { openDevice } from '../lib/v1/device.mjs';
 import { acquireProcessLockSync, profileWriterLockPath } from '../lib/v1/lock.mjs';
@@ -34,7 +34,7 @@ test('noSource with a message result signs an explicit empty source and uploads 
   const payload=f.jobs.get(sent.jobDigest).job.payload;
   assert.deepEqual(payload.source,{kind:'none'});
   assert.deepEqual(payload.result,{kind:'message'});
-  assert.deepEqual(payload.requirements.capabilities,['results_v1']);
+  assert.deepEqual(payload.requirements.capabilities,['results_v1',RUN_REQUEST_CAPABILITY]);
   const puts=f.requests.filter(r=>r.method==='PUT'&&r.route.startsWith('/artifacts/'));
   assert.equal(puts.length,1,'only the prompt is uploaded');
   const files=await ops.submit({noSource:true,result:{kind:'files'},prompt:'Make a CSV of primes',circle});
@@ -72,7 +72,7 @@ test('branch or no result signs the same filtered Git code-change job',async t=>
   assert.equal(branch.jobDigest,legacy.jobDigest,'explicit branch is the same signed request as no result');
   const payload=f.jobs.get(legacy.jobDigest).job.payload;
   assert.equal(Object.hasOwn(payload,'result'),false);
-  assert.deepEqual(payload.requirements.capabilities,['filtered_git_v1']);
+  assert.deepEqual(payload.requirements.capabilities,['filtered_git_v1',RUN_REQUEST_CAPABILITY]);
   const message=await ops.submit({git,prompt:'Fix it',circle,result:{kind:'message'}});
   assert.notEqual(message.jobDigest,legacy.jobDigest);
   assert.deepEqual(f.jobs.get(message.jobDigest).job.payload.result,{kind:'message'});

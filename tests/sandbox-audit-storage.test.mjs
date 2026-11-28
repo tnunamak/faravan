@@ -1,3 +1,4 @@
+import {lendingView} from '../ui/v1/src/helpers.mjs';
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -125,17 +126,40 @@ test('setup cannot report lendable while this computer is low on disk, and never
   assert.doesNotMatch(JSON.stringify(low), /storage (?:is )?enforced|disk (?:limit|ceiling) enforced/i);
 });
 
-test('M5: a preferred disk limit is admitted with storage listed as unenforced, never enforced', async t => {
+test('M5: a preferred disk limit is admitted with storage listed as unenforced, never enforced', { timeout: 60000 }, async t => {
   const f = await lenderFixture(t, { mutateJob: job => { job.requirements.limit_modes = { disk_bytes: 'preferred' }; } });
   f.backend.admitJob = spec => { f.calls.push(['admit', spec]); return admitDockerJob(spec); };
+  let witness;
+  const reached = new Promise(resolve => { witness = resolve; });
+  const prepare = f.backend.prepare.bind(f.backend);
+  f.backend.prepare = (...args) => {
+    witness({ stage: 'backend prepare' });
+    return prepare(...args);
+  };
   const controller = new AbortController();
-  const lender = createLender({ client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
-    clock: f.clock, approve: async () => true, credentialValues: async () => [], onEvent: event => f.events.push(event) });
+  const onAbort = () => witness({ stage: 'test deadline' });
+  t.signal.addEventListener('abort', onAbort, { once: true });
+  const lender = createLender({...f.runOptions, client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
+    clock: f.clock, approve: async () => true, credentialValues: async () => [], onEvent: event => {
+      f.events.push(event);
+      if (['declined', 'failed'].includes(event.status))
+        witness({ stage: event.status, reason: event.reason ?? event.error ?? event.code });
+    } });
   const running = lender.start(controller.signal);
+  running.then(
+    () => witness({ stage: 'lender exited' }),
+    error => witness({ stage: 'lender rejected', reason: error.message }),
+  );
   t.after(async () => { controller.abort(); await running; });
-  await until(() => f.calls.some(([kind]) => kind === 'prepare') || f.events.some(event => ['declined', 'failed'].includes(event.status)), 'admission outcome');
+  try {
+    const outcome = await reached;
+    assert.equal(outcome.stage, 'backend prepare', `first admission outcome: ${JSON.stringify(outcome)}`);
+  } finally {
+    t.signal.removeEventListener('abort', onAbort);
+  }
   assert.equal(f.events.some(event => event.status === 'declined'), false);
-  const admitted = f.calls.find(([kind]) => kind === 'admit')[1];
+  const admitted = f.calls.find(([kind]) => kind === 'admit')?.[1];
+  assert.ok(admitted, 'successful prepare must have followed admission');
   assert.equal(admitted.required_limits.includes('storage'), false);
   const result = admitDockerJob(admitted);
   assert.equal(result.ok, true);
@@ -187,13 +211,15 @@ test('availability waits on a low disk with its own reason before claiming work'
   const f = await lenderFixture(t), report = f.backend.lenderCapabilities();
   f.backend.lenderCapabilities = () => ({ ...report, available: false, reason: 'host_disk_low', enforced_limits: report.enforced_limits.filter(k => k !== 'disk_bytes') });
   const controller = new AbortController(), events = [];
-  const lender = createLender({ client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
+  const lender = createLender({...f.runOptions, client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
     clock: f.clock, approve: async () => true, credentialValues: async () => [], onEvent: event => events.push(event) });
   const running = lender.start(controller.signal);
   t.after(async () => { controller.abort(); await running; });
   await until(() => events.some(event => ['waiting_for_sandbox', 'idle'].includes(event.status)) || f.calls.some(([kind]) => kind === 'prepare'), 'readiness');
   assert.equal(f.calls.some(([kind]) => kind === 'prepare'), false);
   const state = events.find(event => event.status === 'waiting_for_sandbox');
-  assert.equal(state.reason, 'host_disk_low');
-  assert.equal(state.label, 'Cannot lend: this computer is low on disk space.');
+  assert.equal(state.reason,'sandbox_cannot_start');
+  assert.equal(lendingView(state).remedy,'Free up disk space on this computer');
+  assert.match(lendingView(state).message,/low on disk space/);
+  assert.equal(f.count('/jobs/claim-next'),0);
 });

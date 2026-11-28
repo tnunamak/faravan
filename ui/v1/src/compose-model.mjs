@@ -56,10 +56,6 @@ export function noAgentReason(state, circleName) {
 // A chosen model waits for its effort, so Send is off until one is chosen.
 export const offeredModels = (offers, agent) => [...new Set((offers ?? []).filter(o => o.harness === agent).map(o => o.model))];
 export const offeredEfforts = (offers, agent, model = '') => [...new Set((offers ?? []).filter(o => o.harness === agent && (!model || o.model === model)).map(o => o.effort))];
-// "Cheapest that fits" and "Strongest offered": the lender says which of the two it can make (`auto_intents` on its offers),
-// from the pairs it offers. A choice is offered only while some online lender for the agent says it can make that one, so an
-// older lender is never asked and a lender with no ranked model is never asked for the strongest. This screen does not work
-// out a rank or a price itself.
 // What a blank Model and Effort will run: the first offer, in the lenders' order, which the lender saved as its first choice.
 // The screen only repeats that offer; it computes no rank or price. Empty when nothing is offered for the agent.
 export function lendersChoice(offers, agent) {
@@ -72,14 +68,7 @@ export function lendersAccountChoice(accountOffers) {
   // A blank effort runs at the model's default, which is medium when offered and otherwise none.
   return `Lender’s choice: ${first.modelId}${first.effortIds.includes('medium') ? ' · medium effort' : ''}`;
 }
-export const AUTO_CHOICES = Object.freeze({cheapest: 'Cheapest that fits', strongest: 'Strongest offered'});
-export const isAutoChoice = intent => Object.hasOwn(AUTO_CHOICES, intent);
-export const autoOffered = (offers, agent, intent) => isAutoChoice(intent) && (offers ?? []).some(o => o.harness === agent && Array.isArray(o.auto_intents) && o.auto_intents.includes(intent));
-// A choice the lenders no longer support is cleared when the person changes the agent or the model. A choice this screen has never heard of
-// is kept as it is: it is shown as invalid and Send stays off until the person picks a known choice or clears it.
-export const keepAuto = (offers, {agent = '', auto = ''} = {}) => auto && (!isAutoChoice(auto) || autoOffered(offers, agent, auto)) ? auto : '';
-export function choiceOffered(offers, {agent = '', model = '', effort = '', auto = ''} = {}) {
-  if (auto) return autoOffered(offers, agent, auto);
+export function choiceOffered(offers, {agent = '', model = '', effort = ''} = {}) {
   return (!model && !effort) || (offers ?? []).some(o => o.harness === agent && (!model || o.model === model) && (!effort || o.effort === effort));
 }
 // Changing the agent or the model keeps the other choices only while the circle still offers them.

@@ -47,7 +47,7 @@ for(const harness of ['claude-code-subscription','codex'])
   test('approval API projects the week allowance only for '+harness,{timeout:120000},async t=>{
     const fresh=()=>({provider:'claude',remaining:70.5,observedAt:Date.now()-1000,resetsAt:Date.now()+86400000});
     let quota=fresh();
-    const f=await appFixture(t),{owner,lender,circle}=await f.connect({
+    const f=await appFixture(t),{owner,lender,circle}=await f.connect({syntheticAccounts:harness.startsWith('claude')?'claude':'codex',
       adapters:[{spec:legacyProxyHarness(harness),installed:true,signedIn:true,
         harnessVersion:'synthetic-only',models:[],capabilities:[]}],
       quotaReader:async()=>quota,
@@ -61,7 +61,7 @@ for(const harness of ['claude-code-subscription','codex'])
     await api(lender.app,'/api/agents/'+harness,{method:'POST',body:{useForLending:true}});
     await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
     await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
-    await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,
+    await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,
       git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),
       prompt:'Synthetic weekly allowance request.',harness}});
     const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'review card',30000);

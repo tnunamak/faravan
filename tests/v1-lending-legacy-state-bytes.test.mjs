@@ -40,7 +40,8 @@ function launch(root, home, extra = {}) {
 
 // What the first start of this release adds to saved settings: one-time default versions and empty per-circle bookkeeping maps
 // (Automatic-rule ids, notices shown, roster state). None of them holds a choice; every saved choice keeps its bytes.
-const MIGRATION_MARKERS = {presence:{answer:null,notice:{kind:'pair'}},presenceDefaultsVersion:2,perJobCapDefaultsVersion:1,appRuleIds:{},noticesShown:{},rosterApplied:{},rosterAppliedEpoch:{}};
+const MIGRATION_MARKERS={agentBorrowing:{},presenceDefaultsVersion:2,appRuleIds:{},rosterApplied:{},rosterAppliedEpoch:{}};
+function migratedSettings(bytes){const next={...JSON.parse(bytes),...MIGRATION_MARKERS};delete next.limits.lendingPolicy.providerConsent;return next;}
 
 test('saved settings add only migration markers while earlier counters serve a lending read without a rewrite', {timeout: 30000}, async t => {
   const paths = await scratchHome(t);
@@ -55,7 +56,7 @@ test('saved settings add only migration markers while earlier counters serve a l
   t.after(() => rm(paths.root, {recursive: true, force: true}));
   await api(app, '/api/lending');
   const after = await Promise.all(files.map(file => readFile(file)));
-  assert.equal(after[0].toString(), JSON.stringify({...JSON.parse(before[0]),...MIGRATION_MARKERS}), 'only the one-time migration markers are added; saved choices are kept');
+  assert.equal(after[0].toString(), JSON.stringify(migratedSettings(before[0])), 'only current bookkeeping is added and retired provider consent is dropped; live choices are kept');
   assert.ok(before[1].equals(after[1]), 'the counters file is byte-for-byte what the earlier release wrote');
 });
 
@@ -88,7 +89,7 @@ test('a pace50 ledger from an earlier release is not rewritten by the first star
   await app.close();
   app = null;
   const afterFirst = await Promise.all(files.map(file => readFile(file)));
-  for (const [index, file] of files.entries()) assert.ok((index===0?Buffer.from(JSON.stringify({...JSON.parse(before[index]),...MIGRATION_MARKERS})):before[index]).equals(afterFirst[index]), `${file} keeps its bytes apart from the one-time settings migration markers`);
+  for (const [index, file] of files.entries()) assert.ok((index===0?Buffer.from(JSON.stringify(migratedSettings(before[index]))):before[index]).equals(afterFirst[index]), `${file} keeps its bytes apart from the one-time settings migration markers`);
   // Extra coverage: a second start on the same files must not change them either.
   app = await launch(paths.root, paths.home, {lendingNow: () => at});
   await api(app, '/api/lending');

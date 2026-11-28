@@ -60,9 +60,11 @@ for(const flag of ['missing','false','expired'])test(`server and browser reject 
 });
 
 test('generated catalog preserves released enum history while adding telemetry members',async()=>{
- const {CATALOG}=await import('../lib/v1/telemetry/catalog.mjs');
+ const {CATALOG,enumMembers}=await import('../lib/v1/telemetry/catalog.mjs');
  for(const [name,value,since] of [['error_type','confirmation_required',59],['error_type','hold_release_requested',59],['error_type','sandbox_cleanup_unverified',60],['op','lending.release_hold',59]]){
   assert.equal(CATALOG.enums[name].find(item=>item.value===value)?.since,since,`${name}.${value} keeps its released schema version`);
  }
+ assert.ok(enumMembers('op',59).includes('lending.release_hold'),'released records remain readable');
+ assert.equal(enumMembers('op').includes('lending.release_hold'),false,'current clients cannot emit the retired operation');
  assert.ok(CATALOG.enums.offer_reason.some(item=>item.value==='machine_capacity'));
 });

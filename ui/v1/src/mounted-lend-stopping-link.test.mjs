@@ -57,8 +57,8 @@ test('F5: stop recovery preserves unverified and report-pending evidence and dis
   p.data.home.lendingProjection={...stopping,admission:'blocked',admissionReason:reason};
   const view=await mount(h(Lend,p));
   assert.ok(view.button('Check stop status'));
-  if(reason==='cessation_unverified')assert.match(document.body.textContent,/cannot confirm that the sandbox stopped/);
-  else assert.match(document.querySelector('h2.headline').textContent,/Job stopped; circle report pending/);
+  assert.match(document.body.textContent,/This computer is finishing sandbox cleanup/);
+  assert.match(document.querySelector('h2.headline').textContent,/Stopping Alex Example’s job/);
   assert.doesNotMatch(document.body.textContent,/Stop requested\. Confirmation is still pending\./,
    'generic pending text must not contradict specialized producer evidence');
   await view.unmount();
@@ -106,7 +106,7 @@ test('the phone keeps the same job reachable while status refreshes and the job 
   assert.equal(jobLink(),href);
   const refreshing=transitionalLendingProjection(running);
   assert.equal(refreshing.admission,'blocked');
-  assert.equal(refreshing.admissionReason,'observation_changed');
+  assert.equal(refreshing.admissionReason,'readiness_changed');
   await view.rerender(render(refreshing,'Alex'));
   assert.equal(jobLink(),href);
   assert.match(view.$('.headline').textContent,/^Running/);
@@ -195,7 +195,7 @@ test('Lend keeps the same Stop action and offers one retry after an expired time
  const fail=snapshot({pauseUntil:deadline,resumeError:'network_error'});
  await view.rerender(vnode(fail));
  assert.equal(fail.lendingProjection.admission,'blocked');
- assert.equal(fail.lendingProjection.admissionReason,'resume_failed');
+ assert.equal(fail.lendingProjection.admissionReason,'conditions_unavailable');
  assertJob('Finishing Alex’s job');
  assert.equal(reason(),'Lending could not resume. No new jobs start.');
  assert.doesNotMatch(view.text(),/Ready for requests|Paused until/i);

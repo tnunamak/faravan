@@ -14,7 +14,7 @@ const MODELS = [
 ];
 const GATES = {consent: true, limits: true, funding: true, stopping: true};
 
-function decide({model, ownerCapUsd, requestedUsd, chunkCandidates} = {}) {
+function decide({model, requestedUsd, chunkCandidates} = {}) {
   return decideObjectiveLend({
     now: NOW,
     observedAt: NOW,
@@ -23,7 +23,6 @@ function decide({model, ownerCapUsd, requestedUsd, chunkCandidates} = {}) {
     owner: OWNER_NONE,
     gates: GATES,
     laterBurnCapacityMicro: 0,
-    ownerMaxJobUsdMicro: ownerCapUsd === null ? null : Math.round(ownerCapUsd * MICRO),
     job: {id: model, friendValue: 100, estimateUsdMicro: requestedUsd * MICRO,
       requestedUsdMicro: requestedUsd === null ? null : requestedUsd * MICRO,
       worstCallUsdMicro: Math.round(claudeCallHeadroomUsd(model) * MICRO),
@@ -35,29 +34,29 @@ function decide({model, ownerCapUsd, requestedUsd, chunkCandidates} = {}) {
 test('the total-spend cap subtracts exactly one model worst-call headroom', () => {
   for (const [model, headroomMicro, nativeAtTwelveMicro] of MODELS) {
     assert.equal(Math.round(claudeCallHeadroomUsd(model) * MICRO), headroomMicro);
-    const result = decide({model, ownerCapUsd: 12, requestedUsd: 20,
+    const result = decide({model, requestedUsd: 12,
       chunkCandidates: [{id: 'twelve-dollar-checkpoint', usdMicro: 12 * MICRO, friendValue: 100}]});
     assert.equal(result.admitted, true, `${model}: ${result.reasonText}`);
-    assert.equal(result.maximumExposureUsd, 12, `${model}: owner cap bounds total spend`);
+    assert.equal(result.maximumExposureUsd, 12, `${model}: request size bounds total spend`);
     assert.equal(Math.round(result.nativeMaxBudgetUsd * MICRO), nativeAtTwelveMicro,
       `${model}: native cap leaves one worst-case call inside total exposure`);
   }
 });
 
 test('the borrower request can be the smaller total-spend cap', () => {
-  const result = decide({model: MODELS[0][0], ownerCapUsd: 20, requestedUsd: 12});
+  const result = decide({model: MODELS[0][0], requestedUsd: 12});
   assert.equal(result.admitted, true, result.reasonText);
   assert.equal(result.maximumExposureUsd, 12);
   assert.equal(result.nativeMaxBudgetUsd, 10.68);
 });
 
 test('a $1.50 total cap has no fixed minimum quote, while a cap below headroom holds', () => {
-  const smallUsefulChunk = decide({model: MODELS[0][0], ownerCapUsd: 1.5, requestedUsd: 1.5});
+  const smallUsefulChunk = decide({model: MODELS[0][0], requestedUsd: 1.5});
   assert.equal(smallUsefulChunk.admitted, true, smallUsefulChunk.reasonText);
   assert.equal(smallUsefulChunk.maximumExposureUsd, 1.5);
   assert.equal(smallUsefulChunk.nativeMaxBudgetUsd, 0.18);
 
-  const tooSmall = decide({model: MODELS[0][0], ownerCapUsd: 1, requestedUsd: 3});
+  const tooSmall = decide({model: MODELS[0][0], requestedUsd: 1});
   assert.equal(tooSmall.admitted, false);
   assert.equal(tooSmall.reasonCode, 'budget_too_small');
   assert.equal(tooSmall.nativeMaxBudgetUsd, 0);

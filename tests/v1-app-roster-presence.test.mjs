@@ -1,5 +1,6 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
+import {fixtureAccounts,fixtureAccountOffers} from './helpers/run-request-fixture.mjs';
 import assert from 'node:assert/strict';
 import {appFixture,api,bounded} from './helpers/v1-app-fixture.mjs';
 import {canonicalize} from '../lib/protocol/index.mjs';
@@ -10,7 +11,7 @@ import {homePeopleVM} from '../ui/v1/src/view-models.mjs';
 function reportPresence(f,lender,fields) {
   f.override=async ctx=>{
     if(ctx.route!=='/presence')return false;
-    const devices=fields?[{device:lender.app.device.keyId,source:'heartbeat',...fields}]:[];
+    const devices=fields?[{device:lender.app.device.keyId,source:'heartbeat',capabilities:['run_request_v1'],account_offers:fixtureAccountOffers(),...fields}]:[];
     const bytes=Buffer.from(canonicalize({now:new Date().toISOString(),online_seconds:90,devices,persons:[]}));
     ctx.res.writeHead(200,{'content-type':'application/json','content-length':bytes.length});ctx.res.end(bytes);return true;
   };
@@ -35,7 +36,7 @@ test('a new signed roster refreshes Home and queued presence for the same circle
   const f=await appFixture(t),{owner,lender,circle}=await f.connect({clock},{clock});
   const heartbeat={online:true,last_heartbeat_at:new Date(at).toISOString()};
   reportPresence(f,lender,{...heartbeat,intent:{state:'ready'}});
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,
     git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Wait for the current lender',harness:'codex',send_anyway:true}});
   const read=async()=>{
     const member=await memberOf(owner,circle,lender);
@@ -132,17 +133,16 @@ for (const source of ['heartbeat','poll']) test('Compose discloses a lender only
     [[lender.app.device.keyId,'ready',[{adapter:'codex',readiness:'ready'}]]]:[]);
 });
 
-
 test('overlapping cold job details share the same circle presence read',{timeout:30000},async t=>{
  const seconds=Math.floor(Date.now()/1000),clock=()=>seconds;
  const f=await appFixture(t),{owner,lender,circle}=await f.connect({clock,pollMs:60_000},{clock,pollMs:60_000});
  const lenderKey=lender.app.device.keyId,client=await lender.app.device.client(circle.id);
  const digests=[];
  for (const label of ['First','Second']) {
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,
    git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:label+' overlapping synthetic request',harness:'codex',send_anyway:true}});
   const limits=f.jobs.get(jobDigest).job.payload.requirements.limits;
-  const claim=await client.claimNext({harnesses:['codex'],models:['example-model'],capabilities:['filtered_git_v1'],
+  const claim=await client.claimNext({harnesses:['codex'],models:['example-model'],capabilities:['filtered_git_v1','run_request_v1'],accounts:fixtureAccounts(),
    egress:['internet','provider-only'],enforced_limits:Object.keys(limits),max_limits:limits},{waitSeconds:0});
   assert.equal(claim.job_digest,jobDigest);
   digests.push(jobDigest);
@@ -162,7 +162,7 @@ test('overlapping cold job details share the same circle presence read',{timeout
   if (!ctx.res.destroyed) {
    const bytes=Buffer.from(canonicalize({now:new Date(seconds*1000).toISOString(),online_seconds:90,
     devices:[{device:lenderKey,online:true,source:'heartbeat',last_heartbeat_at:new Date(seconds*1000).toISOString(),
-      intent:{state:'ready'},capabilities:['offers_v1']}],persons:[]}));
+      intent:{state:'ready'},capabilities:['offers_v1','run_request_v1'],account_offers:fixtureAccountOffers()}],persons:[]}));
    ctx.res.writeHead(200,{'content-type':'application/json','content-length':bytes.length});ctx.res.end(bytes);
   }
   return true;

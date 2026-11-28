@@ -263,12 +263,11 @@ test('identity predicates bind independently retained job and attempt',()=>{
 
 test('requirements fail closed, OR alternatives, AND capabilities and every ceiling',()=>{
   const req=obj.job.payload.requirements;
-  const lender={harnesses:['codex'],models:['example-model'],capabilities:['patch-output'],egress:['provider-only'],enforced_limits:Object.keys(req.limits),max_limits:{...req.limits}};
+  const lender={harnesses:['codex'],models:['example-model'],capabilities:['patch-output','run_request_v1'],egress:['provider-only'],enforced_limits:Object.keys(req.limits),max_limits:{...req.limits}};
   assert.equal(p.validateRequirements(req).ok,true);assert.deepEqual(p.canSatisfy(req,lender),{ok:true,unmet:[]});
   for(const bad of [{...req,mounts:['/']},{...req,capabilities:['unknown']},{...req,egress:'host'},{...req,limits:{...req.limits,network:1}},{...req,limits:{...req.limits,cpu:0}},{...req,harness:[]},{...req,model:{any_of:[]}}]) assert.equal(p.validateRequirements(bad).ok,false);
-  const choice={...req,harness:['not-present','codex'],model:{any_of:['not-present','example-model']}};
+  const choice={...req,harness:['not-present','codex']};
   assert.equal(p.canSatisfy(choice,lender).ok,true);
-  assert.equal(p.canSatisfy(req,{...lender,models:[]}).unmet.includes('model'),true);
   assert.equal(p.canSatisfy(req,{...lender,harnesses:['not-present']}).unmet.includes('harness'),true);
   assert.equal(p.canSatisfy(req,{...lender,capabilities:[]}).unmet.includes('capability:patch-output'),true);
   assert.equal(p.canSatisfy(req,{...lender,egress:['internet']}).unmet.includes('egress'),true);
@@ -336,7 +335,8 @@ test('RFC8032 Ed25519 primitive known-answer test, independent of protocol wrapp
 });
 
 test('static schema vocabulary cannot silently expand beyond the bounded validator',()=>{
-  const allowed=new Set(['$id','$schema','$defs','title','description','type','additionalProperties','properties','required','$ref','const','enum','oneOf','minimum','maximum','minLength','maxLength','pattern','format','items','minItems','maxItems','uniqueItems','minProperties','maxProperties']);
+  // readOnly/deprecated are annotations; new-mode payload validation enforces historical-only fields.
+  const allowed=new Set(['$id','$schema','$defs','title','description','readOnly','deprecated','type','additionalProperties','properties','required','$ref','const','enum','oneOf','minimum','maximum','minLength','maxLength','pattern','format','items','minItems','maxItems','uniqueItems','minProperties','maxProperties']);
   function inspect(schema) {
     for(const name of Object.keys(schema)) assert.equal(allowed.has(name),true,'Unsupported runtime schema keyword: '+name);
     for(const group of ['properties','$defs']) for(const child of Object.values(schema[group]??{})) inspect(child);
@@ -445,7 +445,7 @@ test('LAN request proof requires matching provisioned mode before consuming nonc
 
 test('advertisement lists enforce bounds, uniqueness and closed authority vocabularies',()=>{
   const req=clone(obj.job.payload.requirements);
-  const lender={harnesses:['codex'],models:['example-model'],capabilities:['patch-output'],
+  const lender={harnesses:['codex'],models:['example-model'],capabilities:['patch-output','run_request_v1'],
     egress:['provider-only'],enforced_limits:Object.keys(req.limits),max_limits:{...req.limits}};
   const invalid=[];
   for(const name of ['harnesses','models','capabilities']) {
@@ -461,7 +461,7 @@ test('advertisement lists enforce bounds, uniqueness and closed authority vocabu
     assert.deepEqual(checked.unmet,['lenderCapabilities']);
   }
   assert.equal(p.canSatisfy(req,{...lender,models:[...lender.models,'😀'.repeat(4096)]}).ok,true);
-  assert.equal(p.canSatisfy(req,{...lender,capabilities:[...lender.capabilities,...Array.from({length:127},(_,i)=>'cap-'+i)]}).ok,true);
+  assert.equal(p.canSatisfy(req,{...lender,capabilities:[...lender.capabilities,...Array.from({length:126},(_,i)=>'cap-'+i)]}).ok,true);
   const preferred={...req,limit_modes:Object.fromEntries(Object.keys(req.limits).map(k=>[k,'preferred']))};
   assert.equal(p.canSatisfy(preferred,{...lender,enforced_limits:[]}).ok,true);
 });

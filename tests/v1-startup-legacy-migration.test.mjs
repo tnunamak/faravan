@@ -6,7 +6,7 @@ import {dirname, join} from 'node:path';
 import {appFixture, api, syntheticBackend, waitFor} from './helpers/v1-app-fixture.mjs';
 
 // Item 2 of the startup lane: a settings file written by an older build is migrated at startup, before validation, into the
-// strategy-and-position shape. Consent, people, agents, expiry and the owner's per-job cap are carried over unchanged.
+// strategy-and-position shape. People, agents, expiry and the remaining limits are carried over unchanged.
 // Synthetic circle and devices only; no provider calls.
 
 const EXPIRY = 4102444800000;
@@ -29,8 +29,6 @@ async function legacyFixture(t, policy) {
   const {owner, lender, circle} = await f.connect();
   const rule = {id: 'owner-rule', circle: circle.id, people: [owner.app.device.keyId], agents: ['claude-code-subscription'],
     maxWallSeconds: 1200, dailyJobs: 3, weeklyJobs: 21, dailyMinutes: 60, weeklyMinutes: 420, expiresAt: EXPIRY};
-  // The owner's per-job cap lives in its own store and must survive the settings migration.
-  await api(lender.app, '/api/lending/owner-settings', {method: 'POST', body: {maxJobUsd: 2.5, reason: 'synthetic startup cap'}});
   await lender.app.close();
   const file = join(await f.home('lender'), 'v1', 'app-settings.json');
   const settings = JSON.parse(await readFile(file, 'utf8'));
@@ -46,7 +44,7 @@ async function legacyLender(t, policy) {
 }
 
 for (const [name, policy, expected] of LEGACY_SHAPES) {
-  test(`a legacy ${name} settings file migrates to its strategy and keeps consent, people, expiry and caps`, {timeout: 120000}, async t => {
+  test(`a legacy ${name} settings file migrates to its strategy and removes retired consent and keeps people, expiry and limits`, {timeout: 120000}, async t => {
     const {file, rule, restarted} = await legacyLender(t, policy);
     const onDisk = JSON.parse(await readFile(file, 'utf8'));
     const migrated = onDisk.limits.lendingPolicy;
@@ -54,7 +52,7 @@ for (const [name, policy, expected] of LEGACY_SHAPES) {
     if (expected.protectionPosition) assert.equal(migrated.protectionPosition, expected.protectionPosition);
     if (expected.strategyParams) assert.deepEqual(migrated.strategyParams, expected.strategyParams, 'the legacy numbers are kept as they were');
     assert.equal(Object.hasOwn(migrated, 'preset'), false, 'no legacy preset key survives the migration');
-    assert.deepEqual(migrated.providerConsent, CONSENT, 'consent is unchanged');
+    assert.equal(migrated.providerConsent,undefined,'retired provider consent is removed');
     assert.deepEqual(migrated.accountPlans, PLANS);
     assert.equal(migrated.watchOnlyUntil, EXPIRY, 'the expiry is unchanged');
     // The app fills the schedule default into a rule on save; every field the owner set is unchanged.
@@ -65,9 +63,7 @@ for (const [name, policy, expected] of LEGACY_SHAPES) {
     assert.equal(onDisk.lendingPolicyMigration?.fromLegacyPolicy, true, 'the migration is noted');
     assert.equal(onDisk.lendingPolicyMigration?.acknowledged, false, 'the note stays until the owner saves');
     const running = await api(restarted.app, '/api/lending');
-    assert.equal(running.objective.accounts.find(account => account.id === 'claude').plan, 'max20', 'the running app reads the plan');
-    const cap = await api(restarted.app, '/api/lending/owner-settings');
-    assert.equal(cap.values.maxJobUsd, 2.5, 'the owner\'s per-job cap is unchanged by the migration');
+    assert.equal(running.limits.lendingPolicy.accountPlans.claude,'max20','the saved plan remains visible');
   });
 
   test(`a legacy ${name} app reaches the backend with consent unchanged and migrates once`, {timeout: 120000}, async t => {
@@ -107,7 +103,7 @@ test('the migrated policy is on disk before startup goes on, and the atomic writ
   }
   const restarted = await starting;
   const view = await api(restarted.app, '/api/lending');
-  assert.equal(view.objective.accounts.find(account => account.id === 'claude').plan, 'max20', 'startup finished on the migrated policy');
+  assert.equal(view.limits.lendingPolicy.accountPlans.claude, 'max20', 'startup finished on the migrated policy');
 });
 
 // A legacy start point outside today's range does not stop startup: it is clamped into the range, and the note names it.
@@ -119,7 +115,7 @@ test('a legacy custom start point outside 0.2 to 0.5 is clamped into it, and the
   assert.equal(onDisk.limits.lendingPolicy.strategyParams.e0, 0.5, 'the start point is clamped to the top of its range');
   assert.deepEqual(onDisk.lendingPolicyMigration.adjusted, ['e0'], 'the note names the clamped number');
   assert.equal(onDisk.limits.lendingPolicy.strategyParams.keepPct, 40, 'an unread legacy number is kept as saved');
-  assert.deepEqual(onDisk.limits.lendingPolicy.providerConsent, {}, 'a repaired number clears consent until the owner grants it again');
+  assert.equal(onDisk.limits.lendingPolicy.providerConsent,undefined,'retired provider consent stays absent');
 });
 
 // A record this build cannot normalize at all is reset to the defaults with no consent, and startup carries on.
@@ -128,6 +124,6 @@ test('a legacy record that cannot be normalized is reset to the defaults with no
   const restarted = await f.start('lender');
   const onDisk = JSON.parse(await readFile(file, 'utf8'));
   assert.equal(onDisk.limits.lendingPolicy.strategy, 'automatic', 'the defaults apply');
-  assert.deepEqual(onDisk.limits.lendingPolicy.providerConsent, {}, 'no consent');
+  assert.equal(onDisk.limits.lendingPolicy.providerConsent,undefined,'retired consent is absent');
   assert.ok(restarted.app, 'startup finished');
 });

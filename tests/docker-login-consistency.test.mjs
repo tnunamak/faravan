@@ -89,7 +89,8 @@ test('cached readiness and signin stay aligned with doctor when diagnose contrad
   assert.equal(await signedIn(), null, 'a working listing does not prove a Docker session');
 
   const initialReadiness = await api(app, '/api/ops/readiness.get', { method: 'POST', body: { refresh: true } });
-  assert.equal(initialReadiness.ready, true);
+  assert.equal(initialReadiness.ready, false, 'an unverified listing is not lending readiness');
+  assert.equal(initialReadiness.checks.find(check => check.name === 'docker_login')?.signinVerified, false);
   const signinView = await api(app, '/api/ops/signin.start', { method: 'POST', body: { target: 'docker' } });
   assert.equal(signinView.status, 'complete');
 
@@ -101,8 +102,9 @@ test('cached readiness and signin stay aligned with doctor when diagnose contrad
 
   assert.deepEqual({ readiness: readinessLogin, signin: signinView.status, doctor: doctorLogin },
     { readiness: true, signin: 'complete', doctor: true });
-  assert.equal(readiness.ready, true);
-  assert.equal(doctor.status, 'ready');
+  assert.equal(readiness.ready, false, 'cached readiness also waits for proof of sandbox create');
+  assert.equal(readiness.checks.find(check => check.name === 'docker_login')?.signinVerified, false);
+  assert.equal(doctor.status, 'ready', 'quick doctor reports preflight, not verified lending readiness');
   assert.ok(stub.calls.includes('ls -q'), 'the backend uses the same status command as signin');
 
   const setup = setupVM({ readiness, agents: [], status: {lending: { enabled: false }} });
@@ -154,7 +156,16 @@ for (const [label, stderr, expected] of [
   };
   const probe = () => probeSbxPreflight({runCommand, platformName:'linux', sbxHomePath:'/synthetic-sbx', userHome:f.root, inspectDaemons:async()=>[]});
   const backend = syntheticBackend(f.root);
-  backend.probeCapabilities = async () => { const preflight = await probe(); return {available:preflight.ok, preflight}; };
+  let createAccepted = false;
+  backend.probeCapabilities = async () => {
+    const preflight = await probe();
+    if (createAccepted) {
+      const login = preflight.checks.find(check => check.name === 'docker_login');
+      assert.equal(login?.ok, true, 'fixture acceptance requires a successful listing first');
+      login.createAccepted = true;
+    }
+    return {available:preflight.ok, preflight};
+  };
   const {owner, lender, circle} = await f.connect({backend});
   const app = lender.app;
   await api(app, '/api/lending/limits', {method:'POST', body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
@@ -167,12 +178,13 @@ for (const [label, stderr, expected] of [
   const status = await api(app, '/api/status'), agents = await api(app, '/api/agents');
   const ui = blockersFor({status, readiness, agents});
   const doctorLine = preflightHumanLines(doctor).find(line=>line.includes('docker_login:'));
-  await api(owner.app, '/api/jobs', {method:'POST', body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic task.',harness:'codex'}});
+  await api(owner.app, '/api/jobs', {method:'POST', headers:{'faravan-confirm':'yes'}, body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic task.',harness:'codex'}});
   await new Promise(resolve=>setTimeout(resolve,900));
   const approvals = await api(app, '/api/approvals');
   console.log(JSON.stringify({label,claims:approvals.length,can_lend:blockers.can_lend,blockers:blockers.blockers,readiness:readiness.checks.find(c=>c.name==='docker_login'),doctor:doctorLine,ui:ui.items.filter(c=>c.key.startsWith('docker'))}));
   assert.equal(readiness.ready, false);
   assert.equal(blockers.can_lend, false);
+  assert.equal(status.lending.enabled, true, 'a sandbox blocker preserves the lending intent');
   // A refresh failure may be temporary, so it is an unconfirmed sign-in with a recheck, never a sign-out that sends the person to sign in.
   if (label === 'refresh unavailable') { assert.equal(blockers.blockers.filter(b=>b.kind==='docker_signed_out').length, 0); assert.equal(blockers.blockers.filter(b=>b.kind==='sandbox_not_ready').length, 1); }
   assert.equal(doctor.checks.find(c=>c.name==='docker_login').detail, expected);
@@ -184,9 +196,43 @@ for (const [label, stderr, expected] of [
   assert.deepEqual(approvals, [], 'no job is claimed while Docker sign-in is blocked');
   assert.equal(backend.calls.filter(([kind])=>kind==='prepare'||kind==='start').length,0);
   await writeFile(fakeSbx, '#!/bin/sh\nexit 0\n', {mode:0o755});
+  // This is the fixture's exact accepted-create event, distinct from the listing.
+  createAccepted = true;
   await api(app, '/api/ops/readiness.get', {method:'POST',body:{refresh:true}});
   await api(app, '/api/agents/refresh', {method:'POST',body:{}});
   await waitFor(async () => (await api(app, '/api/approvals'))[0], 'the same waiting job is claimed when Docker sign-in recovers');
+});
+
+test('a healthy machine whose listing no create has confirmed yet still claims its first job', testOptions, async t => {
+  const f = await appFixture(t), stub = conflictingDockerEvidence();
+  const fakeSbx = join(f.root, 'sbx');
+  await writeFile(fakeSbx, '#!/bin/sh\nexit 0\n', {mode:0o755});
+  const {promisify} = await import('node:util');
+  const {execFile} = await import('node:child_process');
+  const execute = promisify(execFile);
+  const runCommand = async (command, args, options) => {
+    if (args.join(' ') !== 'ls -q') return stub.runCommand(command, args, options);
+    try { return commandResult(await execute(fakeSbx, args, {env:{PATH:process.env.PATH, HOME:f.root}})); }
+    catch (error) { return commandResult({code:error.code, stdout:error.stdout, stderr:error.stderr}); }
+  };
+  const backend = syntheticBackend(f.root);
+  backend.probeCapabilities = async () => {
+    const preflight = await probeSbxPreflight({runCommand, platformName:'linux', sbxHomePath:'/synthetic-sbx', userHome:f.root, inspectDaemons:async()=>[]});
+    return {available:preflight.ok, preflight};
+  };
+  const {owner, lender, circle} = await f.connect({backend});
+  const app = lender.app;
+  await api(app, '/api/lending/limits', {method:'POST', body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
+  await api(app, '/api/agents/codex', {method:'POST', body:{useForLending:true}});
+  await api(app, '/api/lending/mode', {method:'POST', body:{circle:circle.id,mode:'ask'}});
+  await api(app, '/api/lending/on', {method:'POST', body:{circle:circle.id}});
+  const readiness = await api(app, '/api/ops/readiness.get', {method:'POST', body:{refresh:true}});
+  const login = readiness.checks.find(c => c.name === 'docker_login');
+  assert.equal(login.ok, true);
+  assert.equal(login.signinVerified, false, 'the listing is working but no create has confirmed it');
+  assert.notEqual(login.createAccepted, true);
+  await api(owner.app, '/api/jobs', {method:'POST', headers:{'faravan-confirm':'yes'}, body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic task.',harness:'codex'}});
+  await waitFor(async () => (await api(app, '/api/approvals'))[0], 'a healthy lender claims without a manual step or a confirmed create');
 });
 
 for (const platformName of ['linux','darwin','win32']) test(`refresh failure overrides authenticated diagnostics on ${platformName}`, async () => {

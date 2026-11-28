@@ -70,20 +70,41 @@
         },
         "parent": {
           "description": "Requester-signed link to the exact earlier job and result used as this follow-up's base. Requires parent_link_v1 on host and lender.",
-          "type": "object", "additionalProperties": false,
+          "type": "object",
+          "additionalProperties": false,
           "properties": {
-            "job_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-            "result_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+            "job_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "result_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
           },
-          "required": ["job_digest", "result_digest"]
+          "required": [
+            "job_digest",
+            "result_digest"
+          ]
         },
         "audience": {
           "description": "Optional frozen audience; requires the host capability frozen_audience_v1. The device keys, author included, that may see or run this job, snapshotted from the roster at roster_epoch. Devices that join later are refused by the host. Omitted means every current member.",
-          "type": "object", "additionalProperties": false,
+          "type": "object",
+          "additionalProperties": false,
           "properties": {
-            "device_keys": {"type": "array", "items": {"$ref": "#/$defs/digest"}, "minItems": 1, "maxItems": 1024, "uniqueItems": true}
+            "device_keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/digest"
+              },
+              "minItems": 1,
+              "maxItems": 1024,
+              "uniqueItems": true
+            }
           },
-          "required": ["device_keys"]
+          "required": [
+            "device_keys"
+          ]
         },
         "input_protection": {
           "const": "none"
@@ -105,7 +126,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 160,
-              "pattern": "^[^/\\\\\u0000-\u001f\u007f]+$"
+              "pattern": "^[^/\\\\\u0000-\u001f]+$"
             },
             "archive_digest": {
               "type": "string",
@@ -240,44 +261,74 @@
           "maxLength": 1024,
           "description": "Relative subdirectory for agent and checks. Requires working_directory_v1; whole source remains the result root."
         },
-        "auto_run_v1": {
+        "runRequest": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Optional auto_run_v1 extension: the borrower asks the lender to choose the model and effort. The lender picks one exact pair it offers, once. Not allowed beside an explicit model or budget_v1.effort.",
+          "description": "The models and effort the borrower allows; the lender resolves one account in saved order.",
           "properties": {
-            "intent": {
-              "enum": [
-                "cheapest",
-                "strongest"
+            "schemaVersion": {
+              "const": 1
+            },
+            "models": {
+              "oneOf": [
+                {
+                  "const": "any"
+                },
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 64,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "providerId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "modelId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      }
+                    },
+                    "required": [
+                      "providerId",
+                      "modelId"
+                    ]
+                  }
+                }
+              ]
+            },
+            "effortId": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                }
               ]
             }
           },
           "required": [
-            "intent"
+            "schemaVersion",
+            "models",
+            "effortId"
           ]
         },
-        "runRequest": {
-          "type": "object",
-          "additionalProperties": false,
-          "description": "Optional run_request_v1 extension: the models and effort the borrower allows. The lender resolves one account, model and effort from what it advertises and records it in the receipt selection. Not allowed beside auto_run_v1, an explicit model or budget_v1.effort.",
-          "properties": {
-            "schemaVersion": {"const": 1},
-            "models": {
-              "oneOf": [
-                {"const": "any"},
-                {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "object", "additionalProperties": false,
-                  "properties": {"providerId": {"type": "string", "minLength": 1, "maxLength": 256}, "modelId": {"type": "string", "minLength": 1, "maxLength": 256}},
-                  "required": ["providerId", "modelId"]}}
-              ]
-            },
-            "effortId": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1, "maxLength": 256}]}
-          },
-          "required": ["schemaVersion", "models", "effortId"]
+        "designated_member": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Optional designated_member_v1 extension (owner-offline topology): the one member whose store may dispatch this job. Any online member can accept the signed submission and preserve it; the claim fence at each store refuses a dispatch by any other member. The named member must be a roster member at publish."
         },
         "budget_v1": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Optional budget_v1 extension; amounts are whole list-price US dollars (v1 numeric profile).",
+          "description": "Historical signed jobs only. New submissions use runRequest.",
           "properties": {
             "max_list_usd": {
               "type": "integer",
@@ -298,10 +349,21 @@
           },
           "minProperties": 1
         },
-        "designated_member": {
-          "type": "string",
-          "pattern": "^sha256:[0-9a-f]{64}$",
-          "description": "Optional designated_member_v1 extension (owner-offline topology): the one member whose store may dispatch this job. Any online member can accept the signed submission and preserve it; the claim fence at each store refuses a dispatch by any other member. The named member must be a roster member at publish."
+        "auto_run_v1": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Historical signed jobs only. New submissions use runRequest.",
+          "properties": {
+            "intent": {
+              "enum": [
+                "cheapest",
+                "strongest"
+              ]
+            }
+          },
+          "required": [
+            "intent"
+          ]
         }
       },
       "required": [
@@ -449,6 +511,9 @@
           "minItems": 1
         },
         "model": {
+          "description": "Deprecated, read-only model restriction for historical signed jobs only. New submissions must use runRequest.",
+          "deprecated": true,
+          "readOnly": true,
           "type": "object",
           "additionalProperties": false,
           "properties": {

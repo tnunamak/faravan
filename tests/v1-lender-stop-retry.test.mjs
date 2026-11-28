@@ -11,7 +11,7 @@ import {createSyntheticPace50Source} from './helpers/pace50-synthetic-source.mjs
 // The same launch as the cleanup-journal tests: the lender runs in the background, and f.stop aborts it.
 function launch(f) {
   const controller = new AbortController();
-  const lender = createLender({client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
+  const lender = createLender({...f.runOptions,client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
     approve: async () => true, onEvent: (event) => { f.events.push(event); }});
   const running = lender.start(controller.signal);
   let failure;
@@ -133,7 +133,7 @@ test('stop notification recovery keeps its three-second deadline with a silent t
   await f.stop();
 });
 
-test('Stop recovery reports verified cessation for a job the allowance candidate never reserved', {timeout: 20000}, async t => {
+test('Stop recovery reports saved verified cessation without reconciling the backend', {timeout: 20000}, async t => {
   const f = await lenderFixture(t);
   const attempt = f.attempt();
   await f.client.startAttempt(attempt);
@@ -146,12 +146,6 @@ test('Stop recovery reports verified cessation for a job the allowance candidate
     stopReleaseKey:'saved-release-key',stopReportKey:'saved-report-key',stoppedAt:'2026-10-09T12:02:00Z',
     cessationVerified:{sbx_home:ownership.sbx_home,attemptId:attempt.attempt_id,jobDigest:f.jobDigest,generation:attempt.generation}
   }});
-  const runtime = createLendingRuntime({directory:join(f.root,'pace50'),settings:settingsOn,backend:{},presence:()=>false,
-    lastActiveAt:()=>null,selfKey:()=>null,now:f.clock.now,
-    pace50:{account:'synthetic-account',account_week_id:'synthetic-week-1',source:createSyntheticPace50Source({start:f.clock.now()})}});
-  f.policy.lendingRuntime = runtime;
-  t.after(() => runtime.close());
-  assert.deepEqual(runtime.candidate.adapter.state().attempts, []);
   let backendReconciles = 0;
   f.backend.reconcilePending = async () => { backendReconciles++; return {removed:false}; };
 
@@ -162,7 +156,6 @@ test('Stop recovery reports verified cessation for a job the allowance candidate
     assert.equal(f.count('/release'), 1);
     assert.equal(f.count('/stopped'), 1);
     assert.equal(backendReconciles, 0, 'the saved proof already establishes cessation');
-    assert.deepEqual(runtime.candidate.adapter.state().attempts, []);
   } finally {
     await f.stop();
   }

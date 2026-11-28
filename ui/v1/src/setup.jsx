@@ -93,7 +93,7 @@ function ManagedSandboxInstall({ api, refresh }) {
   const labels = {checking:'Looking for the sandbox…', downloading:'Downloading the sandbox from Docker…',verifying:'Checking the download…',unpacking:'Installing the sandbox…',installed:'The sandbox is installed.'};
   return <div class="stack-2" data-telemetry-private="setup">
     <p class="t-sm">Faravan downloads the sandbox from Docker and checks it before installing it.</p>
-    <Button kind="primary" pending={busy} disabled={busy} onClick={install}>{state.phase === 'failed' ? 'Retry installation' : 'Install the sandbox'}</Button>
+    <Button kind="primary" pending={busy} disabled={busy} disabledReason="The sandbox installation is already running." onClick={install}>{state.phase === 'failed' ? 'Retry installation' : 'Install the sandbox'}</Button>
     {state.phase==='downloading' && <Button kind="secondary" onClick={cancel}>Cancel</Button>}
     {busy && <progress aria-label="Sandbox installation" max={state.total || undefined} value={state.total ? state.received : undefined} />}
     <p class="t-sm" role="status">{state.message || labels[state.phase]}</p>
@@ -267,7 +267,7 @@ function Frame({ vm, children }) {
 
 const Head = ({ vm, headingRef }) => <div class="stack-2 setup-head ph-no-capture" data-telemetry-private="setup">
   <h1 class="t-page" ref={headingRef} tabIndex="-1">{vm.kind === 'unsupported' ? vm.headline : vm.on || vm.executionActive || vm.intentUnknown ? vm.headline : vm.ready ? <><Icon name="check-circle" /> Your computer is ready</> : 'Getting this computer ready to lend'}</h1>
-  <p class="t-2" role="status">{vm.lead} {vm.on && <a href="#/lend">Open Lending →</a>}</p>{vm.limitAction && <a class="btn btn-secondary limit-action" href={vm.limitAction.href}>Raise limit</a>}
+  <p class="t-2" role="status">{vm.lead} {vm.on && <a href="#/lend">Open Lending →</a>}</p>
 </div>;
 
 export function SetupDetails({ readiness, copyDetails = null }) {

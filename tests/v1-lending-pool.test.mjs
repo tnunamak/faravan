@@ -1,3 +1,4 @@
+import {poolFactCache} from './helpers/pool-fact-cache.mjs';
 import './helpers/no-browser.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createLendingPool,parseChildId} from '../lib/v1/lending-pool.mjs';
@@ -31,9 +32,9 @@ test('an already-running all-disabled pool admits one account after registry ena
     acquire:async()=>{acquires++;return ()=>{releases++;};}},
    accounts:()=>accounts.listForPool(),capacity:1,adapters:[{spec:{harness_id:'codex'}}],
    createLender:options=>{
-    const row={key:options.accountKey,slot:options.accountSlot,starts:0};workers.push(row);
-    return {start:signal=>{row.starts++;return new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));},
-     getState:()=>({status:'idle'}),admits:offer=>options.policy.hold(offer,{})};
+    const facts=poolFactCache(options.policy);const row={key:options.accountKey,slot:options.accountSlot,starts:0};workers.push(row);
+    return {start:async signal=>{row.starts++;await facts.refresh();if(!signal.aborted)await new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));},
+     getState:()=>({status:'idle'}),admits:()=>facts.reason,refreshAdmission:()=>facts.refresh()};
    },
   });
   assert.deepEqual(accounts.list().map(a=>a.enabled),[false,false]);
@@ -53,6 +54,7 @@ test('an already-running all-disabled pool admits one account after registry ena
   pool.reconfigure();
   const chosenKey=accounts.get(chosen.id).key;
   assert.deepEqual(workers,[{key:chosenKey,slot:0,starts:1}]);
+  await pool.refreshAdmission();
   assert.equal(pool.admits(job),null);
   assert.equal(pool.getState().accountStates.length,1);
   pool.reconfigure();
@@ -123,7 +125,7 @@ test('null daily caps allow pool reservations and admission after heavy daily us
  const f=fixture({dailyJobs:null,dailyMinutes:null});await f.pool.start();
  const store=f.children[0].options.policy.storage;
  await store.set({day:'2026-10-20',jobs:7,milliseconds:8*60*60*1000,pending:{attemptId:'uncapped'}});
- assert.equal(f.children[0].options.policy.hold({author:'friend'}),null);
+ assert.deepEqual((await f.children[0].options.policy.observeLending({author:'friend'})).waits,[]);
  assert.equal(f.disk().jobs,7);
 });
 test('reconciliation returns unused wall reservation without dropping other account journal',async()=>{

@@ -21,7 +21,7 @@ import {settleWithin} from '../lib/v1/settle-within.mjs';
 
 const pace50 = () => ({source:createSyntheticPace50Source({start:Date.now()}),
   account_week_id:'synthetic-week-1'});
-const durableMode = async home => JSON.parse(await readFile(join(home,'v1','lending-pace50-state.json'),'utf8')).mode;
+const durableSettings = async home => JSON.parse(await readFile(join(home,'v1','app-settings.json'),'utf8'));
 
 test('Pause returns after five seconds when approval and offer settlement never finish', async () => {
   const source=await readFile(new URL('../lib/v1/app.mjs',import.meta.url),'utf8');
@@ -64,9 +64,11 @@ test('a timed pause shows paused until its end, then lending resumes by itself',
   const paused = await api(lender.app, '/api/status');
   assert.deepEqual([paused.state, paused.until], ['paused', until]);
   assert.match(paused.summary.reason, /^Paused until /);
-  assert.equal(await durableMode(lender.home),'paused','the candidate stores the durable pause');
+  const savedPause=await durableSettings(lender.home);
+  assert.deepEqual([savedPause.intent,savedPause.pause_until],['on',until],'owner intent and its timed pause are durable');
   await waitFor(async () => (await api(lender.app, '/api/status')).state === 'ready', 'lending resumed after the pause', 20000);
-  assert.equal(await durableMode(lender.home),'on','the timer resumes the durable candidate through the app route');
+  const savedResume=await durableSettings(lender.home);
+  assert.deepEqual([savedResume.intent,savedResume.pause_until],['on',null],'the timer clears the durable pause through the app route');
   assert.equal((await api(lender.app, '/api/status')).until, null);
 });
 

@@ -1,3 +1,4 @@
+import {LENDING_REASONS,lendingReasonText,lendingReasonCode} from '../../../lib/v1/lending-reasons.mjs';
 import {requestLine} from '../../../lib/v1/request-line.mjs';
 import {currentAccountDecision, currentCapacityWait, formatPauseDeadline} from '../../../lib/v1/lending-summary.mjs';
 import {LEGACY_COMPOSE_PROBLEMS} from '../../../lib/v1/problem.mjs';
@@ -284,8 +285,7 @@ export function machineVM(home, devices, {readiness = null, agents = [], approva
     [item?.action, item?.href, item?.item?.action, item?.item?.href]
       .some(value => typeof value === 'string' && value.trim().length > 0));
   if (['blocked-partial', 'blocked', 'update'].includes(projectedState)) {
-    if (page.limitAction) [line, kind, word] = ['Per-job limit too low', 'need', 'Needs you'];
-    else if (!hasAction()) [line, kind, word] = ['Lending is blocked', 'wait', 'Waiting'];
+    if (!hasAction()) [line, kind, word] = ['Lending is blocked', 'wait', 'Waiting'];
   }
   // The chip says "Ready for requests" only when the computer verdict is ready. A hold starts no new job: the chip says what the page
   // says, with the waiting dot. Lending on with no current evidence is still checking.
@@ -301,7 +301,7 @@ export function machineVM(home, devices, {readiness = null, agents = [], approva
     [line, kind, word] = [own ? 'Running your job' : requester ? 'Running ' + requester + '’s job' : 'Running a job', 'run', 'Running'];
   }
   if (kind === 'need' && !page.exec && projectedState === 'unknown') [line, kind, word] = ['Status unavailable', 'off', 'Unknown'];
-  return {name, ...(page.limitAction ? {href:page.limitAction.href} : {}), line, kind, word, state: projectedState};
+  return {name, line, kind, word, state: projectedState};
 }
 /**
  * U3: the Lending page. Reads today's /api/status (effective state S1.1: state, reason,
@@ -462,14 +462,6 @@ function identityHoldFor(account, agents = []) {
   return {...copy, name:agentLabel(id), target:agent?.installed !== false && agent?.signInSupported === true ? agent.id : null};
 }
 
-export function ownerLimitAction(status = {}) {
-  let d = null;
-  const held = (status.lendingPolicy?.accounts ?? []).find(account => {
-    d = currentAccountDecision(account);
-    return d && d.admitted !== true && (d.reason === 'owner_limit_too_low' || d.objective?.reasonCode === 'owner_limit_too_low');
-  });
-  return held ? {href:'#/lend/limits/owner-limit', label:'Raise limit', line:d.status?.line ?? d.objective?.reasonText} : null;
-}
 function fundingHoldFor(account) {
   const d = currentAccountDecision(account);
   return d?.admitted === true ? null : fundingHoldCopy(d?.status?.id ?? d?.reason, {provider:account?.provider, fundingReason:d?.fundingReason});
@@ -577,12 +569,19 @@ function withDockerConfirmation(blockers, confirmation) {
   return {...blockers, items, needsYou};
 }
 
+// A failed start keeps its own record beside the public reason: the retryable circle failure, or the raw blocker kind that
+// status.blockers still carries. The public reason alone is `conditions_unavailable`, which many holds share.
+const lendingStartFailedOf = status => {
+  const reason = status?.intent?.reason ?? status?.reason;
+  return Boolean(status?.lendingStartFailed) || ['lending_not_started','lending_start_failed'].includes(reason) ||
+    reason === 'conditions_unavailable' && Array.isArray(status?.blockers) && status.blockers.some(blocker => blocker?.kind === 'lending_not_started');
+};
 export function lendingVerdictVM(status = {}, blockers, zone = Intl.DateTimeFormat().resolvedOptions().timeZone, agents = [], now = Date.now()) {
   const projection = lendingProjectionOf(status);
   const formatted = formatLendingProjection(projection, {
-    until: lendingUntil(status), now, formatClock: at => clock(at, zone),
+    until: lendingUntil(status),nextAction:status.lending?.nextAction,detail:status.lending?.detail, now, formatClock: at => clock(at, zone),
     agentName: blockers?.first?.agent ? agentLabel(blockers.first.agent) : '',
-    circleName: status.lendingStartFailed?.circleName ?? '',
+    circleName: status.lendingStartFailed?.circleName ?? '', startFailed: lendingStartFailedOf(status),
     stoppedJob: status.stoppedJob ? {requester: clean(status.stoppedJob.requester)} : null,
     hostOutage: hostOutageOf(blockers),
   });
@@ -592,7 +591,7 @@ export function lendingVerdictVM(status = {}, blockers, zone = Intl.DateTimeForm
   // A lent account with no current availability is checking, whatever the projection's admission says.
   // Only a projection that would otherwise say a request can run is turned into "checking"; its own holds keep their cause.
   const pending = formatted.ready && readiness.state === 'checking';
-  const headline = hold.accountHold ? ownerLimitAction(status) ? 'Per-job limit too low' : hold.ownerHold ? 'Check lending accounts' : 'Lending on'
+  const headline = hold.accountHold ? hold.ownerHold ? 'Check lending accounts' : 'Lending on'
     : pending ? 'Checking this computer…' : formatted.headline;
   const reason = hold.accountHold ? hold.identityHold?.line ?? hold.policyWait?.line ?? hold.idleReading ?? probeFailureLine(hold.holdDecision?.probe) ?? hold.holdDecision?.status?.line ?? hold.holdDecision?.objective?.reasonText ?? formatted.reason
     : pending ? 'Checking how much allowance the lent account has.' : formatted.reason;
@@ -628,15 +627,14 @@ export function lendPageVM(status = {}, {agents = [], use = null, now = Date.now
   const until = lendingUntil(status);
   const pauseExpired = projection.intent === 'paused' && time(until) <= now;
   const projectedView = formatLendingProjection(projection, {
-    until, now, formatClock: at => clock(at, zone), person: who, own, circleName, dailyFacts,
+    until,nextAction:status.lending?.nextAction,detail:status.lending?.detail, now, formatClock: at => clock(at, zone), person: who, own, circleName, dailyFacts, startFailed: lendingStartFailedOf(status),
     stoppedJob: status.stoppedJob ? {requester: clean(status.stoppedJob.requester)} : null, hostOutage: hostOutageOf(blockers),
   });
   const kind = projectedView.kind;
   // A hold that clears on its own (a reserve, a quota reading still to come) needs nothing from the owner: lending stays on
   // and the reason line says when it clears. Only a hold the owner must act on asks for attention.
   const provider = executingProvider(status, projection);
-  const limitAction = verdict.readiness.state === 'ready' ? null : ownerLimitAction(status);
-  const headline = !accountHold && !verdict.pending ? projectedView.headline : limitAction ? 'Per-job limit too low' : ownerHold ? 'Check lending accounts' : 'Lending on';
+  const headline = !accountHold && !verdict.pending ? projectedView.headline : ownerHold ? 'Check lending accounts' : 'Lending on';
   const effectiveReason = identityHold?.line ?? idleReading ?? probeFailureLine(holdDecision?.probe) ?? holdDecision?.status?.line ?? holdDecision?.objective?.reasonText ?? projectedView.reason;
   const unsupported = projection.admissionReason === 'platform_unsupported';
   const idleAccounts = (status.lendingPolicy?.accounts ?? []).filter(account=>account.provider===status.allowance?.provider);
@@ -661,7 +659,7 @@ export function lendPageVM(status = {}, {agents = [], use = null, now = Date.now
     tone: ['blocked', 'starting', 'unknown', 'update'].includes(kind) ? 'need' : ['off', 'paused', 'outside', 'resting', 'unsupported'].includes(kind) ? 'off' : 'on',
     icon: kind === 'blocked' ? 'alert' : 'lend', headline: dockerDisplay?.headline ?? status.summary?.headline ?? (accountHold || verdict.pending ? verdict.headline : headline), agentStates: verdict.agentStates, readiness: verdict.readiness,
     // A selected account is held although the projection reads ready: no new job starts, so the headline is the verdict.
-    accountHold: Boolean(accountHold), ownerHold, identityHold, limitAction,
+    accountHold: Boolean(accountHold), ownerHold, identityHold,
     // A pause can expire while the last summary is still on screen.
     reason: dockerDisplay?.detail ?? (policyWait ? `${accountHold.provider === 'codex' ? 'Codex' : 'Claude Code'}: ${policyWait.line}` : (pauseExpired ? projectedView.reason : status.summary?.reason)
       ?? (verdict.accountHold || verdict.pending ? verdict.reason : effectiveReason)),
@@ -791,13 +789,13 @@ export function lendingQuotaLinesVM(snapshot = {}, approvalRequired = false, sta
       : 'about ' + Math.round(percent * 10) / 10 + '%';
     // A hold is one decision for the account: a job must fit every window. Its reason is said once, not repeated as the
     // reason of each window, and each window's open amount follows so the owner sees which window holds the job.
-    if (current.admitted !== true && (ids.length > 1 || ownerLimitAction({lendingPolicy:{accounts:[account]}}))) {
+    if (current.admitted !== true && ids.length > 1) {
       const open = ids.filter(id => !weeklyText || windowNameOf(id) !== 'week').filter(id => windowNameOf(id) === '5-hour window' && windowsById.get(id)?.state === 'not_open' ||
           finite(points[id]) && points[id] >= 0)
         .map(id => ' This ' + windowNameOf(id) + ': ' +
           (windowNameOf(id) === '5-hour window' && windowsById.get(id)?.state === 'not_open'
             ? 'not started' : percentText(points[id])) + '.');
-      return [{key: account.provider, label: accountName, text: (ownerLimitAction({lendingPolicy:{accounts:[account]}}) ? '' : reason) + (weeklyText ? ' ' + weeklyText : '') + open.join('')}];
+      return [{key: account.provider, label: accountName, text: reason + (weeklyText ? ' ' + weeklyText : '') + open.join('')}];
     }
     return ids.map(id => {
       const window = windowsById.get(id), minutes = window?.window_minutes;
@@ -931,11 +929,12 @@ export function setupVM({readiness, agents, status, devices, circle, lendingRead
     // A working listing proves no sign-in. Only Docker accepting a create is evidence; without one the step is not checked yet.
     if (item.key === 'docker_signin' && ['ok', 'unknown'].includes(item.status) && dockerRow?.ok === true && dockerRow?.signinVerified === false) {
       if (dockerRow.createAccepted === true) detail = 'Docker accepted Faravan\'s request to start a test workspace.';
+      else if (dockerRow.checking === true) { state = 'now'; detail = 'Checking…'; }
       // Faravan runs the test workspace itself after a sign-in. If it could not confirm, say so once, with a check that runs it again.
       else if (item.action === 'Check again') { state = 'need'; extra = {actions: ['recheck', 'docker-create']}; }
     }
     // A read that timed out or could not run is not a refusal: say Faravan is checking and will try again.
-    if (item.key === 'docker_signin' && ['blocked', 'unknown'].includes(item.status) && (dockerRow?.unknown === true || dockerRow?.cause === 'docker_signin_refresh_unavailable'))
+    else if (item.key === 'docker_signin' && ['blocked', 'unknown'].includes(item.status) && (dockerRow?.unknown === true || dockerRow?.cause === 'docker_signin_refresh_unavailable'))
       { state = 'now'; detail = 'Faravan is checking Docker and will try again.'; extra = {actions: ['recheck']}; }
     else if (item.key === 'docker_signin' && item.status === 'unknown' && item.action === 'Check again')
       { extra = {actions: ['recheck']}; }
@@ -1122,8 +1121,7 @@ export function setupVM({readiness, agents, status, devices, circle, lendingRead
     confirmedOff: hasProjection ? projection.intent === 'off' : status?.intent?.on === false || status?.lending?.enabled === false,
     eyebrow: '',
     accountHold: Boolean(verdict.accountHold),
-    limitAction: verdict.readiness.state === 'ready' ? null : ownerLimitAction(status),
-    headline: dockerDisplay?.headline ?? (allOk && !checksPending && ownerLimitAction(status) && verdict.readiness.state !== 'ready' && !executionActive ? 'Your computer is ready' : allOk && !checksPending && on && !executionActive && !verdict.readiness.holdsBack ? 'This computer is ready to lend' : on || executionActive ? checksPending && verdict.ready && !executionActive ? 'Getting this computer ready to lend' : verdict.headline : hasProjection && projection.intent === 'unknown' ? 'Lending status unavailable' : allOk && !checksPending ? 'Your computer is ready' : 'Getting this computer ready to lend'),
+    headline: dockerDisplay?.headline ?? (allOk && !checksPending && on && !executionActive && !verdict.readiness.holdsBack ? 'This computer is ready to lend' : on || executionActive ? checksPending && verdict.ready && !executionActive ? 'Getting this computer ready to lend' : verdict.headline : hasProjection && projection.intent === 'unknown' ? 'Lending status unavailable' : allOk && !checksPending ? 'Your computer is ready' : 'Getting this computer ready to lend'),
     lead: dockerDisplay?.detail ?? (on ? (verdict.accountHold || verdict.waitReason ? verdict.reason : first ? 'Your lending choice is saved. Fix the step that needs you below.' : model.first || working || pendingLendingChecks ? 'Your lending choice is saved. Faravan is getting this computer ready.' : 'Your approval mode and limits apply.') : hasProjection && projection.intent === 'unknown' ? verdict.reason : allOk && !checksPending ? 'This computer is ready to lend with ' + names + '. Review your settings, then turn on lending.'
       : steps.some(s => s.state === 'bad') ? 'Lending stays off until it passes. Here is what happened.'
       : first ? stepsNeedYou(requiredSteps) : readinessNote || (working ? 'Checking Docker Sandboxes and coding agents.' : stepsNeedYou(requiredSteps))),
@@ -1623,7 +1621,7 @@ export function blockersFor(args = {}) {
   // Readiness can pass even when resuming the lender failed after a restart.
   // Keep that execution failure in the same ordered model and expose the recovery action.
   const startFailed = !['running','finishing','stopping'].includes(lendingProjectionOf(args.status).execution) &&
-    (Boolean(args.status?.lendingStartFailed) || ['lending_not_started','lending_start_failed'].includes(args.status?.intent?.reason ?? args.status?.reason));
+    lendingStartFailedOf(args.status);
   if (startFailed) {
     const selected=(args.status?.circles ?? []).find(circle=>circle.id===(args.status?.activeCircle ?? args.status?.lending?.circle));
     const name=clean(args.status?.lendingStartFailed?.circleName ?? selected?.name);
@@ -1964,6 +1962,11 @@ export function waitingCopyVM(job = {}, {circle = '', zone = computerZone(), len
     projection.phase === 'waiting' && job.declined_count > 0 ? 'A lender declined this request. Another computer can still pick it up.' :
     projection.phase === 'waiting' && ['preparation_failed','sandbox_failed','sandbox_start_failed','agent_signed_out','sandbox_not_ready'].includes(previousReason)
       ? decisionMaker + ' couldn’t start it; it’s open again.' : '';
+  const latest=job.previous_attempt??job.current_attempt;
+  let returned;try{returned=typeof latest?.reason==='string'?JSON.parse(latest.reason):latest?.reason;}catch{}
+  if(projection.phase==='waiting'&&latest?.state==='released'&&Number.isSafeInteger(returned?.until)&&Object.hasOwn(LENDING_REASONS,returned.code))
+    return {headline:'Waiting: '+decisionMaker+'’s computer',
+      text:lendingReasonText(returned.code,{until:returned.until,formatTime:at=>clock(at,zone)})+' Another member may take it sooner.',previousDecision:''};
   if(job.offerWaiting) {
     const {readyCount,deciding,dailyLimitCount,dailyLimitDevices,dailyLimitNames}=job.offerWaiting;
     const availability=Number.isSafeInteger(readyCount)?readyCount+' lending '+(readyCount===1?'device is':'devices are')+' ready. ':'';
@@ -2256,12 +2259,9 @@ function missingPairCopy({model = '', effort = ''}) {
   return model ? `No lender offers ${model} right now` : `No lender offers ${effort} effort right now`;
 }
 // The saved automatic choice is one this screen does not know, or no online lender says it can make it. Send stays off; the copy says what to change.
-const autoPickCopy = auto => AUTO_ASKED[auto]
-  ? `No lender can make “${AUTO_ASKED[auto]}” right now. Choose another model, or Let the lender choose`
-  : `The saved choice “${auto}” isn’t one Faravan can send. Choose Cheapest that fits or Strongest offered, or Let the lender choose`;
 // A model is sent with its effort, never alone: a lender that offers the model only at other efforts would skip it.
 function pickBlocker(offers, choice) {
-  if (!choiceOffered(offers, choice)) return choice.auto ? autoPickCopy(choice.auto) : missingPairCopy(choice);
+  if (!choiceOffered(offers, choice)) return missingPairCopy(choice);
   return choice.model && !choice.effort ? `Choose an effort for ${choice.model}` : '';
 }
 // `instead`: a circle whose host answers, offered while this circle's host does not (composeCircle in compose-model.mjs).
@@ -2444,11 +2444,11 @@ export function homePageVM({jobs = null, approvals = null, changes = null, recei
     const provider = providerOf(offer.agent);
     const account = options.home.lendingPolicy?.accounts?.find(entry =>
       (entry.accountKey ?? entry.provider) === (offer.accountKey ?? provider));
-    const reason = offer.reason === 'quota_reserve' ? 'owner_reserve' : offer.reason;
-    const wait = reason === 'owner_reserve'
+    const reason = lendingReasonCode(offer.reason);
+    const wait = reason === 'no_spare'
       ? currentCapacityWait(account, {now, formatClock:at=>clock(at, options.zone, true)}) : null;
     const checkAfterExpiry = wait?.state === 'waiting' && currentAccountDecision(account).wait.nextEvaluationAtMs >= offer.expiresAt;
-    const status = lendingStatus({reason, pendingRequest:true});
+    const status = lendingStatus({reason:reason==='no_spare'?'owner_reserve':reason, pendingRequest:true});
     return {id:offer.id, agent:agentLabel(offer.agent), line:checkAfterExpiry
       ? 'Your remaining allowance is being kept for you. This request is held by the lender’s reserve and may expire before allowance becomes available.'
       : wait?.line ?? (status.id === 'usage_estimate' ? 'Checking whether this computer can start the request.' : status.line)};

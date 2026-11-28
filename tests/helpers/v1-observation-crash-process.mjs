@@ -16,5 +16,5 @@ if(phase==='recover'||phase==='crash-ack')f.client.observeExecutionStart=async(a
   return {execution_observed_at:options.observedAt};
 };
 f.policy.storage=storage;
-const lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,approve:async()=>true});
+const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,approve:async()=>true});
 lender.start(new AbortController().signal).catch(()=>process.exit(2));

@@ -10,7 +10,7 @@ import {createSyntheticPace50Source} from './helpers/pace50-synthetic-source.mjs
 test('lending intent before a join adopts the joined circle and can resume', async t => {
   const f = await appFixture(t);
   const owner = await f.start('owner');
-  const lender = await f.start('newcomer');
+  const lender = await f.start('newcomer',{syntheticAccounts:true});
   await f.provisionFromHome('owner');
   const pseudo = (await api(lender.app, '/api/circles')).find(circle => circle.name === 'My devices');
   assert.ok(pseudo);
@@ -85,7 +85,7 @@ test('startup clears a legacy My devices target instead of choosing among joined
 
   const restarted=await f.start('newcomer');
   await waitFor(async()=>(await api(restarted.app,'/api/lending')).circle===null,'legacy target cleared');
-  await waitFor(async()=>(await api(restarted.app,'/api/home')).intent.reason==='lending_not_started',
+  await waitFor(async()=>(await api(restarted.app,'/api/home')).intent.reason==='conditions_unavailable',
     'resume recovery shown for an already joined circle');
   const conflict=await api(restarted.app,'/api/lending/resume',
     {method:'POST',body:{circle:pseudo.id},status:409});

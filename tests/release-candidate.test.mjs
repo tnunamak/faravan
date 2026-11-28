@@ -2,15 +2,19 @@ import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,createHash} from 'node:crypto';
-import {parseOptions,checkIdentity,verifyCandidate,macArchitecture,assertNewRelease,checkReleaseAssets,verifyMacApp} from '../scripts/release-candidate.mjs';
+import {parseOptions,checkIdentity,verifyCandidate,macArchitecture,assertNewRelease,checkReleaseAssets,verifyMacApp,unpackMacZip} from '../scripts/release-candidate.mjs';
 import {buildSignedManifest} from '../packaging/sign-update.mjs';
 const version='0.2.0-preview.20261126.1',commit='a'.repeat(40);
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 test('candidate arguments reject missing, conflicting and malformed inputs',()=>{
-  for(const args of [[],['--commit','HEAD'],['--commit',commit,'--version','1.0.0'],['--commit',commit,'--version',version,'--linux-only','--mac-zip','app.zip']])
+  const privateHead='c'.repeat(40);
+  for(const args of [[],['--commit','HEAD'],['--commit',commit,'--private-head',privateHead,'--version','1.0.0'],['--commit',commit,'--private-head',privateHead,'--version',version,'--linux-only','--mac-zip','app.zip']])
     assert.throws(()=>parseOptions(args));
-  assert.equal(parseOptions(['--commit',commit,'--version',version,'--dry-run','--linux-only']).dryRun,true);
+  assert.equal(parseOptions(['--commit',commit,'--private-head',privateHead,'--version',version,'--dry-run','--linux-only']).dryRun,true);
   assert.equal(parseOptions(['--promote',version]).promote,version);
+  assert.throws(()=>parseOptions(['--commit',commit,'--version',version]),/private-head/);
+  assert.throws(()=>parseOptions(['--commit',commit,'--private-head','short','--version',version]),/private-head/);
+  assert.equal(parseOptions(['--commit',commit,'--private-head',privateHead.toUpperCase(),'--version',version]).privateHead,privateHead);
 });
 test('embedded version and source SHA must match the requested commit',()=>{
   const metadata={schemaVersion:1,sourceSha:commit,version};
@@ -37,6 +41,18 @@ test('signed manifest includes both Linux downloads and verifies exact bytes and
   assert.throws(()=>verifyCandidate({...input,artifacts:[{...artifacts[0],sha256:'f'.repeat(64)},...artifacts.slice(1)]}),/hash|artifact/);
   assert.throws(()=>verifyCandidate({...input,artifacts:artifacts.slice(1)}),/artifact/);
 });
+test('changing a private head after signing invalidates the exact manifest signature',()=>{
+  const {publicKey,privateKey}=generateKeyPairSync('ed25519');
+  const privateHead='c'.repeat(40);
+  const signed=buildSignedManifest({tarball:Buffer.from('fixture'),version,sourceSha:commit,privateHead,
+    tarballUrl:'https://example.invalid/build.tar.gz',privateKeyPem:privateKey.export({type:'pkcs8',format:'pem'})});
+  const input={...signed,version,commit,publicKey:publicKey.export({type:'spki',format:'pem'})};
+  assert.equal(verifyCandidate(input).privateHead,privateHead);
+  const manifest=JSON.parse(signed.bytes);
+  const tampered=Buffer.from(JSON.stringify({...manifest,privateHead:'d'.repeat(40)}));
+  assert.throws(()=>verifyCandidate({...input,bytes:tampered}),{code:'bad_signature'});
+});
+
 test('Mac architecture comes from the archived launcher, not its filename',()=>{
   const arm=Buffer.alloc(8);arm.writeUInt32LE(0xfeedfacf);arm.writeUInt32LE(0x100000c,4);
   assert.equal(macArchitecture(arm),'arm64');
@@ -204,4 +220,18 @@ await publishPair(process.env.GH_ROOT,'gh-pages','candidate',await readFile(proc
   const calls=(await readFile(join(root,'calls'),'utf8')).trim().split('\n').map(JSON.parse);
   assert.equal(calls.length,3);
   assert.ok(calls.slice(1).every(args=>args[1].endsWith('?ref='+'c'.repeat(40))));
+});
+
+test('unpacking a release Mac zip leaves out the AppleDouble entry ditto writes for a signed script',async t=>{
+  const {mkdtemp,rm,writeFile,mkdir,readdir}=await import('node:fs/promises');
+  const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+  const {execFileSync}=await import('node:child_process');
+  const root=await mkdtemp(join(tmpdir(),'release-unpack-'));t.after(()=>rm(root,{recursive:true,force:true}));
+  const macos=join(root,'in/Faravan.app/Contents/MacOS');await mkdir(macos,{recursive:true});
+  await writeFile(join(macos,'faravan'),'#!/bin/sh\n');await writeFile(join(macos,'._faravan'),'AppleDouble');
+  await writeFile(join(macos,'faravan-launch'),'launcher');
+  const zip=join(root,'app.zip');
+  try{execFileSync('zip',['-q','-r',zip,'Faravan.app'],{cwd:join(root,'in')});}catch(error){if(error.code==='ENOENT')return t.skip('zip is unavailable');throw error;}
+  const out=join(root,'out');await mkdir(out);await unpackMacZip(zip,out);
+  assert.deepEqual((await readdir(join(out,'Faravan.app/Contents/MacOS'))).sort(),['faravan','faravan-launch']);
 });

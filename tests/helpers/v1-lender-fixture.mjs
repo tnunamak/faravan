@@ -1,9 +1,11 @@
 import './no-browser.mjs';
-import { HOST_CAPABILITIES } from '../../lib/v1/versions.mjs';
+import { HOST_CAPABILITIES, RUN_REQUEST_CAPABILITY } from '../../lib/v1/versions.mjs';
+import { borrowerRunRequest, resolveSelection } from '../../lib/v1/run-request.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
+import {randomUUID} from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -71,7 +73,14 @@ export async function lenderFixture(t, options={}) {
   payload.requirements.capabilities=[];
   payload.requirements.limits.wall_seconds=120;
   if(options.authorIndex!==undefined)payload.author=ids[options.authorIndex];
+  delete payload.runRequest;
   options.mutateJob?.(payload);
+  payload.runRequest=borrowerRunRequest(payload.runRequest===undefined
+    ?{harness,model:payload.requirements.model?.any_of?.[0],effort:payload.budget_v1?.effort}
+    :{runRequest:payload.runRequest});
+  delete payload.requirements.model;
+  delete payload.budget_v1;
+  payload.requirements.capabilities=[...new Set([...payload.requirements.capabilities,RUN_REQUEST_CAPABILITY])];
   const job=p.signEnvelope('job',payload,keys[options.authorIndex??0]), jobDigest=p.digest(payload), circle=payload.circle;
   artifacts.set(payload.prompt.digest,prompt);
   let active={attempt_id:vectors.objects.result.envelope.payload.attempt_id,job_digest:jobDigest,
@@ -104,6 +113,10 @@ export async function lenderFixture(t, options={}) {
       if(route==='/roster')return json(res,roster);
       if(route==='/jobs/claim-next'){
         if(claimed||(body.exclude??[]).includes(jobDigest))return json(res,null);
+        const selected=resolveSelection({runRequest:payload.runRequest,accounts:body.advertisement?.accounts??[]});
+        if(!selected.ok)return json(res,null);
+        if(options.requeueReleased&&active.state==='released')active={...active,attempt_id:randomUUID(),generation:active.generation+1,state:'active',reason:null,execution_started_at:null};
+        active={...active,selection:selected.value,claimed_at:iso(clock.now()),lease_expires_at:iso(clock.now()+120000)};
         claimed=true;return json(res,{job_digest:jobDigest,job,attempt:active});
       }
       if(route.startsWith('/artifacts/')){
@@ -140,7 +153,7 @@ export async function lenderFixture(t, options={}) {
         active={...active,lease_expires_at:iso(clock.now()+body.lease_seconds*1000)};return json(res,active);
       }
       if(route.endsWith('/release')||route.endsWith('/fail')){
-        active={...active,state:route.endsWith('/release')?'released':'failed',reason:body.reason};return json(res,active);
+        active={...active,state:route.endsWith('/release')?'released':'failed',reason:body.reason};if(options.requeueReleased&&active.state==='released'&&!active.execution_started_at)claimed=false;return json(res,active);
       }
       if(route.endsWith('/stopped')){
         active={...active,compute_stopped:true,stopped_at:iso(clock.now())};return json(res,active);
@@ -194,7 +207,7 @@ export async function lenderFixture(t, options={}) {
       await options.agent?.(handle.scratch_dir);
       if(options.hold)await execution.promise;
       if(options.runError)throw options.runError;
-      handle._lastExecStdout=options.stdout??'{"type":"turn.completed","usage":{"input_tokens":13,"output_tokens":5}}\n';
+      handle._lastExecStdout=options.stdout??'{"type":"thread.started","model":"example-model"}\n{"type":"turn.completed","usage":{"input_tokens":13,"output_tokens":5}}\n';
       opts.onLog?.({stream:'stdout',chunk:Buffer.from(handle._lastExecStdout)});
       return lendingReading?{stop:null,meter:lendingReading}:undefined;
     },
@@ -203,8 +216,11 @@ export async function lenderFixture(t, options={}) {
     async destroy(){calls.push(['destroy']);return {removed:true};}
   };
   // Queue/runtime tests model the legacy host proxy; native file lending has its own refusal tests.
-  const adapters=[{spec:legacyProxyHarness(harness),installed:true,signedIn:true,harnessVersion:'test-only',
+  const adapters=[{accountProviderId:({'claude-code-subscription':'claude','claude-code-api-key':'anthropic'}[harness]??harness),spec:legacyProxyHarness(harness),installed:true,signedIn:true,harnessVersion:'test-only',
     models:['example-model'],capabilities:[],...(options.run?{run:options.run}:{})}];
+  // Lifecycle tests inject one account and a synthetic execution transport. Account broker,
+  // credential and allowance enforcement have dedicated tests against the real implementations.
+  const runOptions=syntheticAccountRunOptions({harness,credentialValues:options.credentialValues});
   let saved=options.saved??null;
   const saves=[];
   const policy={checkJobIsolation:async()=>({state:"pass"}),enabled:true,mode:'ask',idleOnly:false,dailyJobs:10,dailyMinutes:60,maxWallSeconds:300,
@@ -238,10 +254,23 @@ export async function lenderFixture(t, options={}) {
     async settle(){return {applied:true};},
   };
   policy.lendingRuntime??={candidate:fixtureCandidate};
-  Object.assign(f,{client,backend,adapters,policy,saves,saved:()=>saved,evidence,
+  Object.assign(f,{client,backend,adapters,policy,runOptions,saves,saved:()=>saved,evidence,
     json,problem,count:route=>requests.filter(r=>r.route.endsWith(route)).length});
   t.after(async()=>{try{await f.stop?.();}finally{server.closeAllConnections();await new Promise(r=>server.close(r));
     try{await f.policy.lendingRuntime?.close?.();}finally{await rm(root,{recursive:true,force:true});}}
     assert.deepEqual(errors,[],errors.map(e=>e.stack).join('\n'));});
   return f;
+}
+
+// Shared transport for lifecycle fixtures; broker/credential enforcement has real integration tests.
+export function syntheticAccountRunOptions({harness='codex',accountId='fixture-account',credentialValues}={}){
+  return {runAccounts:()=>[{accountId,providerId:({'claude-code-subscription':'claude','claude-code-api-key':'anthropic'}[harness]??harness),models:[{
+    id:'example-model',enabled:true,efforts:[{id:'low'},{id:'medium'},{id:'high'}],defaultEffort:null}]}],
+    accountExecution:{credentialValues:async()=>await credentialValues?.()??[],lendableAccounts:async accounts=>accounts,wrap:async({backend,selection,attempt})=>new Proxy(backend,{
+      get(target,key){
+        if(key==='start')return async(...args)=>({...await target.start(...args),
+          accountObservation:{jobId:attempt.job_digest,model:selection.modelId}});
+        const value=target[key];return typeof value==='function'?value.bind(target):value;
+      }
+    })}};
 }

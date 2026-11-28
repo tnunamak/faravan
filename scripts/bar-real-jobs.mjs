@@ -1,7 +1,8 @@
 import {execFile} from 'node:child_process';
+import {constants} from 'node:fs';
 import {access} from 'node:fs/promises';
 import {homedir} from 'node:os';
-import {join, resolve} from 'node:path';
+import {delimiter, isAbsolute, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseArgs, promisify} from 'node:util';
 import {candidateURL, readManifest} from './bar-feed.mjs';
@@ -66,9 +67,12 @@ export async function readRealJobs({apps,since,run=execute,memberHome=false}) {
   }
   return memberHome?countMemberHomeJobs(records,since):countJobs(records,since);
 }
-async function installedApp() {
-  const candidates=[join(homedir(),'.local/bin/faravan'),join(homedir(),'.local/share/faravan/usr/bin/faravan'),join(homedir(),'.local/share/faravan-preview-20261026/usr/bin/faravan'),'/Applications/Faravan.app/Contents/MacOS/faravan'];
-  for(const app of candidates){try{await access(app);return app;}catch{}}
+export async function installedApp({env=process.env,home=homedir(),canExecute=file=>access(file,constants.X_OK)}={}) {
+  const dataRoot=env.XDG_DATA_HOME&&isAbsolute(env.XDG_DATA_HOME)?env.XDG_DATA_HOME:join(home,'.local','share');
+  const commandPaths=(env.PATH??'').split(delimiter).filter(dir=>isAbsolute(dir)).map(dir=>join(dir,'faravan'));
+  const candidates=[join(dataRoot,'faravan','usr','bin','faravan'),join(home,'.local','bin','faravan'),...commandPaths,
+    '/Applications/Faravan.app/Contents/MacOS/faravan'];
+  for(const app of new Set(candidates)){try{await canExecute(app);return app;}catch{}}
   throw Error('Installed Faravan command not found');
 }
 export async function main(args) {

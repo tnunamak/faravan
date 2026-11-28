@@ -96,6 +96,16 @@ test('closing the app (update, relaunch) with an open offer does not hide it', {
   assert.equal(f.jobs.get(submitted.jobDigest).state, 'queued');
 });
 
+// The quit op reaches the app's own /api/shutdown and relays its answer. Closing every socket at once dropped that
+// relayed answer on an idle app (about one quit in three), so the CLI said the app was unreachable after a quit that worked.
+test('quit through the ops route always delivers its answer, then the app closes', {timeout: 240000}, async t => {
+  for (let run = 0; run < 6; run++) {
+    const f = await appFixture(t), {lender} = await f.connect();
+    assert.deepEqual(await api(lender.app, '/api/ops/app.quit', {method: 'POST', body: {}, headers: {'faravan-confirm': 'yes'}, status: 200}), {shuttingDown: true}, 'quit ' + run);
+    await waitFor(() => gone(lender.app), 'the app closed', 20000);
+  }
+});
+
 test('shutdown with no job closes the app by itself', {timeout: 120000}, async t => {
   const f = await appFixture(t), {lender, circle} = await f.connect();
   await lendingOn(lender.app, circle);

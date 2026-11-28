@@ -127,7 +127,7 @@ test('a saved burn history calibrates the estimate where the cold assumption wou
   const fast = await executionFor(accountStore({a1: record()}), {usage: burnHistory(10, 50)}, t)
     .execution.lendability({accountId: 'a1'});
   assert.equal(fast.kind, 'wait', 'a saved 40 points/hour burn holds the account for its owner');
-  assert.equal(fast.reason, 'owner_reserve');
+  assert.equal(fast.reason, 'no_spare');
 });
 
 test('the launch refusal keeps its structured reason, next action and retry time', async t => {
@@ -142,6 +142,7 @@ test('the launch refusal keeps its structured reason, next action and retry time
     spec: {}, backend: {}}), error => {
     assert.equal(error.code, 'provider_limit_reached');
     assert.equal(error.admissionDecline, true);
+    assert.equal(error.retryAtMs,at+3600000);
     assert.deepEqual(error.nextAction, {id: 'wait_for_reset', label: 'Wait until allowance resets',
       target: {accountId: 'a1', jobId}});
     return true;
@@ -223,7 +224,7 @@ async function signedClaimTimeAdmission(t, {useSecondAccount = false} = {}) {
     return !accounts.some(row => row.accountId === account.id);
   }, 'the limited account leaves the claim advertisement', 30000);
 
-  const submitted = await api(owner.app, '/api/jobs', {method: 'POST', body: {
+  const submitted = await api(owner.app, '/api/jobs', {headers:{'faravan-confirm':'yes'},method: 'POST', body: {
     circle: circle.id, prompt: 'Signed job nobody can run yet',
     git: 'https://github.com/example/synthetic.git', commit: '1'.repeat(40), harness: 'codex',
     runRequest: {schemaVersion: 1, models: [{providerId: 'codex', modelId: 'example-model'}], effortId: 'high'},
@@ -264,4 +265,30 @@ test('an account at its provider limit is not offered, and its signed job waits 
 
 test('the signed job result names the second account when the first remains limited', {timeout: 180000}, t => {
   return signedClaimTimeAdmission(t, {useSecondAccount: true});
+});
+
+test('transcript scan values come only from the selected account',async t=>{
+ const store=accountStore({a1:record({secret:{credential:{access:'SELECTED_ACCOUNT_TOKEN',refresh:'SELECTED_REFRESH_TOKEN'}}}),
+  a2:record({id:'a2',secret:{key:'OTHER_ACCOUNT_TOKEN'}})});
+ const {execution}=executionFor(store,{},t);
+ const selection={accountId:'a1',providerId:'claude',modelId:'example-model',effortId:null};
+ assert.deepEqual(await execution.credentialValues(selection,'not-prepared'),['SELECTED_ACCOUNT_TOKEN','SELECTED_REFRESH_TOKEN']);
+ await assert.rejects(()=>execution.credentialValues({...selection,providerId:'codex'},'not-prepared'),/job_binding_mismatch/);
+ await store.transaction(state=>{delete state.records.a1.secret;});
+ await assert.rejects(()=>execution.credentialValues(selection,'not-prepared'),/account_secret_unavailable/);
+});
+
+test('one reduction includes configured accounts absent from advertisements',async t=>{
+ const store=accountStore({a1:record({authState:'signed_out'}),a2:record({id:'a2'})});
+ const {execution}=executionFor(store,{},t);
+ const calls=[];
+ execution.lendability=async({accountId,conditions})=>{calls.push(accountId);return accountId==='a1'
+  ?{kind:'hold',code:'account_signed_out'}:{kind:'wait',reason:'cleanup_pending',nextEvaluationAtMs:1234};};
+ const result=await execution.availability({providerIds:['claude']});
+ assert.deepEqual(calls,['a1','a2']);assert.equal(result.decision.kind,'wait');
+ execution.lendability=async({accountId})=>accountId==='a2'?{kind:'lend'}:{kind:'wait',nextEvaluationAtMs:1234};
+ assert.deepEqual((await execution.availability()).accountIds,['a2']);
+ await store.transaction(state=>{state.records={};});
+ const empty=await execution.availability();assert.equal(empty.decision.code,'no_accounts');
+ assert.equal(empty.decision.nextAction.label,'Add an agent account');
 });
