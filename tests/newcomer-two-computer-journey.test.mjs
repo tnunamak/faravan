@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {mkdir, readFile, access, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {connect} from 'node:net';
-import {appFixture, api, syntheticBackend, waitFor} from './helpers/triage-small-app-fixture.mjs';
+import {appFixture, api, browserApi, syntheticBackend, waitFor} from './helpers/triage-small-app-fixture.mjs';
 import {git} from './helpers/git-guest.mjs';
 import {formatMembership} from '../ui/v1/src/membership-projection-view.mjs';
 import {jobVM} from '../ui/v1/src/view-models.mjs';
@@ -12,7 +12,7 @@ import {jobVM} from '../ui/v1/src/view-models.mjs';
 const answer = 'I changed the greeting to Hello from your friend.';
 const changedFile = 'Hello from your friend.\n';
 const wait = (check, label) => waitFor(check, label, 30000);
-const post = (app, path, body = {}) => api(app, path, {method:'POST', body});
+const post = (app, path, body = {}) => api(app, path, {method:'POST', body, ...((path==='/api/jobs'||path.endsWith('/apply'))?{headers:{'faravan-confirm':'yes'}}:{})});
 const children = () => process._getActiveHandles().filter(handle =>
   handle.constructor?.name === 'ChildProcess' && handle.exitCode === null && handle.signalCode === null);
 
@@ -121,8 +121,10 @@ test('a friend joins, sends a job, reads the answer and adds a branch without ch
     await post(a.app, '/api/lending/mode', {circle:circle.id, mode:'ask'});
     await post(a.app, '/api/lending/on', {circle:circle.id});
     const prompt = 'Change greeting.txt to Hello from your friend. Explain what changed.';
-    const sent = await post(b.app, '/api/jobs', {circle:circle.id, prompt, harness:'codex',
-      repo:{path:repo, includeUncommitted:false}});
+    // The friend uses the app on their own computer: the browser owner, who sends no confirm header.
+    const ui = await browserApi(b.app);
+    const sent = await ui('/api/jobs', {method:'POST', body:{circle:circle.id, prompt, harness:'codex',
+      repo:{path:repo, includeUncommitted:false}}});
     const path = '/api/jobs/' + encodeURIComponent(sent.jobDigest);
     const query = '?circle=' + encodeURIComponent(circle.id);
     const view = () => api(b.app, path + query);
@@ -156,7 +158,8 @@ test('a friend joins, sends a job, reads the answer and adds a branch without ch
     assert.equal(typeof preview.preview_token, 'string');
     assert.deepEqual(await snapshot(), before, 'Preview leaves the current branch and work unchanged.');
     assert.equal(git(repo, 'for-each-ref', '--format=%(refname) %(objectname)', 'refs/heads'), branchesBefore);
-    const applied = await post(b.app, path + '/apply', {...input, dry_run:false, expect:{preview_token:preview.preview_token}});
+    // Applying changes the person's repository; the app's Apply button sends as the browser owner, with no confirm header.
+    const applied = await ui(path + '/apply', {method:'POST', body:{...input, dry_run:false, expect:{preview_token:preview.preview_token}}});
     assert.equal(applied.status, 'applied');
     assert.equal(applied.branch, branch);
     assert.equal(git(repo, 'show', branch + ':greeting.txt'), changedFile.trim());

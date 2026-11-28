@@ -1,6 +1,5 @@
 import './helpers/no-browser.mjs';
 import {legacyProxyHarness} from './helpers/legacy-proxy-harness.mjs';
-import {createSyntheticPace50Source} from './helpers/pace50-synthetic-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {appFixture, api, waitFor} from './helpers/v1-app-fixture.mjs';
@@ -9,9 +8,7 @@ import {appFixture, api, waitFor} from './helpers/v1-app-fixture.mjs';
 // An approved card is checked again before it runs. Hard gates here: the owner's global daily minutes.
 const harness = 'claude-code-subscription';
 async function setup(t) {
-  const source = createSyntheticPace50Source({start: Date.now(), resets: {weekly: 7 * 86400000, short: 5 * 3600000}});
-  const common = {adapters: [{spec: legacyProxyHarness(harness), installed: true, signedIn: true, harnessVersion: 'synthetic-only', models: ['example-model'], capabilities: []}],
-    lendingPace50: {source, account_week_id: 'synthetic-week-1'}};
+  const common = {syntheticAccounts:'claude'};
   const f = await appFixture(t, {hold: true}), {owner, circle} = await f.connect({}, common);
   await api(owner.app, '/api/agents/' + harness + '/run', {method: 'POST', body: {model: 'claude-haiku-5-5', effort: null}});
   await api(owner.app, '/api/agents/' + harness, {method: 'POST', body: {useForLending: true}});
@@ -28,7 +25,7 @@ async function setup(t) {
   await api(member.app, '/api/circles/join', {method: 'POST', body: {link: invite}});
   await api(owner.app, '/api/circles/' + circle.id + '/approve', {method: 'POST', body: {}});
   await member.app.device.refreshRoster(circle.id);
-  const submit = prompt => api(member.app, '/api/jobs', {method: 'POST', body: {circle: circle.id, git: 'https://github.com/example/synthetic.git', commit: '1'.repeat(40), prompt, harness}});
+  const submit = prompt => api(member.app, '/api/jobs', {headers:{'faravan-confirm':'yes'},method: 'POST', body: {circle: circle.id, git: 'https://github.com/example/synthetic.git', commit: '1'.repeat(40), prompt, harness}});
   const cards = async () => (await api(owner.app, '/api/approvals')).filter(c => c.jobDigest || c.job_digest);
   const runs = () => owner.backend.calls.filter(([kind]) => kind === 'run').length;
   return {f, owner, circle, member, limits, submit, cards, runs};

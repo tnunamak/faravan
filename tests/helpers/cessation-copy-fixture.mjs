@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {CESSATION_FIX, cessationHoldMessage} from '../../lib/sandbox-remediation.mjs';
 import {projectReadinessBlockers} from '../../lib/v1/blockers.mjs';
 import {createDeadlineRecoveryGate} from '../../lib/v1/deadline-recovery-gate.mjs';
+import {lendingReasonCode} from '../../lib/v1/lending-reasons.mjs';
 
 // Component boundary for computeEffective: execute its real body and the real
 // effectiveState projection without booting an app, provider or host sandbox.
@@ -16,7 +17,9 @@ function section(text,start,end) {
 export function cessationCopyFixture({existing=null,resumeFailure=false}={}) {
   const app=source('lib/v1/app.mjs'),registry=source('lib/v1/ops/registry.mjs');
   const stateSource=source('lib/v1/lending-state.mjs').replace(/^import .*;\n/gm,'').replace(/export /g,'');
-  const context=vm.createContext({structuredClone,options:{},hostProfiles:new Map(),projectReadinessBlockers,CESSATION_FIX,cessationHoldMessage,backend:{cleanupStatus:()=>({items:[]})},
+  const context=vm.createContext({structuredClone,options:{},hostProfiles:new Map(),projectReadinessBlockers,CESSATION_FIX,cessationHoldMessage,
+    // lending-state.mjs imports this; the source is evaluated with its import lines removed.
+    lendingReasonCode,backend:{cleanupStatus:()=>({items:[]})},
     // app.mjs reads cleanup rows through this module-level helper; the fake backend has no snapshot API.
     cleanupDisplaySummary:backend=>backend.cleanupStatus(),
     // Every machine prerequisite is known ready; no external checks run.

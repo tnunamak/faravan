@@ -2,15 +2,15 @@ import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as p from '../lib/protocol/index.mjs';
-import {DEFAULT_RUN_MODEL} from '../lib/v1/lender-pace50.mjs';
+import {DEFAULT_RUN_MODEL} from '../lib/v1/lending-meter.mjs';
 import { appFixture, api, waitFor } from './helpers/v1-app-fixture.mjs';
 
 const jobPath = digest => '/api/jobs/' + encodeURIComponent(digest);
-const submit = (owner, circle) => api(owner.app, '/api/jobs', { method: 'POST', body: { circle: circle.id,
+const submit = (owner, circle) => api(owner.app, '/api/jobs', { headers:{'faravan-confirm':'yes'}, method: 'POST', body: { circle: circle.id,
   git: 'https://github.com/example/synthetic.git', commit: '1'.repeat(40), prompt: 'Synthetic task', harness: 'codex' } });
 
 test('job progress route: a coordinator without the channel reads as no steps; a bad cursor is a 400', { timeout: 20000 }, async t => {
-  const f = await appFixture(t), { owner, circle } = await f.connect();
+  const f = await appFixture(t), { owner, circle } = await f.connect({syntheticAccounts:'codex'});
   const { jobDigest } = await submit(owner, circle);
   const base = f.override;
   f.override = async ctx => {
@@ -25,7 +25,7 @@ test('job progress route: a coordinator without the channel reads as no steps; a
 });
 
 test('job progress route passes through the coordinator steps and nothing else', { timeout: 20000 }, async t => {
-  const f = await appFixture(t), { owner, circle } = await f.connect();
+  const f = await appFixture(t), { owner, circle } = await f.connect({syntheticAccounts:'codex'});
   const { jobDigest } = await submit(owner, circle);
   const base = f.override, seen = [];
   f.override = async ctx => {
@@ -44,7 +44,7 @@ test('job progress route passes through the coordinator steps and nothing else',
 });
 
 test('job progress route passes stage entries through as stage and elapsed seconds (P8b)', { timeout: 20000 }, async t => {
-  const f = await appFixture(t), { owner, circle } = await f.connect();
+  const f = await appFixture(t), { owner, circle } = await f.connect({syntheticAccounts:'codex'});
   const { jobDigest } = await submit(owner, circle);
   const base = f.override, attempt = '33333333-3333-4333-8333-333333333333';
   f.override = async ctx => {
@@ -76,26 +76,26 @@ test('the app heartbeats while lending is off, then ready, with no job, person o
     }
     return base(ctx);
   };
-  const { lender, circle } = await f.connect({ heartbeatMs: 100 });
+  const { lender, circle } = await f.connect({ heartbeatMs: 100, syntheticAccounts:'codex' });
   // Status heartbeats only: a member also sends a one-field capability declaration ({capabilities}) to the same route.
   const mine = () => beats.filter(b => b.signer === lender.app.device.keyId && b.intent);
   await api(lender.app, '/api/lending/limits', { method: 'POST', body: { dailyJobs: 3, dailyMinutes: 60, maxWallSeconds: 1200, idleOnly: false } });
   await api(lender.app, '/api/agents/codex', { method: 'POST', body: { useForLending: true } });
-  await api(lender.app, '/api/lending/mode', { method: 'POST', body: { circle: circle.id, mode: 'ask' } });
+  await api(lender.app, '/api/lending/mode', { headers:{'faravan-confirm':'yes'}, method: 'POST', body: { circle: circle.id, mode: 'ask' } });
   await api(lender.app, '/api/lending/on', { method: 'POST', body: { circle: circle.id } });
   for (let i = 0; i < 100 && !(mine().length >= 3 && mine().some(b => b.intent.state === 'ready')); i++) await new Promise(r => setTimeout(r, 100));
   assert.ok(mine().length >= 2 && mine().every((b, i, all) => i === 0 || b.seq > all[i - 1].seq), 'seq increases');
   assert.ok(mine().some(b => b.intent.state === 'ready'), 'ready after lending is on');
   assert.ok(mine().every(b => ['off', 'blocked', 'starting', 'ready'].includes(b.intent.state)));
   for (const { signer, ...b } of mine()) {
-    assert.deepEqual([...b.capabilities].sort(), ['progress_v1','transcript_relay_v1','offers_v1','budget_v1','auto_run_v1','circle_profile_v1','circle_people_v1','circle_authority_v1','working_directory_v1','source_manifest_v1','source_project_name_v1','filtered_git_v1',...(b.agents.some(a=>a.model_efforts?.length)?['model_effort_pairs_v1']:[])].sort());
+    assert.deepEqual([...b.capabilities].sort(), ['progress_v1','transcript_relay_v1','offers_v1','budget_v1','designated_member_v1','circle_profile_v1','circle_people_v1','circle_authority_v1','working_directory_v1','source_manifest_v1','source_project_name_v1','filtered_git_v1',...(b.agents.some(a=>a.model_efforts?.length)?['model_effort_pairs_v1']:[]),...(b.accounts?.length?['run_request_v1']:[])].sort());
     assert.deepEqual(Object.keys(b.execution).sort(), ['state', 'stops_by']);
     assert.doesNotMatch(JSON.stringify(b), /sha256:|\/home\/|prompt|requester/);
   }
 });
 
 test('configured exact pairs appear in the actual heartbeat',{timeout:30000},async t=>{
- const f=await appFixture(t),{lender,circle}=await f.connect({heartbeatMs:100});
+ const f=await appFixture(t),{lender,circle}=await f.connect({heartbeatMs:100,syntheticAccounts:'codex'});
  await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
  await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
  const initial=await waitFor(()=>f.heartbeats?.findLast(b=>b.agents?.some(a=>a.adapter==='codex'&&a.model_efforts?.some(pair=>pair.model===DEFAULT_RUN_MODEL.codex&&pair.effort==='medium'))),'default heartbeat',15000);
@@ -108,19 +108,11 @@ test('configured exact pairs appear in the actual heartbeat',{timeout:30000},asy
  assert.ok(beat.capabilities.includes('model_effort_pairs_v1'));
 });
 
-test('the heartbeat says which automatic choices each agent can satisfy, from its own pairs',{timeout:60000},async t=>{
- const f=await appFixture(t),{lender,circle}=await f.connect({heartbeatMs:100});
+test('the heartbeat never advertises retired automatic model choices',{timeout:60000},async t=>{
+ const f=await appFixture(t),{lender,circle}=await f.connect({heartbeatMs:100,syntheticAccounts:'codex'});
  await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
  await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
- const beatWith=async pairs=>{
-  await api(lender.app,'/api/agents/codex/run',{method:'POST',body:{model:null,effort:null,model_efforts:pairs}});
-  const beat=await waitFor(()=>f.heartbeats?.findLast(b=>b.agents?.some(a=>a.adapter==='codex'&&p.canonicalize(a.model_efforts??[])===p.canonicalize(pairs))),'heartbeat for '+JSON.stringify(pairs),15000);
-  return {beat,agent:beat.agents.find(a=>a.adapter==='codex')};
- };
- const ranked=await beatWith([{model:'gpt-6-luna',effort:'low'}]);
- assert.deepEqual(ranked.agent.auto_run_intents,['cheapest','strongest']);assert.ok(ranked.beat.capabilities.includes('auto_run_v1'));
- const priced=await beatWith([{model:'gpt-5.4-mini',effort:'low'}]);
- assert.deepEqual(priced.agent.auto_run_intents,['cheapest'],'a priced model with no rank cannot be the strongest');
- const neither=await beatWith([{model:'pair-one',effort:'low'}]);
- assert.equal(Object.hasOwn(neither.agent,'auto_run_intents'),false);assert.equal(neither.beat.capabilities.includes('auto_run_v1'),false,'no choice to make, so no capability');
+ const beat=await waitFor(()=>f.heartbeats?.findLast(b=>b.accounts?.length),'account heartbeat',15000);
+ assert.equal(beat.capabilities.includes('auto_run_v1'),false);
+ assert.ok(beat.agents.every(agent=>!Object.hasOwn(agent,'auto_run_intents')));
 });

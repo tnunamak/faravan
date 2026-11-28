@@ -1,6 +1,7 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {RUN_REQUEST_CAPABILITY} from '../lib/v1/versions.mjs';
 import {createLender} from '../lib/v1/lender.mjs';
 import {lenderFixture,until} from './helpers/v1-lender-fixture.mjs';
 import {makeTelemetry,settle} from './helpers/telemetry-harness.mjs';
@@ -9,14 +10,14 @@ import {makeTelemetry,settle} from './helpers/telemetry-harness.mjs';
 // (TELEMETRY.md section 2.3 "Lender sites"). Synthetic fixtures only; no sandbox, provider or model.
 function launch(f,{approve=async()=>true}={}) {
   const controller=new AbortController(),diagnostics=[];
-  const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,approve,
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,approve,
     onDiagnostic:entry=>diagnostics.push(entry),onEvent:event=>f.events.push(event)});
   const running=lender.start(controller.signal),settled=running.catch(error=>error);
   f.stop=async()=>{controller.abort();await settled;};
   return {lender,diagnostics,running,settled};
 }
 const offers=f=>{
-  f.client.capabilities=async()=>({capabilities:['offers_v1']});
+  f.client.capabilities=async()=>({capabilities:['offers_v1',RUN_REQUEST_CAPABILITY]});
   f.client.listOffers=async function*(){};
 };
 const coded=(code,extra={})=>Object.assign(new Error('synthetic '+code),{code,...extra});
@@ -49,7 +50,7 @@ test('a stop whose sandbox removal is unproven reports cessation_unverified besi
   const {lender,diagnostics}=launch(f);
   await until(()=>f.calls.some(([kind])=>kind==='run'),'running');
   await lender.stopCurrentJob(lender.getState().current);
-  await until(()=>sawReason(f,'cessation_unverified'),'unverified');
+  await until(()=>sawReason(f,'cleanup_pending'),'unverified');
   await f.stop();
   const [entry]=only(diagnostics,'cessation_unverified');
   assert.equal(only(diagnostics,'cessation_unverified').length,1);
@@ -72,7 +73,7 @@ test('a failed offer list reports offers_failed once per fault',{timeout:60000},
   let faults=0;
   f.client.listOffers=async function*(){if(faults++===0)throw new Error('synthetic list failure');};
   const {diagnostics}=launch(f);
-  await until(()=>sawReason(f,'offers_failed'),'list failure surfaced');
+  await until(()=>sawReason(f,'circle_unreachable'),'list failure surfaced');
   f.clock.advance(5000);await until(()=>faults>1,'list read again');
   await f.stop();
   assert.equal(diagnostics.length,1);
@@ -83,7 +84,7 @@ test('a claim the lender gives up on reports claim_failed; a retried claim repor
   const refused=await lenderFixture(t);
   refused.client.claimNext=async()=>{throw new Error('synthetic claim failure');};
   const first=launch(refused);
-  await until(()=>sawReason(refused,'claim_failed'),'claim refused');
+  await until(()=>sawReason(refused,'circle_unreachable'),'claim refused');
   await refused.stop();
   assert.equal(first.diagnostics.length,1);
   assert.deepEqual([first.diagnostics[0].code,first.diagnostics[0].phase],['claim_failed','before_claim']);
@@ -99,8 +100,8 @@ test('a claim the lender gives up on reports claim_failed; a retried claim repor
 
 test('a lender loop failure reports lender_failed once',{timeout:60000},async t=>{
   const f=await lenderFixture(t);
-  f.backend.lenderCapabilities=()=>{throw new Error('synthetic loop failure');};
   const {diagnostics,settled}=launch(f);
+  Object.defineProperty(f.policy,'enabled',{enumerable:true,get(){throw new Error('synthetic loop failure');}});
   assert.match((await settled).message,/synthetic loop failure/);
   assert.equal(diagnostics.length,1);
   assert.deepEqual([diagnostics[0].code,diagnostics[0].phase],['lender_failed','before_claim']);
@@ -110,7 +111,7 @@ test('a completion rejected during recovery reports completion_rejected; from th
   const recovery=await lenderFixture(t);
   recovery.override=({route,req})=>{if(route.endsWith('/complete')){req.socket.destroy();return true;}return false;};
   const interrupted=launch(recovery);
-  await until(()=>sawReason(recovery,'network_error'),'completion saved for retry');
+  await until(()=>sawReason(recovery,'circle_unreachable'),'completion saved for retry');
   await recovery.stop();
   assert.ok(recovery.saved().resultPending);
   recovery.override=({route,res})=>{if(route.endsWith('/complete')){recovery.problem(res,'definitive_rejection',409);return true;}return false;};

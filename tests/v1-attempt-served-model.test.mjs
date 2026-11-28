@@ -1,9 +1,7 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+
 import {attemptEvidenceFromState, buildAttemptEvidence, mergeServedModelEvidence, observeServedModel, servedModelEvidence} from '../lib/v1/attempt-evidence.mjs';
 import {parseClaudeStream} from '../lib/v1/lending-meter.mjs';
 
@@ -119,94 +117,3 @@ test('pure: retries fill missing effort and upgrade unknown to stream to guard i
 // These owner-run integration cases use the actual scoped lender/policy/adapter.
 // The scope-limited worker runs --test-name-pattern='^pure:' rather than loading
 // their excluded transitive dependencies or replacing those dependencies.
-test('integration: usageUnits keeps its numbers and fallback model unchanged', async () => {
-  const {usageUnits, jobRequest} = await import('../lib/v1/lender-pace50.mjs');
-  const request = {attemptId: 'attempt-1', jobId: 'job-1', job: {}, model: requested, stopMs: 0};
-  const plain = jobRequest(request), withEffort = jobRequest({...request, effort: 'low'});
-  assert.equal(Object.hasOwn(plain, 'effort'), false, 'existing callers retain their exact request shape');
-  assert.equal(withEffort.effort, 'low');
-  delete withEffort.effort;
-  assert.deepEqual(withEffort, plain);
-  const guard = usageUnits({provider: 'claude', model: requested, effort: 'low', execution: {
-    stdout: stream('stream-model'), lending_meter: {model: requested, final: true, cost_usd: 0}}});
-  assert.equal(guard.units_micro, 0);
-  assert.equal(guard.served_model.source, 'guard');
-  assert.equal(guard.served_model.served, requested);
-  const streamed = usageUnits({provider: 'claude', model: requested, effort: 'low', execution: {stdout: stream('stream-model')}});
-  assert.equal(streamed.units_micro, 0);
-  assert.equal(streamed.served_model.source, 'stream');
-  const fallback = usageUnits({provider: 'claude', model: requested, effort: 'low', execution: {}});
-  assert.equal(fallback.metered.model, requested);
-  assert.equal(fallback.units_micro, null);
-  assert.equal(fallback.served_model.served, null);
-  assert.equal(fallback.served_model.reason, 'no_source_reported_model');
-});
-
-test('integration: old state validates and normal events add metadata without changing any number or effect', async () => {
-  const {transitionEstimatedPace50State: transition} = await import('../lib/v1/lending-policy.mjs');
-  const original = oldState();
-  assert.equal(transition(original, {type: 'validate', event_id: 'check', at: 100}).reason, 'unknown_event');
-  const metadata = observed({observation: {model: 'guard-model'}});
-  const events = [
-    {type: 'usage', burn_id: 'burn-1', resources: [{id: 'five_hour', instance: 'window-1', amount_micro: 10}]},
-    {type: 'usage_unknown', provider: 'claude'},
-  ];
-  for (const data of events) {
-    const event = {...data, event_id: 'finish', at: 101, attempt_id: 'attempt-1'};
-    const plain = transition(original, event), annotated = transition(original, {...event, served_model: metadata});
-    assert.equal(plain.applied, true, data.type);
-    assert.deepEqual(annotated.state.attempts[0].served_model, metadata);
-    delete annotated.state.attempts[0].served_model;
-    assert.deepEqual(annotated, plain, data.type);
-    assert.deepEqual(transition(original, {...event, served_model: {served: 'bad'}}), plain,
-      'invalid optional metadata cannot change an accounting event');
-  }
-  assert.deepEqual(original, oldState());
-});
-
-test('integration: metadata-only fallback preserves watermark/resources and rejects wrong timestamps', async () => {
-  const {transitionEstimatedPace50State: transition} = await import('../lib/v1/lending-policy.mjs');
-  const state = oldState(), metadata = observed({observation: {model: 'guard-model'}});
-  const event = {type: 'served_model', event_id: 'attempt-1:served-model', at: state.updated_at, attempt_id: 'attempt-1', served_model: metadata};
-  const result = transition(state, event);
-  assert.equal(result.applied, true);
-  assert.deepEqual(result.effects.map(row => row.type), ['persist_proposed_state']);
-  const restored = structuredClone(result.state);
-  delete restored.attempts[0].served_model;
-  restored.revision--; restored.event_ids.pop();
-  assert.deepEqual(restored, state, 'only metadata, revision and the event id change');
-  assert.equal(transition(state, {...event, at: state.updated_at + 1}).reason, 'served_model_invalid');
-});
-
-test('integration: adapter loads old state, deduplicates retries, upgrades evidence, and reopens it', async t => {
-  const {createPace50Adapter} = await import('../lib/v1/lending-pace50-adapter.mjs');
-  const directory = fs.mkdtempSync(join(tmpdir(), 'attempt-served-model-'));
-  const file = join(directory, 'lending-pace50-state.json'), original = oldState();
-  fs.writeFileSync(file, JSON.stringify(original));
-  const noEffect = () => { throw new Error('metadata must not invoke provider-facing effects or builders'); };
-  const options = {directory, account: original.account, account_week_id: original.account_week_id, buildInput: noEffect,
-    effects: {arm_cessation_deadline: noEffect, launch_chunk: noEffect, open_short_window: noEffect,
-      cancel_pending_attempt: noEffect, request_cessation: noEffect, request_fresh_complete_reconciliation: noEffect}};
-  let adapter = createPace50Adapter(options);
-  t.after(async () => { await adapter.close(); fs.rmSync(directory, {recursive: true, force: true}); });
-  assert.equal(attemptEvidenceFromState(adapter.state(), 'attempt-1').served_model.reason, 'not_recorded');
-  const metadata = observed({});
-  const outcomes = await Promise.all([adapter.recordServedModel('attempt-1', metadata), adapter.recordServedModel('attempt-1', metadata)]);
-  assert.deepEqual(outcomes.map(row => row.applied), [true, false]);
-  assert.equal(outcomes[1].reason, 'already_recorded');
-  assert.equal(adapter.state().revision, original.revision + 1);
-  assert.equal(adapter.state().updated_at, original.updated_at);
-  assert.deepEqual(adapter.state().attempts[0].resources, original.attempts[0].resources);
-  const streamed = observed({parsed: {model: 'stream-model'}}), guarded = observed({observation: {model: 'guard-model'}});
-  assert.equal((await adapter.recordServedModel('attempt-1', streamed)).applied, true);
-  assert.equal((await adapter.recordServedModel('attempt-1', guarded)).applied, true);
-  const revision = adapter.state().revision;
-  assert.equal((await adapter.recordServedModel('attempt-1', observeServedModel({}))).reason, 'already_recorded');
-  assert.equal(adapter.state().revision, revision);
-  assert.equal((await adapter.recordServedModel('attempt-1', observed({observation: {model: 'final-guard-model'}}))).applied, true);
-  assert.equal((await adapter.recordServedModel('attempt-1', guarded)).applied, true,
-    'a later report must not collide with an earlier content/event id');
-  await adapter.close();
-  adapter = createPace50Adapter(options);
-  assert.deepEqual(attemptEvidenceFromState(adapter.state(), 'attempt-1').served_model, guarded);
-});

@@ -28,7 +28,7 @@ async function stalledFixture(t, {offers}) {
   };
   f.policy.preparationTimeoutMs = PREPARATION_MS;
   const controller = new AbortController();
-  const lender = createLender({client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
+  const lender = createLender({...f.runOptions,client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
     approve: async () => {state.approvals++; return true;}, onEvent: e => f.events.push(e)});
   const loop = lender.start(controller.signal);
   f.stop = async () => {controller.abort(); state.inFlight = false; pending.resolve({ok: false, code: 'policy_unenforceable'}); await loop;};

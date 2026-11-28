@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { gunzipSync } from 'node:zlib';
+
 import { createLender } from '../lib/v1/lender.mjs';
 import { readArchiveFiles } from '../lib/archive.mjs';
 import { lenderFixture, until } from './helpers/v1-lender-fixture.mjs';
@@ -12,7 +12,7 @@ import { makeRepo } from './helpers/git-guest.mjs';
 
 function launch(f) {
   const controller = new AbortController();
-  const lender = createLender({ client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
+  const lender = createLender({...f.runOptions, client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
     approve: async () => true, onEvent: event => f.events.push(event) });
   let failure; const settled = Promise.resolve(lender.start(controller.signal)).catch(error => { failure = error; });
   f.stop = async () => { controller.abort(); await settled; if (failure && failure.name !== 'AbortError' && failure.code !== 'aborted') throw failure; };
@@ -55,7 +55,7 @@ test('a no-source message job runs in an empty workspace and returns the faravan
   assert.deepEqual(receipt.source, { kind: 'none' });
   assert.equal(receipt.candidate_format, 'tree');
   assert.equal(receipt.diff_unavailable, undefined);
-  assert.deepEqual(receipt.capabilities_applied, ['results_v1']);
+  assert.deepEqual(receipt.capabilities_applied, ['results_v1', 'run_request_v1']);
   assert.deepEqual(treeNames(f.artifacts.get(candidate.digest)), ['faravan-output/chart.csv']);
 });
 

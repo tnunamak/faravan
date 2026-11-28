@@ -82,6 +82,9 @@ export async function realLenderFixture(t,options={}) {
   }
   const client=index=>clientAt(index,origin);
   const owner=client(0),lender=client(1);
+  await lender.heartbeat({boot:'fixture-accounts',seq:0,intent:{state:'ready'},execution:{state:'idle'},blockers:[],
+    agents:[{adapter:f.adapters[0].spec.harness_id,readiness:'ready',models:['example-model'],per_job_max_minutes:2}],
+    capabilities:['run_request_v1'],accounts:f.runOptions.runAccounts()});
   if(options.offers!==true)delete lender.listJobs;
   async function submit() {
     const payload=structuredClone(f.job.payload);
@@ -93,6 +96,8 @@ export async function realLenderFixture(t,options={}) {
   if(memberStore) {
     const memberOwner=clientAt(0,memberOrigin);
     f.member={origin:memberOrigin,store:memberStore,requests:memberRequests,owner:memberOwner,client:index=>clientAt(index,memberOrigin)};
+    await f.member.client(1).heartbeat({boot:'fixture-accounts',seq:0,intent:{state:'ready'},execution:{state:'idle'},blockers:[],
+      agents:[],capabilities:['run_request_v1'],accounts:f.runOptions.runAccounts()});
     // One signed request carried to each named store: the same envelope and prompt bytes, so every store holds the identical job.
     f.publish=async({designated=false,at=['incumbent','member'],text='Synthetic dual-authority regression'}={})=>{
       const payload=structuredClone(f.job.payload);
@@ -109,6 +114,13 @@ export async function realLenderFixture(t,options={}) {
       return digest;
     };
   }
+  let heartbeatSeq=0;
+  f.refreshAccountHeartbeat=async()=>{
+    const heartbeat={boot:'fixture-accounts',seq:++heartbeatSeq,intent:{state:'ready'},execution:{state:'idle'},blockers:[],
+      agents:[],capabilities:['run_request_v1'],accounts:f.runOptions.runAccounts()};
+    await lender.heartbeat(heartbeat);
+    if(f.member)await f.member.client(1).heartbeat(heartbeat);
+  };
   if(options.publish!==false)f.jobDigest=await submit();
   if(options.exposeTeardown)f.teardownResources={handler,server,dir};
   return f;

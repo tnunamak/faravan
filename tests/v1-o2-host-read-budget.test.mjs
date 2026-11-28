@@ -10,7 +10,7 @@ import {appFixture,api,boundedFetch} from './helpers/v1-app-fixture.mjs';
 const jobPath=d=>'/api/jobs/'+encodeURIComponent(d);
 test('O2: repeated page reads spend only their own host requests, not a roster, names and result read each',{timeout:60000},async t=>{
   const f=await appFixture(t),{owner,circle}=await f.connect();
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'x',harness:'codex'}});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'x',harness:'codex'}});
   await f.complete(jobDigest,'owner',{});
   const q='?circle='+circle.id;
   const reads=[jobPath(jobDigest)+q,jobPath(jobDigest)+'/changes'+q,jobPath(jobDigest)+'/transcript'+q,'/api/jobs','/api/devices'];
@@ -28,7 +28,7 @@ test('O2: repeated page reads spend only their own host requests, not a roster, 
 
 test('O2: a host that is still busy passes its Retry-After through the app to the page',{timeout:60000},async t=>{
   const f=await appFixture(t),{owner,circle}=await f.connect();
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'x',harness:'codex'}});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'x',harness:'codex'}});
   const previous=f.override;
   f.override=async context=>{
     if(context.req.method==='GET'&&context.route==='/jobs/'+jobDigest.slice(7)){
@@ -45,7 +45,7 @@ test('O2: a host that is still busy passes its Retry-After through the app to th
 // Judge r9 O-B: a cold page whose host is still busy after the client's waits shows the saved copy, not a skeleton.
 test('O-B: a busy host answers a read from the saved copy, marked saved',{timeout:60000},async t=>{
   const f=await appFixture(t),{owner,circle}=await f.connect();
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'x',harness:'codex'}});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'x',harness:'codex'}});
   const path=jobPath(jobDigest)+'?circle='+circle.id;
   const live=await api(owner.app,path);
   const previous=f.override;

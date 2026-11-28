@@ -39,7 +39,7 @@ test('approval card allows a request when both optional daily caps are unset', {
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
   const card=await waitForCard(lender,jobDigest);
   assert.deepEqual(card.requestAdmission,{schemaVersion:2,kind:'request-admission',admission:'allowed',reasonCode:null,
@@ -48,7 +48,7 @@ test('approval card allows a request when both optional daily caps are unset', {
 
 test('approval card reports a signed request that does not fit raw remaining minutes', {timeout:60000}, async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const wallMilliseconds=f.jobs.get(jobDigest).job.payload.requirements.limits.wall_seconds*1000;
   const dailyMinutes=Math.ceil(wallMilliseconds/60000)+10;
   const limitMilliseconds=dailyMinutes*60000;
@@ -71,7 +71,7 @@ test('approval card reports a signed request that does not fit raw remaining min
 
 test('approval card allows a signed request that exactly fits raw remaining minutes', {timeout:60000}, async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const wallMilliseconds=f.jobs.get(jobDigest).job.payload.requirements.limits.wall_seconds*1000;
   const dailyMinutes=Math.ceil(wallMilliseconds/60000)+10;
   const limitMilliseconds=dailyMinutes*60000;
@@ -89,7 +89,7 @@ test('approval card allows a signed request that exactly fits raw remaining minu
 
 test('next approval GET reflects changed daily limits and durable usage', {timeout:90000}, async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
-  const first=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle)});
+  const first=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle)});
   const wallMilliseconds=f.jobs.get(first.jobDigest).job.payload.requirements.limits.wall_seconds*1000;
   const dailyMinutes=Math.ceil(wallMilliseconds/60000)+10;
   const firstUsage=dailyMinutes*60000-wallMilliseconds+1;
@@ -111,7 +111,7 @@ test('next approval GET reflects changed daily limits and durable usage', {timeo
   await lender.app.close();
   const newUsage=900000;
   await writeCounters(lender,{jobs:2,milliseconds:newUsage,timeZone});
-  const second=await api(owner.app,'/api/jobs',{method:'POST',body:{...jobInput(circle),prompt:'Updated admission snapshot'}});
+  const second=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{...jobInput(circle),prompt:'Updated admission snapshot'}});
   const restarted=await f.start('lender');
   await api(restarted.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
 

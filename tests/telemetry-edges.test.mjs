@@ -22,7 +22,7 @@ function walk(directory, out = []) {
   }
   return out;
 }
-const SOURCES = [...walk(join(ROOT, 'lib')), ...walk(join(ROOT, 'bin')), ...walk(join(ROOT, 'coordinator')).filter(f => !f.includes('node_modules')), ...walk(join(ROOT, 'ui/v1/src'))]
+const SOURCES = [...walk(join(ROOT, 'lib')), ...walk(join(ROOT, 'bin')), ...walk(join(ROOT, 'ui/v1/src'))]
   .filter(file => (/\.(mjs|jsx|js)$/.test(file) && !/\.test\.m?js$/.test(file)) || /\/bin\/faravan/.test(file));
 const importsOf = file => [...readFileSync(file, 'utf8').matchAll(/(?:from\s+|import\s*\(\s*|require\(\s*)['"]([^'"]+)['"]/g)].map(m => m[1]);
 /** Files (relative to the repo) that import a module whose path ends with `target`. */
@@ -49,12 +49,13 @@ test('the other telemetry modules are reached only from the places that own an e
   }
 });
 
-test('no lending, lender, admission or docker-backend module imports telemetry, and telemetry imports none of them', () => {
+test('lending engines do not import telemetry; telemetry shares only the pure reason vocabulary', () => {
   const lending = SOURCES.map(file => relative(ROOT, file)).filter(file => /\/(lend|admission|docker-backend|offer-book)/.test(file) && !file.startsWith('lib/v1/telemetry/') && !file.startsWith('ui/'));
   assert.ok(lending.length >= 8, 'found ' + lending.join(', '));
   for (const file of lending) assert.ok(!importsOf(join(ROOT, file)).some(spec => /telemetry/.test(spec)), file + ' imports telemetry');
+  assert.doesNotMatch(readFileSync(join(ROOT,'lib/v1/lending-reasons.mjs'),'utf8'),/\bimport\s/,'the shared reason vocabulary imports no engine');
   for (const file of SOURCES.filter(f => f.includes('/lib/v1/telemetry/'))) {
-    assert.ok(!importsOf(file).some(spec => /(lend|lender|admission|docker-backend|lending-)/.test(spec.split('/').at(-1))), relative(ROOT, file) + ' imports lending code');
+    assert.ok(!importsOf(file).some(spec => spec!=='../lending-reasons.mjs'&&/(lend|lender|admission|docker-backend|lending-)/.test(spec.split('/').at(-1))), relative(ROOT, file) + ' imports lending code');
   }
 });
 
@@ -77,9 +78,9 @@ const CLASSES = [
   ['J7', 'result upload or completion pending or rejected', h => { lend(h, 'preparing'); lend(h, 'running'); failure(h, 'delivery_delayed', 'result'); failure(h, 'completion_unknown', 'result'); failure(h, 'completion_rejected', 'result'); lend(h, 'failed', {reason: 'completion_rejected'}); },
     [['problem.count', {'error.type': 'delivery_delayed', outcome: 'delayed'}], ['problem.count', {'error.type': 'completion_unknown'}], ['problem.count', {'error.type': 'completion_rejected'}], ['job.run', {outcome: 'failed'}]]],
   ['L1', 'quota meter missing', h => h.tel.observe('event:offer-decision', {outcome: 'ineligible', reason: 'quota_unknown', harness: 'codex', mode: 'auto', wallSeconds: 60, deadline: 600}),
-    [['health.state', {check: 'quota_meter', state: 'degraded'}], ['lending.offer.decision', {reason: 'quota_unknown'}]]],
+    [['health.state', {check: 'quota_meter', state: 'degraded'}], ['lending.offer.decision', {reason: 'conditions_unavailable'}]]],
   ['L2', 'quota meter stale or unreadable', h => { h.tel.observe('event:offer-decision', {outcome: 'ineligible', reason: 'quota_unknown', harness: 'claude-code', mode: 'ask', wallSeconds: 600, deadline: 3600}); },
-    [['health.state', {check: 'quota_meter', state: 'degraded'}], ['lending.offer.decision', {reason: 'quota_unknown', harness: 'claude-code'}]]],
+    [['health.state', {check: 'quota_meter', state: 'degraded'}], ['lending.offer.decision', {reason: 'conditions_unavailable', harness: 'claude-code'}]]],
   ['L7', 'five-hour guard or budget stop', h => { lend(h, 'preparing'); lend(h, 'running'); lend(h, 'sending-result', {stopReason: 'budget'}); lend(h, 'finished', {stopReason: 'budget'}); },
     [['job.run', {outcome: 'finished', 'stop.reason': 'budget'}]]],
   ['L8', 'guard record or stop failure', h => { failure(h, 'guard_record_invalid'); failure(h, 'guard_record_unverified'); },
@@ -104,7 +105,7 @@ const CLASSES = [
   ['H2', 'harness sign-in failure', h => { h.tel.observe('event:signin', {flowId: 'f', target: 'codex', status: 'starting'}); h.clock.advance(2000); h.tel.observe('event:signin', {flowId: 'f', target: 'codex', status: 'failed'}); },
     [['signin.run', {outcome: 'failed', harness: 'codex'}], ['signin.count', {outcome: 'failed'}]]],
   ['H3', 'sign-in blocks admission', h => h.tel.observe('event:offer-decision', {outcome: 'ineligible', reason: 'agent_signed_out', harness: 'codex', mode: 'auto', wallSeconds: 60, deadline: 600}),
-    [['lending.offer.decision', {reason: 'agent_signed_out'}], ['health.state', {check: 'agent_signin', state: 'blocked'}]]],
+    [['lending.offer.decision', {reason: 'account_signed_out'}], ['health.state', {check: 'agent_signin', state: 'blocked'}]]],
   ['T1', 'tray sees the app unreachable', h => h.inbox('inbox.tray-health-app-reachable'), [['health.state', {check: 'app_reachable', state: 'blocked', }]]],
   ['I5', 'self-update failure', h => { h.tel.observe('event:update', {state: 'checking', owner: 'faravan'}); h.clock.advance(1000); h.tel.observe('event:update', {state: 'failed', owner: 'faravan', currentVersion: '0.1.0', candidate: '0.1.1'}); },
     [['upgrade.run', {outcome: 'failed', owner: 'faravan'}], ['upgrade.count', {outcome: 'failed'}]]],

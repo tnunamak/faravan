@@ -7,10 +7,10 @@ import {join} from 'node:path';
 import {createQuotaRegistry} from '../lib/v1/quota-registry.mjs';
 import {buildLendingRuleState} from '../lib/v1/lending-rule-seam.mjs';
 import {decideObjectiveLend} from '../lib/v1/lending-objective.mjs';
-import {createEstimatedPace50State, evaluateEstimatedPace50} from '../lib/v1/lending-policy.mjs';
+
 import {createLendingHistory} from '../lib/v1/lending-history.mjs';
 import {adaptSeamV2, decide as fluidDecide, protection} from '../lib/v1/rules/fluid-protection.mjs';
-import {ordinaryInput, request, NOW, ACCOUNT, WEEK, MICRO as M, HOUR_MS as H} from './helpers/pace50-fixtures.mjs';
+import {ordinaryInput, NOW, ACCOUNT, MICRO as M, HOUR_MS as H} from "./helpers/pace50-fixtures.mjs";
 
 const model='claude-sonnet-5-5';
 const yes=s=>({admit:true,lendable:Object.fromEntries(s.windows.map(w=>[w.id,100])),reason:'Synthetic spare.'});
@@ -111,25 +111,7 @@ test('decimal micro-boundaries are exact, never a floating-point tolerance',()=>
   }});
   assert.equal(quote(p).admitted,true,'exponent-form native weights use the same exact rounding');
 });
-test('durable quote forwards real builder evidence without synthesizing a registry or bounds',()=>{
-  const p=ordinaryInput({now:NOW}),s=input();
-  p.state=createEstimatedPace50State({account:ACCOUNT,account_week_id:WEEK});
-  p.request=request({requested_usd_micro:3*M,provider:'claude',model});
-  p.objective={...p.objective,ruleDial:s.ruleDial,job:structuredClone(s.job),ruleEvidence:structuredClone(s.ruleEvidence),decide:yes};
-  assert.equal(evaluateEstimatedPace50(p).admitted,true);
-  delete p.objective.job.nativeCostBounds;
-  assert.match(evaluateEstimatedPace50(p).objective.reasonText,/native_cost_bound_unknown/);
-  p.objective.job=structuredClone(s.job);delete p.objective.ruleEvidence.quotaRegistry;
-  assert.match(evaluateEstimatedPace50(p).objective.reasonText,/quota_registry_missing/);
-});
-test('non-injected pace50 decisions are byte-for-byte unchanged by unused registry evidence',()=>{
-  const p=ordinaryInput({now:NOW});p.state=createEstimatedPace50State({account:ACCOUNT,account_week_id:WEEK});
-  p.request=request();
-  const before=evaluateEstimatedPace50(p);assert.equal(before.admitted,true);
-  p.objective.ruleDial=NaN;p.objective.ruleEvidence={quotaRegistry:null};
-  p.objective.job.nativeCostBounds={unit:'unknown',lower:NaN,upper:Infinity};
-  assert.deepEqual(evaluateEstimatedPace50(p),before);
-});
+
 test('real OPEN probe episode keeps source and tail; it is same-reset lower evidence, never a sample',t=>{
   const p=input(),w=p.windows.weekly,start=w.resetAtMs-w.durationMs;
   const home=mkdtempSync(join(tmpdir(),'seam-registry-probe-'));

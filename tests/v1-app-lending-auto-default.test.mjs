@@ -294,14 +294,13 @@ test('creating by an existing circle name adds no second rule or notice',async t
   assert.ok(!(await saved(owner.home)).standingRules.some(r=>r.circle===circle.id));
 });
 
-test('a newly joined circle becomes automatic without raising saved budgets or limits',async t=>{
+test('a newly joined circle becomes automatic without raising saved limits',async t=>{
   const harness='claude-code-subscription',f=await appFixture(t);
   const owner=await f.start('owner'),lender=await f.start('lender',{adapters:[{
     spec:legacyProxyHarness(harness),installed:true,signedIn:true,harnessVersion:'synthetic-only',
     models:['claude-haiku-5-5'],capabilities:[]}]});
   await f.provisionFromHome('owner');
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:2,dailyMinutes:17,maxWallSeconds:600,idleOnly:false}});
-  await api(lender.app,'/api/lending/owner-settings',{method:'POST',body:{maxJobUsd:0.01,reason:'Keep the saved budget'}});
   const limits=(await saved(lender.home)).limits;
   const circle=await create(f,owner.app,'Joined after upgrade');
   await joinCircle(owner.app,lender.app,circle);
@@ -310,9 +309,6 @@ test('a newly joined circle becomes automatic without raising saved budgets or l
   assert.equal(state.modes[circle.id],'auto');
   assert.deepEqual(state.limits,limits);
   assert.equal(rule.dailyJobs,2);assert.equal(rule.dailyMinutes,17);assert.equal(rule.maxWallSeconds,600);
-  assert.equal((await api(lender.app,'/api/lending/owner-settings')).values.maxJobUsd,0.01);
-  const agent=(await api(lender.app,'/api/agents')).find(a=>a.id===harness);
-  assert.ok(!agent.lendable_models.includes('claude-haiku-5-5'),'the saved budget still excludes a model whose call cannot fit');
   assert.deepEqual((await api(lender.app,'/api/status')).lendingPrompts,[]);
 });
 

@@ -52,7 +52,7 @@ test('Home keeps the projected reason while exposing prerequisite detail separat
 test('Home, Lending and shell use one projection through cap, execution, blockers and malformed v2 data', () => {
   const states=[
     {name:'ready',projection:projectLendingState({effective:{intent:{on:true,state:'ready'},execution:{state:'idle'}},dailyLimitReached:false}),headline:'Ready for requests'},
-    {name:'needs attention',projection:projectLendingState({effective:{intent:{on:true,state:'blocked',reason:'sandbox_not_ready'},execution:{state:'idle'}},dailyLimitReached:false}),headline:'Lending can’t start here'},
+    {name:'needs attention',projection:projectLendingState({effective:{intent:{on:true,state:'blocked',reason:'sandbox_cannot_start'},execution:{state:'idle'}},dailyLimitReached:false}),headline:'Lending can’t start here'},
     {name:'daily cap with execution',projection:projectLendingState({effective:{intent:{on:true,state:'ready'},execution:{state:'running',job:'job-1'}},dailyLimitReached:true}),headline:'Running a job'},
     {name:'pending approval cannot hide execution',projection:projectLendingState({effective:{intent:{on:true,state:'ready'},execution:{state:'running',job:'job-1'}},dailyLimitReached:false}),headline:'Running a job',approvals:[{id:'approval-1'}]},
   ];
@@ -65,7 +65,7 @@ test('Home, Lending and shell use one projection through cap, execution, blocker
     assert.equal(card.reason,formatLendingProjection(projection).reason,name+' Home reason');
     if(projection.execution==='running') assert.equal(shell.word,'Running',name+' shell state');
     else if(projection.admission==='allowed') assert.equal(shell.line,'Ready for requests',name+' shell line');
-    else assert.equal(shell.line,'Needs you',name+' shell line');
+    else assert.equal(shell.line,'Lending is blocked',name+' shell line');
   }
   const invalid={lendingProjection:null,intent:{on:true,state:'ready'},lending:{enabled:true}};
   assert.equal(lendPageVM(invalid).headline,'Status unavailable');
@@ -90,25 +90,17 @@ test('shell execution badge uses the central formatter label for every projected
   }
 });
 
-test('stop recovery copy distinguishes missing cessation proof from a pending report without changing the hold', () => {
-  for (const reason of ['cessation_unverified','stop_report_pending']) {
-    const projection=projectLendingState({effective:{intent:{on:false,state:'off',reason},
-      execution:{state:'stopping',job:'job-1'}},dailyLimitReached:false});
-    const before=JSON.stringify(projection), view=formatLendingProjection(projection);
-    assert.equal(projection.admissionReason,reason);
-    assert.equal(view.ready,false);
+test('stop recovery maps private evidence to one public cleanup hold without claiming cessation',()=>{
+  for(const cause of ['cessation_unverified','stop_report_pending']){
+    const projection=projectLendingState({effective:{intent:{on:false,state:'off',reason:cause},execution:{state:'stopping',job:'job-1'}},dailyLimitReached:false});
+    const before=JSON.stringify(projection),view=formatLendingProjection(projection);
+    assert.equal(projection.admissionReason,'cleanup_pending');
+    assert.equal(view.ready,false);assert.equal(view.headline,'Stopping this job');assert.equal(view.label,'Stopping');
+    assert.equal(view.reason,'This computer is finishing sandbox cleanup.');
     assert.equal(JSON.stringify(projection),before);
     assert.equal(lendingVM({lendingProjection:projection}).reason,view.reason);
     assert.equal(lendPageVM({lendingProjection:projection}).reason,view.reason);
-    if(reason==='cessation_unverified') {
-      assert.equal(view.reason,'Faravan cannot confirm that the sandbox stopped. No new jobs start until this is confirmed. Open Setup and choose Check again.');
-      assert.doesNotMatch(view.reason,/Setup (?:resolves|fixes)|automatically/);
-    } else {
-      assert.equal(view.headline,'Job stopped; circle report pending');
-      assert.equal(view.label,'Stop report pending');
-      assert.equal(view.reason,'The job stopped, but its report to the circle is waiting. Check your connection. Faravan retries the report automatically.');
-      assert.doesNotMatch(view.reason,/Setup|Docker/);
-    }
+    assert.doesNotMatch(view.reason,/job stopped|automatically/i);
   }
 });
 
@@ -139,7 +131,7 @@ test('formatter stays consistent with generated intent, admission and execution 
   const executions=['idle','running','finishing','stopping','unknown'];
   for (const intent of intents) for (const admission of admissions) for (const execution of executions) {
     const intentState={on:'ready',off:'off',paused:'paused',unknown:null}[intent];
-    const admissionReason={allowed:null,blocked:'sandbox_not_ready',unknown:null}[admission];
+    const admissionReason={allowed:null,blocked:'sandbox_cannot_start',unknown:null}[admission];
     const executionJob=['running','finishing','stopping'].includes(execution)?'job-1':null;
     const tuple=createLendingProjection({schemaVersion:2,kind:'lending',intent,admission,admissionReason,execution,executionJob,
       evidence:{intentState,dailyLimitReached:false,executionState:execution},version:null});
@@ -235,8 +227,8 @@ test('readiness follows the lender admission check: busy, stopped, or too little
   assert.deepEqual([starting.kind,starting.headline,starting.label],['running','Starting Alex Example’s job','Starting']);
   const stopped=view({intent:{on:true,state:'blocked',reason:'lender_stopped'},execution:{state:'idle'}});
   assert.equal(stopped.headline,'Jobs can’t start');
-  assert.equal(stopped.remedy,'Check lending');
-  assert.match(stopped.reason,/Check lending before trying again/);
+  assert.equal(stopped.remedy,'Turn lending on');
+  assert.equal(stopped.reason,'Lending is turned off.');
   assert.equal(view({intent:{on:false,state:'off'},execution:{state:'idle'}}).remedy,'Turn lending on');
   assert.equal(view({intent:{on:true,state:'paused'},execution:{state:'idle'}}).remedy,'Resume lending');
   const short=view({intent:{on:true,state:'resting',reason:'daily_limit'},execution:{state:'idle'}},{jobs:2,jobLimit:12,minutes:42,minuteLimit:60,jobMinutes:20});
@@ -261,9 +253,9 @@ test('O-E no-circle On names the missing membership instead of passed workspace 
 
 test('copy audit B sign-in is conditional and failed starts have a next step',async()=>{
  const view=reason=>formatLendingProjection(projectLendingState({effective:{intent:{on:true,state:'blocked',reason},execution:{state:'idle'}},dailyLimitReached:false}),{agentName:'Codex',circleName:'Friends'});
- assert.match(view('agent_signed_out').reason,/sandbox/);
- assert.match(view('agent_signed_out').reason,/then lending can resume/);
- assert.equal(view('lending_not_started').reason,'Lending couldn’t start for the circle “Friends”. Check lending for what is blocking it.');
+ assert.equal(view('account_signed_out').reason,'The agent account is signed out.');
+ assert.equal(view('account_signed_out').remedy,'Sign in to the account');
+ assert.equal(view('conditions_unavailable').reason,'Lending on this computer waits for the blocked step. You can still send jobs to another lender.');
  const {joinLendingNote}=await import('./lending-projection-view.mjs');
  const status={intent:{on:true,state:'ready'},lending:{enabled:true,status:'idle'}};
  assert.equal(joinLendingNote(status,{surface:'fresh'}),joinLendingNote(status));

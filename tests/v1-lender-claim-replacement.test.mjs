@@ -45,7 +45,7 @@ for(const failReplacement of [true,false])test(`an observation acknowledgment pr
   };
   const start=()=>{
     controller=new AbortController();
-    const lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,
+    const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,
       approve:async()=>true,onEvent:event=>f.events.push(event)});
     loop=lender.start(controller.signal);loop.catch(()=>{});
     f.stop=async()=>{controller.abort();await loop.catch(()=>{});};

@@ -260,9 +260,11 @@ test('security describes fresh automatic lending without claiming execution is a
   // Inspect the startup wiring; do not extract and evaluate a copy of application code.
   assert.match(app, /const freshLending\s*=\s*options\.freshLending\s*\?\?\s*'automatic'/);
   assert.match(app, /enabled:\s*false,\s*intent:\s*freshLending\s*===\s*'automatic'\s*\?\s*'on'\s*:\s*'off'/);
-  assert.match(app, /providerConsent:\s*\{claude:\s*true,\s*codex:\s*true\}/);
+  assert.doesNotMatch(app, /providerConsent:\s*\{claude:\s*true,\s*codex:\s*true\}/);
+  assert.match(app, /const\s*\{\s*providerConsent:\s*_legacy\s*,\s*\.\.\.rest\s*\}\s*=\s*policy/);
   assert.match(security, /Fresh app settings have lending intent On and the automatic strategy/);
-  assert.match(security, /initialize provider consent for both supported providers/);
+  assert.match(security, /Fresh settings do not pre-grant provider consent/);
+  assert.match(security, /the app checks consent for that provider/);
   assert.match(security, /Execution starts disabled/);
   assert.match(security, /explicit lending sign-in choice/);
   assert.doesNotMatch(security, /Lending starts off, with ask-each-time approval/i);

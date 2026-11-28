@@ -221,7 +221,7 @@ test('presence notice uses the actual page and toggle labels and retains the per
   const {renderFixture}=await import('./render.test-helper.mjs');
   const toggle=renderFixture(StopOnReturn,{p:policyDraft(),setP(){}});
   assert.match(toggle,/aria-label="Stop a running job when I return"/);
-  const vm=migrationVM({migration:{presenceDefaultsChanged:true,perJobCapChanged:true,acknowledged:false,
+  const vm=migrationVM({migration:{presenceDefaultsChanged:true,acknowledged:false,
     reset:[{field:'idleOnly',was:true},{field:'stopOnReturn',was:true},{field:'strategyParams.perJobPct'}]}});
   assert.match(vm.text,/open What you lend and under When you use your computer turn on Only lend when I am away/);
   assert.match(vm.text,/turn on Stop a running job when I return/);

@@ -124,10 +124,10 @@ test('MCP source refusals retain the explicit root repair instruction',async()=>
 });
 
 
-test('only known hold-refusal reason codes cross the error-detail boundary',async t=>{
+test('only known cessation-refusal reason codes cross the error-detail boundary',async t=>{
   for(const detail of ['process_present','unknown_reason','/private/path token=private-secret',{token:'private-secret'},null]) {
     const c=await client(t,async()=>answer({code:'cessation_unverified',detail},409));
-    await assert.rejects(c.call('lending.release_hold',{attemptId:'dead'},{confirmed:true}),error=>{
+    await assert.rejects(c.call('lending.stop_job',{attemptId:'dead'},{confirmed:true}),error=>{
       const problem=problemOf(error);
       assert.equal(problem.code,'cessation_unverified');
       if(detail==='process_present')assert.equal(problem.detail,detail);else assert.equal('detail' in problem,false);

@@ -45,7 +45,6 @@ reads job metadata, opens account stores or dumps a database. There is no option
 to include raw logs.
 
 The collector reads only these fixed paths: `v1/app-settings.json`,
-`v1/owner-settings/owner-settings.json`, `v1/support-readiness.json`,
 `v1/history/events.jsonl`, `v1/lending-errors.jsonl`, and
 the installation's `VERSION` and `.installed-via` files. It rejects symlinked
 inputs and non-regular files. Each profile read is at most 256 KiB; log reads

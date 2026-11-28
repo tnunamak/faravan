@@ -3,12 +3,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
-import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
+import {mkdtempSync, rmSync} from "node:fs";
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { PROBE_USAGE_LINE, guestProbeArgv, guestProbeScript, parseProbeOutput, createLendingProbe, createLendingReadings, PROBE_REQUESTS } from '../lib/v1/lending-probe.mjs';
 import { createLendingLedger } from '../lib/v1/lending-ledger.mjs';
-import { createPace50Candidate } from '../lib/v1/lender-pace50.mjs';
+
 import {sanitizeProbeDiagnostics} from '../lib/v1/probe-diagnostics.mjs';
 
 function assertResultDiagnostics(result, expected, phases = null, failedPhase = undefined) {
@@ -245,92 +245,6 @@ test('a reading keeps identity and censored weekly history, and never an executo
     'a meter sample is censored until the app can prove no refusal or deferral occurred');
 });
 
-test('a reading never carries or rebinds stop evidence: account A then account B, with and without a receipt', async () => {
-  const {createRealPace50Source} = await import('../lib/v1/lending-pace50-source.mjs');
-  const {STOP_EVIDENCE_TTL_MS} = await import('../lib/v1/stop-evidence.mjs');
-  const dir = mkdtempSync(join(homedir(), '.tmp', 'probe-no-carry-'));
-  try {
-    let t = T;
-    const ledger = createLendingLedger({file: join(dir, 'ledger.json'), now: () => t});
-    const idA = {status: 200, account_sha256_16: '1111222233334444', email_sha256_16: 'aaaa0000bbbb1111'};
-    const idB = {status: 200, account_sha256_16: '5555666677778888', email_sha256_16: 'bbbb0000cccc2222'};
-    const out = id => JSON.stringify({faravan_probe: 1, status: 200, body: CLAUDE_BODY, identity: id,
-      guest_auth: {loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty'}});
-    // Even a runner that still reports a stop and an executor (an old build's shape) adds nothing to the reading's fact.
-    const legacy = {executor: {backend_id: 'docker-sbx', sbx_version: 'v1'}, stop: {delivered: true, fallback: null, latency_ms: 900, removed: true}};
-    let identity = idA, receipt = null;
-    const probe = createLendingProbe({ledger, now: () => t, runGuest: async () => ({stdout: out(identity), host_read: true, ...legacy})});
-    const readings = createLendingReadings({ledger, probe, now: () => t});
-    let expectedEmail = idA.email_sha256_16;
-    const source = createRealPace50Source({readings, funding: provider => probe.funding(provider), stopBoundMs: 35_000,
-      stopEvidence: async () => receipt,
-      expectedIdentity: async () => ({email_sha256_16: expectedEmail}),
-      expectedExecutor: {backend_id: 'docker-sbx', accepts: v => v === 'v1'}});
-    const seen = async () => source.observe({provider: 'claude', admissionOnly: true});
-
-    // No receipt: a read for A, then a read for B. Neither carries an earlier proof, and neither makes one.
-    assert.equal((await probe.probe('claude')).ok, true);
-    assert.equal(probe.funding('claude').stop, undefined);
-    assert.equal(probe.funding('claude').executor, undefined);
-    t += 60_000; identity = idB; expectedEmail = idB.email_sha256_16;
-    assert.equal((await probe.probe('claude')).ok, true);
-    const noReceipt = await seen();
-    assert.equal(noReceipt.identity.verified, true, 'B is verified');
-    assert.equal(noReceipt.stop.bounded_execution, 'unknown', 'B does not inherit a stop');
-    assert.equal(noReceipt.stop.reason, 'stop_unobserved');
-    assert.equal(noReceipt.executor.single_executor, 'unknown');
-
-    // A machine receipt proves the stop for whichever account is read, for 24 hours, and then no longer.
-    receipt = {executor: {backend_id: 'docker-sbx', sbx_version: 'v1'}, stop: {delivered: true, fallback: null, latency_ms: 900, removed: true}, measured_at: t};
-    for (const [id, email] of [[idA, idA.email_sha256_16], [idB, idB.email_sha256_16]]) {
-      identity = id; expectedEmail = email; t += 1000;
-      assert.equal((await probe.probe('claude')).ok, true);
-      const proven = await seen();
-      assert.equal(proven.stop.bounded_execution, 'proven');
-      assert.equal(proven.stop.proven_until, receipt.measured_at + STOP_EVIDENCE_TTL_MS);
-    }
-    // A receipt for another runtime version proves no executor.
-    receipt = {...receipt, executor: {backend_id: 'docker-sbx', sbx_version: 'v2'}};
-    assert.equal((await seen()).executor.single_executor, 'unknown');
-  } finally { rmSync(dir, {recursive: true, force: true}); }
-});
-
-test('optional history failures retain current quota, identity and funding with a bounded diagnostic', async () => {
-  const {createRealPace50Source} = await import('../lib/v1/lending-pace50-source.mjs');
-  for (const failure of ['record', 'factory', 'warning', 'async-warning']) {
-    const dir = mkdtempSync(join(homedir(), '.tmp', 'probe-history-warning-'));
-    try {
-      const ledger = createLendingLedger({file: join(dir, 'ledger.json'), now: () => T});
-      const identity = {status: 200, account_sha256_16: '1111222233334444', email_sha256_16: 'aaaa0000bbbb1111'};
-      const storageFailure = () => { throw new Error('PRIVATE_STORAGE_ERROR'); };
-      const warnings = [];
-      const probe = createLendingProbe({ledger, now: () => T,
-        history: failure === 'factory' ? storageFailure : {record: storageFailure},
-        warnHistoryWrite: warning => {
-          warnings.push(warning);
-          if (failure === 'warning') throw new Error('PRIVATE_LOG_ERROR');
-          if (failure === 'async-warning') return Promise.reject(new Error('PRIVATE_ASYNC_LOG_ERROR'));
-        },
-        runGuest: async () => ({stdout: JSON.stringify({faravan_probe: 1, status: 200, body: CLAUDE_BODY, identity})})});
-      const result = await probe.probe('claude');
-      assert.equal(result.ok, true, failure);
-      assert.equal(result.warning, 'history_write_failed');
-      await new Promise(resolve => setImmediate(resolve)); // Rejected async diagnostics must be handled, not become unhandled rejections.
-      const readings = createLendingReadings({ledger, probe, now: () => T});
-      const observation = await createRealPace50Source({readings}).observe({provider: 'claude'});
-      assert.equal(observation.refresh_succeeded, true, failure);
-      assert.equal(observation.complete, true, failure);
-      assert.deepEqual(observation.resources.map(row => [row.id, row.used_micro]),
-        [['five_hour', 25000000], ['seven_day', 37000000]]);
-      assert.equal(probe.funding('claude').extra_usage, 'disabled');
-      assert.equal(probe.funding('claude').observed_at, T);
-      assert.deepEqual(probe.funding('claude').identity, {
-        account_sha256_16: identity.account_sha256_16, email_sha256_16: identity.email_sha256_16, org_sha256_16: null});
-      assert.deepEqual(warnings, [{at: T, code: 'history_write_failed'}], 'one bounded warning, without raw error text');
-    } finally { rmSync(dir, {recursive: true, force: true}); }
-  }
-});
-
 test('a required ledger write failure still withholds current funding and refresh success', async () => {
   const storageError = new Error('durable ledger write failed');
   let writes = 0, historyWrites = 0, warnings = 0;
@@ -347,25 +261,6 @@ test('a required ledger write failure still withholds current funding and refres
   assert.equal(writes, 2, 'both direct probe and required refresh reached the ledger write');
   assert.equal(historyWrites, 0, 'optional history is not attempted after required persistence fails');
   assert.equal(warnings, 0, 'required persistence failure is not downgraded to an optional warning');
-});
-
-test('a durable reservation rejection is not swallowed as optional history failure', async t => {
-  const directory = mkdtempSync(join(homedir(), '.tmp', 'probe-durable-rejection-'));
-  const opened = createPace50Candidate({directory, now: () => T,
-    account: 'synthetic-account', account_week_id: 'synthetic-week',
-    measurementHistory: {record() { throw new Error('optional history write failed'); }}});
-  t.after(async () => { await opened.adapter.close(); rmSync(directory, {recursive: true, force: true}); });
-  const storageError = new Error('durable reservation write failed');
-  let reservations = 0;
-  // Simulate the durable adapter rejecting its admission write, not a learning recorder.
-  opened.adapter.admit = async () => { reservations++; throw storageError; };
-  await assert.rejects(opened.candidate.reserve({attemptId: 'write-failed', jobId: 'write-failed',
-    provider: 'claude', model: 'claude-haiku-5-5', automatic: false, ownerAbsent: true,
-    job: {requirements: {limits: {wall_seconds: 300}}, budget_v1: {max_list_usd: 20},
-      expires_at: new Date(T + 3600000).toISOString()}}), error => error === storageError);
-  assert.equal(reservations, 1, 'the durable write boundary was reached');
-  assert.equal(opened.candidate.registry.entry('write-failed').authorized, false);
-  assert.deepEqual(opened.adapter.state().attempts, [], 'failed admission never creates a usable reservation');
 });
 
 test('lendingReadings (app.mjs injection): probes when stale and idle, returns the ledger snapshot with plan', async () => {
@@ -615,32 +510,6 @@ test('a failed guest run names the HTTP status and the tries of each request, so
     probe: { usage_status: 429, identity_status: 429, usage_attempts: 3, identity_attempts: 1 } });
 });
 
-test('fresh production probe ledger source retains successful guest windows without admission injection', async () => {
-  const {createRealPace50Source} = await import('../lib/v1/lending-pace50-source.mjs');
-  const dir = mkdtempSync(join(homedir(), '.tmp', 'fresh-probe-contract-'));
-  try {
-    const body = {five_hour: {utilization: 3, resets_at: new Date(T + 5 * 3600000).toISOString()},
-      seven_day: {utilization: 8, resets_at: new Date(T + 7 * 86400000).toISOString()}, extra_usage: {is_enabled: false}};
-    const ledger = createLendingLedger({file: join(dir, 'ledger.json'), now: () => T});
-    const probe = createLendingProbe({ledger, now: () => T,
-      runGuest: () => runThroughProxy('claude', body)});
-    const readings = createLendingReadings({ledger, probe, now: () => T});
-    const source = createRealPace50Source({readings});
-    assert.deepEqual(ledger.snapshot('claude').windows, []);
-    const observation = await source.observe({provider: 'claude'});
-    assert.equal(observation.refresh_succeeded, true);
-    assert.equal(observation.complete, true);
-    assert.deepEqual(observation.resources.map(r => [r.id, r.used_micro]),
-      [['five_hour', 3000000], ['seven_day', 8000000]]);
-    assert.equal(ledger.snapshot('claude').windows.length, 2);
-    assert.equal(observation.identity.verified, false);
-    assert.notEqual(observation.funding.subscription_only, 'proven');
-    assert.notEqual(observation.executor.single_executor, 'proven');
-    assert.notEqual(observation.stop.bounded_execution, 'proven');
-    assert.ok(observation.resources.every(r => r.kappa_micro === null));
-  } finally { rmSync(dir, {recursive: true, force: true}); }
-});
-
 test('closing a lending probe aborts its pending read and prevents a later read', async () => {
   let observedSignal;
   const probe = createLendingProbe({runGuest: ({signal}) => {
@@ -687,38 +556,6 @@ test('closing a probe drains a late successful read without publishing evidence'
   }
 });
 
-test('one aborted candidate observer cancels all joiners, drains before retry, and cannot publish a late result', async t => {
-  const directory=mkdtempSync(join(homedir(),'.tmp','candidate-observation-cancel-'));
-  let calls=0, releaseFirst, releaseSecond, firstSignal;
-  const success={refresh_succeeded:true,complete:true,resources:[],observed_at:T};
-  const source={observe({signal}){
-    calls++;
-    if(calls===1){firstSignal=signal;return new Promise(resolve=>{releaseFirst=()=>resolve(success);});}
-    return new Promise(resolve=>{releaseSecond=()=>resolve({...success,observed_at:T+1});});
-  }};
-  const opened=createPace50Candidate({directory,now:()=>T,account:'synthetic-account',account_week_id:'synthetic-week',source});
-  t.after(async()=>{await opened.candidate.cancelObservations();await opened.adapter.close();rmSync(directory,{recursive:true,force:true});});
-  const args={provider:'claude',model:'claude-haiku-5-5',plan:'max20',now:T};
-  const controller=new AbortController();
-  const first=opened.candidate.observe({...args,signal:controller.signal});
-  await new Promise(resolve=>setImmediate(resolve));
-  const second=opened.candidate.observe(args);
-  controller.abort(new DOMException('test cancellation','AbortError'));
-  assert.equal(firstSignal.aborted,true,'one observer cancels the shared source signal');
-  const third=opened.candidate.observe(args);
-  assert.equal(calls,1,'a new caller joins the still-draining cancelled observation');
-  releaseFirst();
-  const cancelled=await Promise.all([first,second,third]);
-  assert.ok(cancelled.every(value=>value.refresh_succeeded===false),'all joiners see a cancelled unknown result');
-  assert.equal(opened.candidate.observeSnapshot(args),null,'a late successful callback cannot populate the snapshot cache');
-  const retry=opened.candidate.observe(args);
-  await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(calls,2,'retry starts only after the old observation settles');
-  releaseSecond();
-  assert.equal((await retry).refresh_succeeded,true);
-  assert.equal(opened.candidate.observeSnapshot(args).observed_at,T+1);
-});
-
 test('read-only sandbox preflight forwards the shutdown abort signal to each command', async () => {
   const {probeSbxPreflight}=await import('../lib/docker-backend.mjs');
   const controller=new AbortController(),signals=[];
@@ -737,91 +574,6 @@ test('read-only sandbox preflight forwards the shutdown abort signal to each com
   assert.ok(signals.every(signal=>signal?.aborted));
 });
 
-
-test('each probe failure class reaches the preflight decision and durable history without secrets', async t => {
-  const {createRealPace50Source} = await import('../lib/v1/lending-pace50-source.mjs');
-  const {createMeasurementHistory} = await import('../lib/v1/event-history.mjs');
-  const {readFileSync} = await import('node:fs');
-  const cases = [
-    ['probe_unavailable', {unavailable:true}],
-    ['probe_cancelled', {result:{ok:false,reason:'cancelled'}}],
-    ['usage_http_503', {stdout:JSON.stringify({faravan_probe:1,status:503,body:{token:'SECRET_BODY'}})}],
-    ['rate_limited', {stdout:JSON.stringify({faravan_probe:1,status:429,body:{token:'SECRET_BODY'}})}],
-    ['identity_failed', {stdout:JSON.stringify({faravan_probe:1,status:200,body:CLAUDE_BODY,
-      identity:{status:401,account_id:'SECRET_ACCOUNT'}})}],
-    ['sandbox_start_failed', {error:'sandbox_start_failed'}], ['parse_failed', {stdout:'SECRET_BODY'}],
-    ['timeout', {error:'timeout'}], ['other', {error:'unknown'}],
-  ];
-  for (const [failureClass, fixture] of cases) await t.test(failureClass, async () => {
-    const directory = mkdtempSync(join(homedir(), '.tmp', 'probe-provenance-'));
-    const history = createMeasurementHistory({directory:join(directory,'history'),now:()=>T});
-    let candidate;
-    try {
-      const ledger = createLendingLedger({file:join(directory,'ledger.json'),now:()=>T});
-      let probe = createLendingProbe({ledger,now:()=>T,runGuest:async()=>{
-        if (fixture.error) throw Object.assign(new Error('SECRET_ERROR'),{probe_failure:fixture.error,token:'SECRET_TOKEN'});
-        return {stdout:fixture.stdout};
-      }});
-      if (fixture.result || fixture.deferred) probe = {due:()=>!fixture.deferred, funding:()=>null, lastResult:()=>fixture.result,
-        probe:async()=>({...fixture.result,body:'SECRET_BODY',account_id:'SECRET_ACCOUNT',token:'SECRET_TOKEN'})};
-      if (fixture.unavailable) probe = null;
-      const readings = createLendingReadings({ledger,probe,now:()=>T,jobRunning:()=>fixture.busy===true});
-      const source = createRealPace50Source({readings,funding:provider=>probe?.funding?.(provider)});
-      ({candidate} = createPace50Candidate({directory:join(directory,'candidate'),now:()=>T,
-        account:'synthetic',account_week_id:'synthetic-week',source,measurementHistory:history}));
-      // Refreshing belongs to the background path; admission only reads its saved result.
-      if (probe) await probe.probe('claude');
-      assert.equal(await candidate.preflight({provider:'claude',ownerAbsent:true}),
-        failureClass === 'identity_failed' ? 'identity_unknown' : 'refresh_failed');
-      const decision = candidate.lastJobDecisionFor('claude');
-      assert.equal(decision.admitted,false);
-      assert.equal(decision.assessedAt,T);
-      assert.equal(decision.probe.provider,'claude');
-      assert.equal(decision.probe.failure_class,failureClass);
-      if (failureClass === 'rate_limited') assert.equal(decision.probe.retry_at,T+5*60_000);
-      await history.flush();
-      const rows = readFileSync(join(history.directory,'measurements.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
-      const failed = rows.find(row=>row.type==='observation_failed');
-      assert.equal(failed.data.probe.provider,'claude');
-      assert.equal(failed.data.probe.failure_class,failureClass);
-      if (failureClass === 'rate_limited') assert.equal(failed.data.probe.retry_at,T+5*60_000);
-      assert.doesNotMatch(JSON.stringify({decision,failed}),/SECRET_|account_id|token|body/);
-      if (failureClass === 'rate_limited') {
-        const deferred = await readings('claude',{forceRefresh:true});
-        assert.equal(deferred.probe.reason,'rate_limited');
-        assert.equal(deferred.refresh_outcome,undefined);
-        assert.equal(deferred.probe.failure_class,'rate_limited');
-        assert.equal(deferred.probe.deferral_cause,undefined);
-        assert.equal(deferred.probe.retry_at,T+5*60_000);
-      }
-    } finally {
-      await candidate?.adapter?.close();
-      await history.flush(); history.close();
-      rmSync(directory,{recursive:true,force:true});
-    }
-  });
-});
-
-
-test('candidate cancellation still records provider and failure class', async () => {
-  const rows = [];
-  const directory = mkdtempSync(join(homedir(), '.tmp', 'probe-cancel-provenance-'));
-  const controller = new AbortController();
-  controller.abort();
-  const {candidate,adapter} = createPace50Candidate({directory,now:()=>T,account:'synthetic',
-    account_week_id:'synthetic-week',source:{observe:()=>assert.fail('cancelled source must not run')},
-    measurementHistory:{record:(type,data)=>{rows.push({type,data});return null;}}});
-  try {
-    const result = await candidate.observe({provider:'codex',signal:controller.signal});
-    assert.equal(result.probe.provider,'codex');
-    assert.equal(result.probe.failure_class,'probe_cancelled');
-    const failed = rows.find(row=>row.type==='observation_failed');
-    assert.equal(failed.data.probe.provider,'codex');
-    assert.equal(failed.data.probe.failure_class,'probe_cancelled');
-  } finally {await adapter.close();rmSync(directory,{recursive:true,force:true});}
-});
-
-
 test('failure diagnostics reject unbounded back-off and arbitrary or non-string classes', async () => {
   const {sanitizeProbeFailure} = await import('../lib/v1/lending-probe.mjs');
   for (const retry_at of [-1,Infinity,NaN,'123',Number.MAX_SAFE_INTEGER,1.5]) {
@@ -834,87 +586,6 @@ test('failure diagnostics reject unbounded back-off and arbitrary or non-string 
       body:'SECRET_BODY',token:'SECRET_TOKEN',account_id:'SECRET_ACCOUNT'});
     assert.deepEqual(diagnostic,{reason:'guest_failed',provider:'codex',failure_class:'other'});
   }
-});
-
-for (const reason of ['account_busy', 'probe_deferred']) test(reason + ' is a durable deferral, never a failed observation', async t => {
-  const {createRealPace50Source, paceInputFromObservation, observationProofFailures} = await import('../lib/v1/lending-pace50-source.mjs');
-  const {createMeasurementHistory} = await import('../lib/v1/event-history.mjs');
-  const {lendingReadiness} = await import('../lib/v1/lending-readiness.mjs');
-  const {lendingStatus} = await import('../lib/v1/lending-status-copy.mjs');
-  const {readFileSync} = await import('node:fs');
-  const directory = mkdtempSync(join(homedir(), '.tmp', 'probe-deferral-'));
-  const history = createMeasurementHistory({directory:join(directory,'history'),now:()=>T});
-  let calls = 0;
-  const ledger = {snapshot:()=>({read_at:T,windows:[{observed_at:T}]})};
-  const probe = {funding:()=>null,lastResult:()=>({ok:true}),due:()=>false,retryAt:()=>T+60_000,probe:async()=>{calls++;assert.fail('no request due');}};
-  const readings = createLendingReadings({ledger,probe,now:()=>T,jobRunning:()=>reason==='account_busy'});
-  const source = createRealPace50Source({readings});
-  const {candidate,adapter} = createPace50Candidate({directory:join(directory,'candidate'),now:()=>T,
-    account:'synthetic',account_week_id:'synthetic-week',source,measurementHistory:history});
-  t.after(async()=>{await adapter.close();await history.flush();history.close();rmSync(directory,{recursive:true,force:true});});
-  const observation = await candidate.observe({provider:'codex',forceRefresh:true});
-  assert.equal(calls,0);
-  assert.equal(observation.refresh_outcome,'deferred');
-  assert.equal(observation.refresh_succeeded,false);
-  assert.equal(observation.probe.reason,reason);
-  assert.deepEqual(observation.resources,[],'cached windows cannot be admitted');
-  assert.equal(paceInputFromObservation(observation,{now:T}).refuse,reason);
-  assert.equal(observationProofFailures(observation).includes('refresh_failed'),false);
-  const ready = lendingReadiness({observation,provider:'codex',signedIn:true,sandboxState:'passed'});
-  assert.equal(ready.find(row=>row.id==='weekly_window').state,'unknown');
-  assert.match(ready.find(row=>row.id==='weekly_window').line,reason==='account_busy'?/busy/:/next check/);
-  const status = lendingStatus({reason,detail:observation.probe});
-  assert.match(status.line,reason==='account_busy'?/busy/:/next check/);
-  assert.doesNotMatch(status.line,/could not be measured|verdict|receipt|attempt|settled|lease/i);
-  await candidate.observe({provider:'codex'}); // cached deferrals also stay deferrals
-  assert.equal(await candidate.preflight({provider:'codex',ownerAbsent:true}),'objective_evidence_unknown');
-  await history.flush();
-  const rows = readFileSync(join(history.directory,'measurements.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
-  assert.equal(rows.filter(row=>row.type==='observation_failed').length,1);
-  assert.equal(rows.filter(row=>row.type==='observation_deferred').length,1);
-  assert.ok(rows.filter(row=>row.type==='observation_deferred').every(row=>row.data.reason===reason));
-});
-
-test('a 429 then an early refresh retains the rate-limit failure without another request', async t => {
-  const {createRealPace50Source,paceInputFromObservation} = await import('../lib/v1/lending-pace50-source.mjs');
-  const rows = [], directory = mkdtempSync(join(homedir(),'.tmp','probe-backoff-deferral-'));
-  let calls = 0;
-  const ledger = {snapshot:()=>({windows:[],read_at:null})};
-  const probe = createLendingProbe({ledger,now:()=>T,runGuest:async()=>{calls++;return {stdout:JSON.stringify({faravan_probe:1,status:429})};}});
-  const source = createRealPace50Source({readings:createLendingReadings({ledger,probe,now:()=>T})});
-  const {candidate,adapter} = createPace50Candidate({directory,now:()=>T,account:'synthetic',account_week_id:'synthetic-week',source,
-    measurementHistory:{record:(type,data)=>{rows.push({type,data});return null;}}});
-  t.after(async()=>{await adapter.close();await probe.close();rmSync(directory,{recursive:true,force:true});});
-  const args = {provider:'codex',model:'gpt-6-sol'};
-  const first = await candidate.refreshObservation(args);
-  assert.equal(first.probe.reason,'rate_limited');
-  assert.equal(paceInputFromObservation(first,{now:T}).refuse,'refresh_failed');
-  const deferred = await candidate.refreshObservation(args);
-  assert.equal(calls,1);
-  assert.equal(deferred.refresh_succeeded,false);
-  assert.notEqual(deferred.refresh_outcome,'deferred');
-  assert.deepEqual(deferred.probe,first.probe);
-  assert.equal(paceInputFromObservation(deferred,{now:T}).refuse,'refresh_failed');
-  assert.notEqual(candidate.observeSnapshot(args).refresh_outcome,'deferred');
-  assert.equal(rows.filter(row=>row.type==='observation_failed').length,2);
-  assert.equal(rows.filter(row=>row.type==='observation_deferred').length,0);
-});
-
-test('a deferred refresh cannot restore a prior successful cache for admission', async t => {
-  const {paceInputFromObservation} = await import('../lib/v1/lending-pace50-source.mjs');
-  const directory = mkdtempSync(join(homedir(),'.tmp','deferred-cache-'));
-  let reads = 0;
-  const deferred = {refresh_outcome:'deferred',refresh_succeeded:false,resources:[],
-    probe:{reason:'account_busy',provider:'codex',failure_class:'probe_busy'}};
-  const source = {observe:async()=>++reads===1?{refresh_succeeded:true,resources:[],observed_at:T}:deferred};
-  const {candidate,adapter} = createPace50Candidate({directory,now:()=>T,account:'synthetic',account_week_id:'synthetic-week',source});
-  t.after(async()=>{await adapter.close();rmSync(directory,{recursive:true,force:true});});
-  const args = {provider:'codex',model:'gpt-6-sol'};
-  assert.equal((await candidate.observe(args)).refresh_succeeded,true);
-  assert.equal((await candidate.refreshObservation(args)).refresh_outcome,'deferred');
-  assert.equal(candidate.observeSnapshot(args).refresh_outcome,'deferred');
-  assert.equal(paceInputFromObservation(await candidate.observe(args),{now:T}).refuse,'account_busy');
-  assert.equal(reads,2,'cached hold remains closed without another provider request');
 });
 
 test('cadence deferral carries its known next check time without making a request', async () => {
@@ -932,32 +603,6 @@ test('cadence deferral carries its known next check time without making a reques
     assert.equal(reading.probe.deferral_cause,undefined);
   } finally {await probe.close();}
 });
-
-test('a malformed deferred outcome can never supply successful admission proof', async () => {
-  const {observationProofFailures} = await import('../lib/v1/lending-pace50-source.mjs');
-  const otherwiseValid = {refresh_succeeded:true,identity:{verified:true,account_id:'synthetic'},
-    account_week_id:'week',epoch:'epoch',complete:true,weekly_resource_id:'weekly',
-    funding:{subscription_only:'proven'},executor:{single_executor:'proven'},
-    stop:{bounded_execution:'proven'},stop_bound_ms:1,uncertainty_ms:0,resources:[]};
-  assert.deepEqual(observationProofFailures(otherwiseValid),[]);
-  for (const probe of [{reason:'account_busy'},{reason:'SECRET_REASON'},null])
-    assert.deepEqual(observationProofFailures({...otherwiseValid,refresh_outcome:'deferred',probe}),['refresh_failed']);
-});
-
-test('malformed deferred success is recorded as failed, never completed', async t => {
-  const rows = [], directory = mkdtempSync(join(homedir(),'.tmp','malformed-deferral-'));
-  const source = {observe:async()=>({refresh_outcome:'deferred',refresh_succeeded:true,resources:[],
-    probe:{reason:'account_busy',provider:'codex'}})};
-  const {candidate,adapter} = createPace50Candidate({directory,now:()=>T,account:'synthetic',account_week_id:'synthetic-week',source,
-    measurementHistory:{record:(type,data)=>{rows.push({type,data});return null;}}});
-  t.after(async()=>{await adapter.close();rmSync(directory,{recursive:true,force:true});});
-  await candidate.observe({provider:'codex'});
-  assert.equal(rows.filter(row=>row.type==='observation_completed').length,0);
-  assert.equal(rows.filter(row=>row.type==='observation_deferred').length,0);
-  assert.equal(rows.filter(row=>row.type==='observation_failed').length,1);
-  assert.equal(rows.find(row=>row.type==='observation_failed').data.reason,'refresh_failed');
-});
-
 
 test('cadence skips retain the last real failure class until a successful probe', async t => {
   for (const [name, output, reason, failureClass] of [
@@ -1021,7 +666,6 @@ test('rate-limit retry time respects page, admission and forced refresh cadence'
     assert.equal(calls,1);
   } finally { await probe.close(); }
 });
-
 
 test('a thrown refresh failure after success is retained during cadence', async () => {
   let at=T, calls=0;

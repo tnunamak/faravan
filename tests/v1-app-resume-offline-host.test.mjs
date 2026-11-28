@@ -10,7 +10,7 @@ import {createClient, clientFailure} from '../lib/v1/client.mjs';
 import {generateKeyPairSync} from 'node:crypto';
 import {createAuthorityClient} from '../lib/v1/authority-client.mjs';
 
-test('jobs-list internal errors retain only the first repository lib frame', {timeout:120000}, async t=>{
+test('job-changing internal errors retain only the first repository lib frame', {timeout:120000}, async t=>{
   const f=await appFixture(t);
   const {lender,circle}=await f.connect({});
   const original=lender.app.device.client.bind(lender.app.device);
@@ -20,8 +20,11 @@ test('jobs-list internal errors retain only the first repository lib frame', {ti
     '    at outside (/home/ana/private.mjs:1:2)\n'+
     '    at read ('+new URL('../lib/v1/client.mjs',import.meta.url).href+':123:45)\n'+
     '    at serve ('+new URL('../lib/v1/app.mjs',import.meta.url).href+':456:7)';
-  lender.app.device.client=async()=>{throw error;};
-  const answer=await api(lender.app,'/api/jobs?circle='+circle.id,{status:409});
+  const originalReadClient=lender.app.device.jobReadClient;
+  t.after(()=>{lender.app.device.jobReadClient=originalReadClient;});
+  lender.app.device.jobReadClient=async()=>({cancelJob:async()=>{throw error;}});
+  const answer=await api(lender.app,'/api/jobs/'+encodeURIComponent('sha256:'+'a'.repeat(64))+'/cancel',
+    {method:'POST',body:{circle:circle.id},status:409});
   assert.equal(answer.code,'internal_error');
   const file=join(lender.home,'v1','lending-errors.jsonl');
   const row=await waitFor(async()=>{
@@ -193,7 +196,7 @@ for (const [label, make] of Object.entries(modes)) test(`Resume with a host that
   const seen = [];
   f.override = async args => { if (down) seen.push(String(args.req.url)); return down ? failing(args) : reachable(args); };
   // Each retry-worker host init has its own short deadline here, so a host that never answers is abandoned and retried.
-  const cold1 = await f.start('lender', {adapters: cold(), identityProbe: async () => signedIn, blockerRecheckMs: 300, hostProfileMs: 300, hostInitMs: 1500});
+  const cold1 = await f.start('lender', {syntheticAccounts:'codex',adapters: cold(), identityProbe: async () => signedIn, blockerRecheckMs: 300, hostProfileMs: 300, hostInitMs: 1500});
   const began = Date.now();
   const answer = await api(cold1.app, '/api/lending/resume', {method: 'POST', body: {circle: circle.id}, status: 409});
   assert.ok(Date.now() - began < 1000, 'answered within one second: ' + (Date.now() - began));
@@ -219,7 +222,7 @@ test('a local disk error is internal_error with one error_id in the answer and o
   await lendingOn(lender.app, circle);
   await api(lender.app, '/api/lending/pause', {method: 'POST', body: {}});
   await lender.app.close();
-  const cold1 = await f.start('lender', {adapters: cold(), identityProbe: async () => signedIn});
+  const cold1 = await f.start('lender', {syntheticAccounts:'codex',adapters: cold(), identityProbe: async () => signedIn});
   const listCircles = cold1.app.device.listCircles.bind(cold1.app.device);
   cold1.app.device.listCircles = async () => { throw new Error('disk /secret/path token=abc123'); };
   let answer;
@@ -272,7 +275,7 @@ test('Resume with a healthy host and a blocked local lane answers resume_pending
   // An agent check holds the mutation lane. The settings writer stays free, so the intent still saves.
   let blockNext = false, release;
   const gate = new Promise(resolve => { release = resolve; });
-  const cold1 = await f.start('lender', {adapters: async () => { if (blockNext) { blockNext = false; await gate; } return cold(); }, identityProbe: async () => signedIn});
+  const cold1 = await f.start('lender', {syntheticAccounts:'codex',adapters: async () => { if (blockNext) { blockNext = false; await gate; } return cold(); }, identityProbe: async () => signedIn});
   blockNext = true;
   const blocker = api(cold1.app, '/api/agents/refresh', {method: 'POST', body: {}});
   await new Promise(resolve => setTimeout(resolve, 200));
@@ -416,7 +419,7 @@ const offlineHost = async (t, {restart = false} = {}) => {
   const state = {down: true, pools: 0};
   const reachable = f.override;
   f.override = async args => { if (state.down) { args.req.socket.destroy(); return true; } return reachable(args); };
-  const open = () => f.start('lender', {adapters: cold(), identityProbe: async () => signedIn, blockerRecheckMs: 300, hostProfileMs: 300, onLendingPoolStart: () => { state.pools++; }});
+  const open = () => f.start('lender', {syntheticAccounts:'codex',adapters: cold(), identityProbe: async () => signedIn, blockerRecheckMs: 300, hostProfileMs: 300, onLendingPoolStart: () => { state.pools++; }});
   return {f, circle, state, open};
 };
 

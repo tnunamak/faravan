@@ -1,3 +1,4 @@
+import {poolFactCache} from './helpers/pool-fact-cache.mjs';
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -108,10 +109,11 @@ async function withPool(t,{rows=[],admitsFor}={}) {
   const controller=new AbortController();
   const pool=createLendingPool({backend,storage:{get:async()=>disk,set:async v=>{disk=v;},acquire:async()=>()=>{}},capacity:2,
     policy:{enabled:true,dailyJobs:null,dailyMinutes:null},adapters:[{spec:{harness_id:'claude-code-subscription'}},{spec:{harness_id:'codex'}}],
-    createLender:opts=>{const index=workers.length;const worker={start:signal=>new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true})),
-      getState:()=>({status:'idle',reason:null,current:null}),admits:job=>admitsFor?admitsFor(index,opts,job):opts.policy.hold(job),cessation:()=>({proven:true})};workers.push(worker);return worker;}});
+    createLender:opts=>{const index=workers.length;const facts=poolFactCache(opts.policy);const worker={start:async signal=>{await facts.refresh();if(!signal.aborted)await new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));},refreshAdmission:()=>facts.refresh(),
+      getState:()=>({status:'idle',reason:null,current:null}),admits:job=>admitsFor?admitsFor(index,opts,job):facts.reason,cessation:()=>({proven:true})};workers.push(worker);return worker;}});
   const running=pool.start(controller.signal);t.after(async()=>{controller.abort();await running;});
   while(workers.length<2)await new Promise(resolve=>setImmediate(resolve));
+ await pool.refreshAdmission();
   return {pool,source,workers,backend};
 }
 
@@ -119,14 +121,18 @@ test('a pool admits pass scans the cleanup journal once for two account children
   const {pool,source}=await withPool(t);
   source.calls=0;
   assert.equal(pool.admits(),null);
-  assert.equal(source.calls,1,'two children, four holds, one scan');
+  assert.equal(source.calls,1,'one snapshot for the cached admission question');
+  await pool.refreshAdmission();
+  assert.equal(source.calls,3,'one additional fresh snapshot per child observation');
 });
 
 test('a pass with unknown-account debts still scans once',async t=>{
   const {pool,source}=await withPool(t,{rows:[debt({account_key:null,id:'x1'}),debt({account_key:null,id:'x2'})]});
   source.calls=0;
   pool.admits();
-  assert.equal(source.calls,1,'debts are read once however many holds ask');
+  assert.equal(source.calls,1,'one snapshot for the cached admission question');
+  await pool.refreshAdmission();
+  assert.equal(source.calls,3,'each child observes the shared debts once');
 });
 
 test('a child that answers with a promise makes the pass throw, even when another child answers null; the snapshot is cleared',async t=>{
@@ -150,7 +156,7 @@ test('a function that returns a promise makes withCleanupSnapshot throw, and the
 // paused and stopped gates, so wrapping withCleanupSnapshot counts the app's calls to lenderAdmission one for one.
 const countAdmissions=lender=>{
   const counter={asks:0};
-  lender.backend.withCleanupSnapshot=work=>{counter.asks++;return work();};
+  lender.backend.withCleanupSnapshot=work=>{if(work.name==='askChildren')counter.asks++;return work();};
   lender.backend.cleanupSlotHold=()=>null;
   lender.backend.unknownCleanupDebts=()=>0;
   return counter;
@@ -190,7 +196,7 @@ test('with a job running and its cleanup not yet proven, a state build still ask
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false,lendingPolicy:{providerConsent:{claude:true,codex:true}}}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
-  await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic task.',harness:'codex'}});
+  await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic task.',harness:'codex'}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'review card');
   await api(lender.app,'/api/approvals/'+card.id+'/accept',{method:'POST',body:{}});

@@ -184,5 +184,6 @@ test('a valid current-shape policy is left alone: no notice, no change to lendin
   assert.equal(saved.lendingPolicyMigration, undefined);
   assert.equal(saved.intent, 'paused');
   assert.equal(saved.paused, true);
-  assert.deepEqual(saved.limits.lendingPolicy, POLICY_61, 'the policy and its consent are unchanged');
+  const {providerConsent,...currentPolicy}=POLICY_61;
+  assert.deepEqual(saved.limits.lendingPolicy,currentPolicy,'the policy is unchanged except retired provider consent');
 });

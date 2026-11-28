@@ -24,7 +24,7 @@ test('friend run count includes confirmed stops and nonzero executions',{timeout
   const options={hold:true},f=await appFixture(t,options),{owner,lender,circle}=await f.connect();
   await lend(lender.app,circle);
 
-  const stopped=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle,'contribution-stopped-01')});
+  const stopped=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle,'contribution-stopped-01')});
   await accept(lender.app);
   await waitFor(()=>lender.backend.calls.some(([kind])=>kind==='run'),'first execution entered backend');
   const attemptId=(await api(lender.app,'/api/lending')).current;
@@ -44,7 +44,7 @@ test('friend run count includes confirmed stops and nonzero executions',{timeout
   options.runError=Object.assign(new Error('synthetic nonzero agent exit'),{code:'entrypoint_start_failed'});
   await waitFor(async()=>(await api(lender.app,'/api/lending')).current===null,'stopped execution cleanup settles');
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
-  const nonzero=await api(owner.app,'/api/jobs',{method:'POST',body:jobInput(circle,'contribution-nonzero-01')});
+  const nonzero=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:jobInput(circle,'contribution-nonzero-01')});
   await accept(lender.app);
   await waitFor(()=>f.jobs.get(nonzero.jobDigest).state==='failed','nonzero execution reaches terminal state');
   const afterNonzero=await waitFor(async()=>{

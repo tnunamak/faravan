@@ -11,6 +11,7 @@ import {randomUUID} from 'node:crypto';
 import fs from 'node:fs';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {parsePreviewInstallChannel, resolveInstallLayout} from './install-layout.mjs';
 import {MICRO, convertUsd, judgeOwnerStop, readPace50Attempt, readPace50Attempts, pointsFor, breachesFor, sumPointsAsUsdMicro, cumulativeProviderGate, compareSpendLedger,
   installedDataHome, sandboxScan, judgeNothingRunning, agentModelMatches, readPreparedStopIdentity, judgeRecordedStopRemoval} from './evidence.mjs';
 
@@ -91,11 +92,18 @@ function withTimeout(promise, ms, label) {
     .finally(() => clearTimeout(timer));
 }
 function spawnApp(role) {
-  const installRoot = join(dirs[role].home, '.local', 'lib', 'faravan');
-  const cfg = {src: SRC, installRoot, role, lender: 'owner', live, costUsd: SYNTHETIC_COST_USD, tokens: TOKENS, model: HAIKU};
+  const layout = resolveInstallLayout(process.env, dirs[role].home);
+  // Refuse a non-matching preview marker before starting an installed app.
+  const previewChannel = process.env.FARAVAN_INSTALL_ROOT ? parsePreviewInstallChannel(fs.readFileSync(layout.channelFile, 'utf8')) : null;
+  const stateFile = join(dirs[role].faravan, 'v1', 'state.json');
+  // A shared preview install cannot attest either role's data directory.
+  // Require fresh state on first launch; the owner restart must reuse it.
+  if (previewChannel && !procs[role] && fs.existsSync(stateFile))
+    throw new Error(role + ' preview needs a fresh data home');
+  const cfg = {src: SRC, installRoot: layout.installRoot, role, lender: 'owner', live, costUsd: SYNTHETIC_COST_USD, tokens: TOKENS, model: HAIKU};
   const out = fs.openSync(join(RUN, role + '.log'), 'a', 0o600);
   fs.writeFileSync(join(RUN, 'started.'+role+'.app'), '', {mode:0o600});
-  const child = fork(join(HERE, 'smoke-child.mjs'), [JSON.stringify(cfg)], {execPath: join(installRoot, 'runtime/bin/node'),
+  const child = fork(join(HERE, 'smoke-child.mjs'), [JSON.stringify(cfg)], {execPath: layout.nodeBin,
     env: childEnv(role), cwd: dirs[role].base, stdio: ['ignore', out, out, 'ipc']});
   fs.closeSync(out);
   let nextId = 0; const pending = new Map();
@@ -131,7 +139,7 @@ function spawnApp(role) {
     if (child.exitCode === null && child.signalCode === null) { rec.forcedKill = true; child.kill('SIGKILL'); }
     await withTimeout(exited, 10000, role + ' forced exit');
   };
-  const info = {child, control, shutdown, exited, readyPromise};
+  const info = {child, control, shutdown, exited, readyPromise, layout, previewChannel, stateFile};
   procs[role] = info;
   return info;
 }
@@ -148,15 +156,18 @@ async function startApp(role) {
   const faravan = resolve(dirs[role].faravan) + '/';
   const xdgInsideData = Object.entries(env).filter(([key, value]) => key.startsWith('XDG_') &&
     (resolve(value) + '/').startsWith(faravan)).map(([key]) => key);
-  const channelFile = join(dirs[role].home, '.local', 'channel');
-  const installDataHome = installedDataHome(fs.readFileSync(channelFile, 'utf8'));
+  const {layout, previewChannel, stateFile} = info;
+  const marker = previewChannel ? null : fs.readFileSync(layout.channelFile, 'utf8');
+  const installDataHome = previewChannel
+    ? (fs.existsSync(stateFile) ? dirname(dirname(fs.realpathSync(stateFile))) : null)
+    : installedDataHome(marker);
   const profile = {homeMatches: env.HOME === dirs[role].home && installDataHome === dirs[role].faravan &&
       fs.existsSync(join(dirs[role].faravan, 'v1', 'state.json')), expectedHome: dirs[role].home,
-    installChannel: fs.readFileSync(channelFile, 'utf8').match(/^channel=(.+)$/m)?.[1] ?? null, installDataHome,
+    installChannel: previewChannel ?? marker.match(/^channel=(.+)$/m)?.[1] ?? null, installDataHome,
     xdgInsideFaravanData: xdgInsideData,
     installedRuntimeMatches: resolve(fs.readlinkSync(`/proc/${ready.pid}/exe`).replace(/ \(deleted\)$/, '')) ===
-      resolve(join(dirs[role].home, '.local', 'lib', 'faravan', 'runtime/bin/node')),
-    installedAppModuleMatches: ready.installedAppModule === join(dirs[role].home, '.local', 'lib', 'faravan', 'lib/v1/app.mjs')};
+      (previewChannel ? fs.realpathSync(layout.nodeBin) : resolve(layout.nodeBin)),
+    installedAppModuleMatches: ready.installedAppModule === layout.appModule};
   summary.profiles[role] = profile;
   if (!profile.homeMatches || xdgInsideData.length || !profile.installedRuntimeMatches || !profile.installedAppModuleMatches)
     throw new Error(`${role} /proc/install profile check failed: ${JSON.stringify(profile)}`);

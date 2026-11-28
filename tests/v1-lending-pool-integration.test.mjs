@@ -1,6 +1,7 @@
 import './helpers/no-browser.mjs';
 import {legacyProxyHarness} from './helpers/legacy-proxy-harness.mjs';
 import test from 'node:test';
+import {decideLending} from '../lib/v1/lending-decision.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -11,13 +12,21 @@ import { createAccountRegistry } from '../lib/v1/lending-accounts.mjs';
 import { proveDurableCessation } from '../lib/v1/durable-cessation.mjs';
 import { realLenderFixture } from './helpers/v1-real-lender-fixture.mjs';
 import { BOTH, sandboxes, adapters, memory } from './helpers/v1-pool-fakes.mjs';
-import { deferred, until } from './helpers/v1-lender-fixture.mjs';
+import { syntheticAccountRunOptions, deferred, until } from './helpers/v1-lender-fixture.mjs';
+
+
+async function poolFixture(t,options){
+  const f=await realLenderFixture(t,options);
+  f.runOptions.runAccounts=()=>BOTH.flatMap(harness=>syntheticAccountRunOptions({harness,accountId:'fixture-'+harness}).runAccounts());
+  await f.refreshAccountHeartbeat();
+  return f;
+}
 
 // Real lenders (createLender) under the real pool, against the real v1 coordinator (store + HTTP handler).
 // The backend is fake, but keeps one sandbox per job so two agents can run at once.
 for (const accept of [true, false]) test('one owner approval for the same signed offer: ' + (accept ? 'Accept' : 'Skip'), async t => {
-  const f = await realLenderFixture(t, {offers:true,mutateJob: job => {job.requirements.harness = BOTH;}});
-  const sbx = sandboxes(t), storage = memory(), decision = deferred();
+  const f = await poolFixture(t, {offers:true,mutateJob: job => {job.requirements.harness = BOTH;}});
+  const sbx = sandboxes(t), storage = memory({day:lenderDayKey(f.clock.now(),f.policy.timeZone),jobs:0,milliseconds:0,pending:null}), decision = deferred();
   const {storage: _unused, ...policy} = f.policy;
   policy.mode = 'ask';
   policy.lendingPolicy = {accountSlots: 1, machineSlots: 2};
@@ -34,7 +43,7 @@ for (const accept of [true, false]) test('one owner approval for the same signed
     };
     return typeof fn === 'function' ? fn.bind(target) : fn;
   }});
-  const pool = createLendingPool({
+  const pool = createLendingPool({...f.runOptions,
     createLender: options => createLender({...options, approve: details => {
       arrivals.push({account: options.accountKey, details});
       return options.approve(details);
@@ -73,12 +82,12 @@ for (const accept of [true, false]) test('one owner approval for the same signed
 });
 
 async function twoRunning(t) {
-  const f = await realLenderFixture(t, { mutateJob: (job) => { job.requirements.harness = BOTH; } });
+  const f = await poolFixture(t, { mutateJob: (job) => { job.requirements.harness = BOTH; } });
   const digests = [f.jobDigest, await f.submit(), await f.submit()];
-  const sbx = sandboxes(t), storage = memory(), events = [];
+  const sbx = sandboxes(t), storage = memory({day:lenderDayKey(f.clock.now(),f.policy.timeZone),jobs:0,milliseconds:0,pending:null}), events = [];
   const { storage: _unused, ...policy } = f.policy;
   policy.lendingPolicy = { accountSlots: 1, machineSlots: 2 };
-  const pool = createLendingPool({ createLender, storage, policy, adapters: adapters(), capacity: 2, client: f.client, backend: sbx.backend,
+  const pool = createLendingPool({...f.runOptions,createLender, storage, policy, adapters: adapters(), capacity: 2, client: f.client, backend: sbx.backend,
     clock: { now: f.clock.now, monotonic: () => performance.now() }, approve: async () => true, onEvent: (e) => events.push(e) });
   const controller = new AbortController();
   const loop = pool.start(controller.signal);
@@ -97,7 +106,7 @@ for (const explicit of [true,false]) {
     const sbx=sandboxes(t),storage=memory(),{storage:_unused,...policy}=f.policy;
     await storage.set({day:lenderDayKey(f.clock.now(),policy.timeZone),jobs:0,milliseconds:0,pending:null});
     policy.lendingPolicy={accountSlots:1,machineSlots:2};
-    const pool=createLendingPool({createLender,storage,policy,adapters:adapters().filter(a=>a.spec.harness_id==='codex'),
+    const pool=createLendingPool({...f.runOptions,createLender,storage,policy,adapters:adapters().filter(a=>a.spec.harness_id==='codex'),
       accounts:()=>registry.listForPool(),capacity:2,client:f.client,backend:sbx.backend,
       clock:{now:f.clock.now,monotonic:()=>performance.now()},approve:async()=>true});
     const controller=new AbortController(),loop=pool.start(controller.signal);
@@ -198,26 +207,36 @@ test('a crash with two accounts running leaves both journals; a restarted app mu
 // O-A (r11): an account that cannot run a job must not make the pool read as ready while another account runs.
 // Real lenders under the real pool. The adapter source is async and read on every check, as the app's is.
 function identity({ codexSignedIn = true, claudeSignedIn = true, codexLent = true, claudeLent = true } = {}) {
-  return BOTH.map((id) => ({ spec:legacyProxyHarness(id), installed: true, signedIn: id === 'codex' ? codexSignedIn : claudeSignedIn,
+  return BOTH.map((id) => ({ accountProviderId:id==='codex'?'codex':'claude',spec:legacyProxyHarness(id), installed: true, signedIn: id === 'codex' ? codexSignedIn : claudeSignedIn,
     enabled: id === 'codex' ? codexLent : claudeLent, harnessVersion: 'test-only', models: ['example-model'], capabilities: [] }));
 }
 async function accounts(t, { busy = false, busyOn = 'claude', sandboxDown = false, maxResources, ...signin } = {}) {
   // A busy job only the busy account can take; otherwise a job no account can take, so nothing is claimed.
   const busyHarness = busyOn === 'codex' ? 'codex' : 'claude-code-subscription';
-  const f = await realLenderFixture(t, { mutateJob: (job) => { job.requirements.harness = busy ? [busyHarness] : ['opencode']; } });
-  const sbx = sandboxes(t), storage = memory();
+  const f = await poolFixture(t, { mutateJob: (job) => { job.requirements.harness = busy ? [busyHarness] : ['opencode']; } });
+  const sbx = sandboxes(t), storage = memory({day:lenderDayKey(f.clock.now(),f.policy.timeZone),jobs:0,milliseconds:0,pending:null});
   if (sandboxDown) {
     const up = sbx.backend.lenderCapabilities;
     sbx.backend.lenderCapabilities = () => ({ ...up(), available: false });
   }
   let current = identity(signin);
+  f.runOptions.accountExecution.availability=async({providerIds,conditions})=>{
+    const at=f.clock.now(),answers=current.filter(row=>providerIds.includes(row.accountProviderId)).map(row=>{
+      const id='fixture-'+row.spec.harness_id;
+      return {id,decision:decideLending({schemaVersion:1,nowMs:at,account:{id,providerId:row.accountProviderId,enabled:row.enabled,authState:row.signedIn?'signed_in':'signed_out'},
+        usage:{accountId:id,state:'unavailable',reading:null},ledger:{accountId:id,resources:[]},history:{accountId:id,rows:[]},job:null,
+        policy:{enabled:f.policy.enabled,revision:1,strategy:'automatic',strategyParams:{},protectionPosition:'balanced'},
+        eligibility:{evaluatedAtMs:at,settingsRevision:1,enabledNow:conditions.enabledNow!==false},runtime:conditions.runtime,conditions})};
+    });
+    return {decision:answers.find(a=>a.decision.kind==='lend')?.decision??answers[0].decision,accountIds:answers.filter(a=>a.decision.kind==='lend').map(a=>a.id)};
+  };
   const { storage: _unused, ...policy } = f.policy;
   policy.lendingPolicy = { accountSlots: 1, machineSlots: 2 };
-  const pool = createLendingPool({ createLender, storage, policy, adapters: async () => current, capacity: 2, maxResources,
+  const pool = createLendingPool({...f.runOptions,createLender, storage, policy, adapters: async () => current, capacity: 2, maxResources,
     client: f.client, backend: sbx.backend, clock: { now: f.clock.now, monotonic: () => performance.now() }, approve: async () => true });
   const controller = new AbortController(), loop = pool.start(controller.signal);
   t.after(async () => { controller.abort(); for (const s of sbx.live.values()) s.run?.resolve(); await loop.catch(() => {}); });
-  if (busy) await until(() => sbx.runs.length === 1, 'the job runs');
+  if(busy)await until(()=>sbx.runs.length===1,'the job runs');
   // The same shape of probe the app's readiness reads (a standard job from someone else).
   const probe = { author: 'faravan-readiness-probe', circle: f.job.payload.circle, requirements: structuredClone(f.job.payload.requirements),
     expires_at: new Date(f.clock.now() + 86400000).toISOString() };
@@ -237,7 +256,7 @@ test('O-A: one account busy and a usable spare account with room still admits th
 test('O-A: when no account can run a job, the pool names the sign-in; a signed-out account is not the workspace', async (t) => {
   const { pool, probe } = await accounts(t, { codexSignedIn: false, claudeSignedIn: false });
   await until(() => pool.admits(probe) !== 'lender_starting', 'both accounts have been checked');
-  assert.equal(pool.admits(probe), 'agent_signed_out');
+  assert.equal(pool.admits(probe), 'account_signed_out');
 });
 
 test('O-A: the busy account outranks a spare that is not lent, whichever is listed first', async (t) => {
@@ -248,13 +267,13 @@ test('O-A: the busy account outranks a spare that is not lent, whichever is list
 test('O-A: when no account is lent, the reason is that none is chosen', async (t) => {
   const { pool, probe } = await accounts(t, { claudeLent: false, codexLent: false });
   await until(() => pool.admits(probe) !== 'lender_starting', 'both accounts have been checked');
-  assert.equal(pool.admits(probe), 'agent_not_chosen');
+  assert.equal(pool.admits(probe), 'lending_off');
 });
 
 test('O-A: a sandbox that is genuinely down is still reported as the workspace, with signed-in accounts', async (t) => {
   const { pool, probe } = await accounts(t, { sandboxDown: true });
   await until(() => pool.admits(probe) !== 'lender_starting', 'both accounts have been checked');
-  assert.equal(pool.admits(probe), 'sandbox_not_ready');
+  assert.equal(pool.admits(probe),'sandbox_check_pending');
 });
 
 test('O-A: the machine room still refuses a second job while the first holds the CPUs', async (t) => {

@@ -168,8 +168,11 @@ test('POST /api/ops/<id> runs the same route the web app uses, with confirmation
   // Consequential: 428 with the effect, then the route itself decides.
   const needs = await call(app, 'lending.on', {}, {}, 428);
   assert.equal(needs.code, 'confirmation_required'); assert.match(needs.effect, /other people/);
-  const attempted = await api(app, '/api/ops/lending.on', {method:'POST', body:{}, headers:{'faravan-confirm':'yes'}, status:409});
-  assert.notEqual(attempted.code, 'confirmation_required', 'confirmed: the app\'s own readiness rules answer');
+  // docs/protocol/app-api.md: lending.on saves the intent and checks circle membership; an account or readiness hold is
+  // answered in status, not as an agent_not_ready veto.
+  const attempted = await api(app, '/api/ops/lending.on', {method:'POST', body:{}, headers:{'faravan-confirm':'yes'}});
+  assert.notEqual(attempted.code, 'confirmation_required', 'confirmed: the app\'s own rules answer');
+  assert.equal(attempted.lending_on, true);
   // Human-only operations are not offered over HTTP.
   assert.equal((await call(app, 'uninstall.run', {}, {}, 403)).code, 'human_only');
   // Idempotency-Key: the same key and input replays the first answer; a different input is refused.

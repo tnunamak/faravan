@@ -9,7 +9,7 @@
     "circle": "11111111-1111-4111-8111-111111111111",
     "executor": "sha256:6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827",
     "generation": 1,
-    "job_digest": "sha256:78369c3dc5dcd0b18c7fa4af64bcc76a8bb891ea0cddd3c45827123a296f0367",
+    "job_digest": "sha256:2ace5572926630b064a692e79b4863cc60df88c6685605108f6cd7a6a04c1496",
     "receipt": {
       "backend": "example-microvm",
       "capabilities_applied": [
@@ -52,6 +52,6 @@
   "signature": {
     "algorithm": "Ed25519",
     "key_id": "sha256:6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827",
-    "value": "BMHpTjus59sHlMhVVEkrRf_FodrwtXJ2tAMYUmURO9ZSIek5WvxBgKkq2jHgh8Pq6dsPFipRHuL5DRvYYMLvAQ"
+    "value": "GaurS1fgVDOKpzKmXTIUlT9-bGVP1T12DuQri_NiIB9-5lzfQqvlkjDcnMoypiTEFJk51tUecbEbGdILoFFuDg"
   }
 }

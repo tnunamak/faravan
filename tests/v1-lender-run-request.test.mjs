@@ -20,21 +20,18 @@ const options = request => ({offers: true, run: {model: 'gpt-6-sol', effort: 'hi
   job.requirements.capabilities = [...new Set([...job.requirements.capabilities, CAP])];
   job.runRequest = request;
 }});
-// The metered model is what the agent actually ran. `report` chooses what the stand-in meter says: the reserved model, or another.
-async function setup(t, request, accounts = ACCOUNTS, report = reserved => reserved, extra = {}) {
+async function setup(t, request, accounts = ACCOUNTS, extra = {}) {
   const f = await realLenderFixture(t, options(request));
-  const candidate = f.policy.lendingRuntime.candidate, reserve = candidate.reserve.bind(candidate), finish = candidate.finish.bind(candidate);
-  let reserved = null;
-  candidate.reserve = async args => {reserved = args.model; f.reservedModels = [...(f.reservedModels ?? []), args.model]; return reserve(args);};
-  candidate.finish = async args => { const out = await finish(args); return {...out, metered: {...out.metered, model: report(reserved)}}; };
   f.backend.requestStop = async () => ({compute_stopped: true});
   await f.client.heartbeat({boot: 'run-request', seq: 0, intent: {state: 'ready'}, execution: {state: 'idle'}, blockers: [],
     agents: [{adapter: 'codex', readiness: 'ready', models: ['m'], per_job_max_minutes: 2}], capabilities: [CAP], accounts});
   const c = new AbortController();
   const lender = createLender({client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy, clock: f.clock,
-    ...extra, approve: async () => true, runAccounts: () => accounts, onEvent: e => f.events.push(e)});
+    ...extra,...(extra.accountExecution?{accountExecution:{...f.runOptions.accountExecution,...extra.accountExecution}}:{}),
+    approve: async () => true, runAccounts: () => accounts, onEvent: e => f.events.push(e)});
   const loop = lender.start(c.signal);
   t.after(async () => {c.abort(); await Promise.race([loop.catch(() => {}), new Promise(r => setTimeout(r, 2000))]);});
+  f.lender=lender;
   return f;
 }
 const ended = (f, ms = 20000) => until(() => f.events.some(e => ['finished', 'declined', 'failed'].includes(e.status)), 'the job ended', ms);
@@ -43,7 +40,6 @@ test('account metadata without a broker execution path cannot authorize a run', 
   const f=await setup(t,{schemaVersion:1,models:'any',effortId:'high'});
   await ended(f);
   assert.ok(!f.events.some(e=>e.status==='finished'));
-  assert.deepEqual(f.reservedModels??[],[]);
   assert.equal(f.calls.filter(([kind])=>['admit','prepare','run'].includes(kind)).length,0);
   assert.notEqual((await f.owner.getJob(f.jobDigest)).state,'result-accepted');
 });
@@ -59,27 +55,22 @@ test('a model no account offers is refused, never run on another account', {time
 
 for(const effortId of ['high',null])test('effective effort above the owner cap is refused before reservation or admission: '+String(effortId),{timeout:60000},async t=>{
   const accounts=[account('acct-a','codex',[model('gpt-6-sol',['low','high'],'high')])];
-  const f=await setup(t,{schemaVersion:1,models:'any',effortId},accounts,undefined,
+  const f=await setup(t,{schemaVersion:1,models:'any',effortId},accounts,
     {accountExecution:{wrap(){assert.fail('cap must be checked before account launch');}}});
   f.policy.lendingRuntime.effortMax=()=> 'low';
   await ended(f);
-  assert.deepEqual(f.reservedModels??[],[]);
   assert.equal(f.calls.filter(([kind])=>['admit','prepare','run'].includes(kind)).length,0);
   assert.ok(!f.events.some(e=>e.status==='finished'));
   assert.notEqual((await f.owner.getJob(f.jobDigest)).state,'result-accepted');
 });
 
 test('only the adapter\'s own provider can run a request: an advertised account of another provider is never used', {timeout: 60000}, async t => {
-  let completedOfferRead = false;
-  const f = await setup(t, {schemaVersion: 1, models: 'any', effortId: null}, [ACCOUNTS[0]], undefined, {
-    accountExecution: {wrap() { assert.fail('the wrong provider must not reach launch'); }},
-    onPoll: ({rateLimited}) => { if (!rateLimited) completedOfferRead = true; },
+  const f = await setup(t, {schemaVersion: 1, models: 'any', effortId: null}, [ACCOUNTS[0]], {
+    accountExecution:{availability:async({providerIds})=>{assert.deepEqual(providerIds,['codex']);assert.equal(ACCOUNTS[0].providerId,'provider-y');return {decision:{kind:'hold',code:'no_accounts',nextAction:{id:'add_account',label:'Add an agent account',target:{}}},accountIds:[]};},wrap(){assert.fail('the wrong provider must not reach launch');}},
   });
-  // No compatible offer means the lender returns to its poll timer without a terminal job event.
-  await until(() => completedOfferRead && f.clock.pending().includes(f.policy.pollMs),
-    'the real offer read completes and the lender returns to polling');
+  // No own-provider account means this worker cannot advertise capacity or claim a job.
+  await until(()=>f.lender.admits()==='no_accounts','the worker holds without an eligible account');
   assert.ok(!f.events.some(e => ['claimed', 'working', 'finished'].includes(e.status)));
-  assert.deepEqual(f.reservedModels ?? [], [], 'nothing was reserved');
   assert.equal(f.calls.filter(([kind]) => ['admit', 'prepare', 'run'].includes(kind)).length, 0);
   const view = await f.owner.getJob(f.jobDigest);
   assert.equal(view.state, 'queued');

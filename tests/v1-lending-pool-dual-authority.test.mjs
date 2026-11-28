@@ -1,102 +1,90 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { createLender } from '../lib/v1/lender.mjs';
-import { createLendingPool } from '../lib/v1/lending-pool.mjs';
-import { createAuthorityClient } from '../lib/v1/authority-client.mjs';
-import { realLenderFixture } from './helpers/v1-real-lender-fixture.mjs';
-import { BOTH, sandboxes, adapters, memory } from './helpers/v1-pool-fakes.mjs';
-import { until } from './helpers/v1-lender-fixture.mjs';
+import {readFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {randomUUID} from 'node:crypto';
+import {appFixture,api,waitFor} from './helpers/v1-app-fixture.mjs';
+import {sandboxes} from './helpers/v1-pool-fakes.mjs';
+import {installServingMember} from './helpers/serving-member-fixture.mjs';
 
-// One serving device, one real lending pool, two authorities (owner-offline topology). Ordinary work stays at
-// the incumbent host; work that names this device runs only at the device's own member store. When only the
-// incumbent becomes unreachable, designated work keeps flowing, the ordinary attempt is neither duplicated nor
-// moved to the member store, and every attempt, stop and settlement stays at the authority that issued it.
-const vectors = JSON.parse(readFileSync(new URL('../docs/protocol/vectors/golden.json', import.meta.url)));
-const OWN = vectors.keys[1].fingerprint;
-// The owner's registry names both lent accounts, as the app's does; a registry-less fresh root would seed a legacy row with no
-// counting day, which the lender (correctly) refuses.
-const ACCOUNTS = [{ provider: 'claude', key: 'claude', enabled: true }, { provider: 'codex', key: 'codex', enabled: true }];
-// The jobs a store was asked to claim (a replayed idempotent claim is the same job once).
-const claims = (requests) => [...new Set(requests.filter((r) => r.url.endsWith('/claim')).map((r) => 'sha256:' + r.url.split('/jobs/')[1].split('/')[0]))];
-const touching = (requests, digest) => requests.filter((r) => r.url.includes('/jobs/' + digest.slice(7) + '/'));
+// Both stores and the app's lending pool are real. The provider and sandbox processes are synthetic.
+test('an incumbent outage stalls only ordinary work: designated work runs at the member store, nothing runs twice, stop stays exact',{timeout:360000},async t=>{
+ const f=await appFixture(t),sbx=sandboxes(t);
+ const connected=await f.realConnect({lenderOptions:{syntheticAccounts:['claude','codex'],backend:sbx.backend}});
+ const {owner,lender,circle,incumbent,realRequests,realHeartbeats}=connected;
+ await installServingMember({f,...connected});
+ const memberRequests=[];
+ lender.app.memberListener.server.prependListener('request',req=>memberRequests.push({route:req.url,method:req.method}));
+ const coordinator=await owner.app.device.client(circle.id),member=await owner.app.device.memberClient(circle.id,lender.app.device.keyId);
+ await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:8,dailyMinutes:120,maxWallSeconds:1200,idleOnly:false,
+  lendingPolicy:{accountSlots:1,machineSlots:2}}});
+ for(const harness of ['claude-code-subscription','codex'])await api(lender.app,'/api/agents/'+harness,{method:'POST',body:{useForLending:true}});
+ await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'auto'}});
+ await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
+ await waitFor(()=>realHeartbeats.filter(row=>row.device===lender.app.device.keyId).at(-1)?.body.accounts?.length===2,'both accounts advertised at the incumbent',30000);
+ const templates=new Map();
+ const publish=async(designated,prompt)=>{
+  const authority=designated?member:coordinator,other=designated?coordinator:member;
+  let digest,payload;
+  if(templates.has(designated)){
+   // Reuse the product-built request, but send this new intent to the authority under test.
+   // Automatic destination selection may otherwise choose the other serving member when this provider is busy.
+   payload=structuredClone(templates.get(designated));payload.intent_id=randomUUID();
+   payload.created_at=new Date().toISOString().replace(/\.\d+Z$/,'Z');
+   payload.expires_at=new Date(Date.now()+86400000).toISOString().replace(/\.\d+Z$/,'Z');
+   payload.prompt=await authority.uploadArtifact(Buffer.from(prompt),'text/plain');
+   digest=(await authority.submitJob(payload)).jobDigest;
+  }else{
+   digest=(await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,
+    noSource:true,result:{kind:'message'},prompt,harness:designated?'codex':'claude-code-subscription',
+    ...(designated?{designated_member:lender.app.device.keyId}:{})}})).jobDigest;
+   payload=(await authority.getJob(digest)).job.payload;templates.set(designated,payload);
+  }
+  await other.uploadArtifact(await authority.fetchArtifact(payload.prompt),'text/plain');
+  assert.equal((await other.submitJob(payload)).jobDigest,digest,'both authorities retain the unchanged signed job');
+  return digest;
+ };
+ const ordinary=await publish(false,'Ordinary one'),designated=await publish(true,'Designated one');
+ try{await waitFor(()=>sbx.runs.length===2,'both providers execute at their own authorities',45000);}
+ catch(error){t.diagnostic(JSON.stringify({ordinary:(await coordinator.getJob(ordinary)).current_attempt,designated:(await member.getJob(designated)).current_attempt,runs:sbx.runs,accounts:(await api(lender.app,'/api/lending')).accountStates.map(({account,status,reason})=>({account,status,reason})),errors:realRequests.filter(row=>row.status>=400)}));throw error;}
 
-test('an incumbent outage stalls only ordinary work: designated work runs at the member store, nothing runs twice, stop stays exact', async (t) => {
-  let incumbentDown = false;
-  const f = await realLenderFixture(t, { memberStore: true, publish: false,
-    mutateJob: (job) => { job.requirements.harness = BOTH; },
-    intercept: (req) => { if (!incumbentDown) return false; req.socket.destroy(); return true; },
-    policy: { servesMember: true } });
-  const ordinary = await f.publish({ designated: false, text: 'ordinary one' });
-  const designated = await f.publish({ designated: true, text: 'designated one' });
-
-  const sbx = sandboxes(t), storage = memory(), events = [];
-  const { storage: _unused, ...policy } = f.policy;
-  policy.lendingPolicy = { accountSlots: 1, machineSlots: 2 };
-  let rows = {};
-  const client = createAuthorityClient({ ownKeyId: OWN, incumbent: async () => f.client, member: async () => f.member.client(1),
-    routes: { read: async () => structuredClone(rows), write: async (value) => { rows = structuredClone(value); } },
-    outageMs: 100, backoffMs: 300 });
-  const pool = createLendingPool({ createLender, storage, policy, adapters: adapters(), capacity: 2, accounts: () => ACCOUNTS, client, backend: sbx.backend,
-    clock: { now: f.clock.now, monotonic: () => performance.now() }, approve: async () => true, onEvent: (e) => events.push(e) });
-  const controller = new AbortController();
-  const loop = pool.start(controller.signal);
-  f.stop = async () => { controller.abort(); for (const s of sbx.live.values()) s.run?.resolve(); await loop.catch(() => {}); };
-
-  // One device executes one ordinary and one designated job, each at its own origin.
-  await until(() => sbx.runs.length === 2, 'the ordinary and the designated job both run');
-  const ordinaryAttempt = (await f.owner.getJob(ordinary)).current_attempt;
-  const designatedAttempt = (await f.member.owner.getJob(designated)).current_attempt;
-  assert.ok(ordinaryAttempt && designatedAttempt, 'each job has an attempt at its own authority');
-  assert.equal((await f.member.owner.getJob(ordinary)).attempts_started, 0, 'the member copy of the ordinary job is never dispatched');
-  assert.equal((await f.owner.getJob(designated)).attempts_started, 0, 'the incumbent copy of the designated job is never dispatched');
-  assert.deepEqual(claims(f.realRequests), [ordinary], 'only the ordinary job was claimed at the incumbent');
-  assert.deepEqual(claims(f.member.requests), [designated], 'only the designated job was claimed at the member store');
-  assert.equal(rows[ordinary]?.a, 'incumbent');
-  assert.equal(rows[designated]?.a, 'member');
-  const running = pool.getState().currentJobs;
-  assert.equal(running.length, 2);
-  assert.equal(new Set(running.map((j) => j.account)).size, 2, 'one slot per account: two accounts, one job each');
-  assert.deepEqual(running.map((j) => j.attemptId).sort(), [ordinaryAttempt.attempt_id, designatedAttempt.attempt_id].sort());
-
-  // More work of both kinds arrives while the device is full, then only the incumbent is isolated.
-  const ordinaryLater = await f.publish({ designated: false, text: 'ordinary two' });
-  const designatedLater = await f.publish({ designated: true, text: 'designated two' });
-  incumbentDown = true;
-
-  // The designated job finishes at the member store while the incumbent is dark.
-  const designatedSandbox = [...sbx.live.values()].find((s) => s.handle.job_id.includes(designated.slice(7, 23)));
-  const ordinarySandbox = [...sbx.live.values()].find((s) => s.handle.job_id.includes(ordinary.slice(7, 23)));
-  assert.ok(designatedSandbox && ordinarySandbox, 'each job has its own sandbox');
-  designatedSandbox.run.resolve();
-  await until(() => sbx.runs.length === 3, 'the freed slot takes designated work while the incumbent is down');
-  assert.equal((await f.member.owner.getJob(designated)).state, 'result-accepted', 'the designated result landed at the member store');
-  const laterAttempt = (await f.member.owner.getJob(designatedLater)).current_attempt;
-  assert.ok(laterAttempt, 'the later designated job was discovered and claimed at the member store');
-  assert.equal(ordinarySandbox.run !== null && !sbx.gone.has(ordinarySandbox.handle.sandbox_id), true, 'the ordinary attempt keeps running');
-  assert.equal((await f.member.owner.getJob(ordinaryLater)).attempts_started, 0, 'the retained ordinary debt is not moved to the member store');
-  assert.deepEqual(claims(f.member.requests), [designated, designatedLater], 'the member store only ever saw designated claims');
-  assert.equal(sbx.runs.length, 3, 'three distinct jobs, three executions: nothing ran twice');
-  assert.equal(pool.getState().currentJobs.length, 2, 'the shared slot budget still holds two attempts');
-
-  // Stop is scoped to the exact attempt: stopping the designated attempt leaves the ordinary one running.
-  pool.pause();
-  await pool.stopCurrentJob(laterAttempt.attempt_id);
-  await until(() => pool.getState().currentJobs.length === 1, 'only the designated attempt stops');
-  assert.equal(pool.getState().currentJobs[0].attemptId, ordinaryAttempt.attempt_id);
-  assert.ok(touching(f.member.requests, ordinary).every((r) => r.url.includes('/jobs/' + ordinary.slice(7) + '/') && !r.url.endsWith('/claim')),
-    'the member store never claimed the ordinary job');
-
-  // The incumbent returns; the retained ordinary attempt stops at the incumbent and nowhere else.
-  incumbentDown = false;
-  await pool.stopCurrentJob(ordinaryAttempt.attempt_id);
-  await until(() => pool.getState().currentJobs.length === 0, 'the ordinary attempt stops');
-  const after = storage.peek();
-  assert.equal(after.pending, null);
-  assert.equal(Object.values(after.accounts).reduce((sum, a) => sum + a.jobs, 0), after.jobs, 'one counter totals both authorities');
-  assert.equal(sbx.runs.length, 3);
-  assert.deepEqual(claims(f.realRequests).filter((d) => d !== ordinary && d !== ordinaryLater), [], 'the incumbent only ever saw ordinary claims');
-  assert.equal((await f.owner.getJob(designated)).attempts_started, 0);
-  assert.equal((await f.owner.getJob(designatedLater)).attempts_started, 0);
+ const ordinaryAttempt=(await coordinator.getJob(ordinary)).current_attempt,designatedAttempt=(await member.getJob(designated)).current_attempt;
+ assert.equal(ordinaryAttempt.selection.providerId,'claude');assert.equal(designatedAttempt.selection.providerId,'codex');
+ assert.notEqual(ordinaryAttempt.selection.accountId,designatedAttempt.selection.accountId);
+ const state=()=>api(lender.app,'/api/lending');
+ assert.equal((await state()).currentJobs.length,2);
+ const ordinaryLater=await publish(false,'Ordinary two'),designatedLater=await publish(true,'Designated two');
+ incumbent.down();
+ t.after(()=>incumbent.up());
+ const handleFor=digest=>[...sbx.live.values()].find(row=>row.handle.job_id===digest);
+ const ordinarySandbox=handleFor(ordinary),designatedSandbox=handleFor(designated);
+ assert.ok(ordinarySandbox&&designatedSandbox);
+ designatedSandbox.run.resolve();
+ await waitFor(async()=>(await member.getJob(designated)).state==='result-accepted','member completion while incumbent is down',45000);
+ await waitFor(()=>sbx.runs.length===3,'freed Codex account takes the next designated job during outage',60000);
+ const laterAttempt=(await member.getJob(designatedLater)).current_attempt;
+ await waitFor(async()=>(await member.getJob(designatedLater)).current_attempt.execution_observed_at,'later member execution is observed',15000);
+ await waitFor(async()=>(await state()).accountStates.some(row=>row.current===laterAttempt.attempt_id&&row.status==='running'),'the pool observes the later agent running',15000);
+ assert.ok(!sbx.gone.has(ordinarySandbox.handle.sandbox_id),'ordinary execution stays alive');
+ assert.equal((await state()).currentJobs.length,2);
+ assert.ok(!realRequests.some(row=>row.method==='POST'&&row.route.endsWith('/jobs/'+designated.slice(7)+'/claim')),'incumbent never claims designated work');
+ const memberClaims=memberRequests.filter(row=>row.method==='POST'&&row.route.endsWith('/claim')).map(row=>row.route);
+ assert.ok(memberClaims.every(route=>[designated,designatedLater].some(digest=>route.includes('/jobs/'+digest.slice(7)+'/'))),'member claims only designated work');
+ await api(lender.app,'/api/lending/pause',{method:'POST',body:{}});
+ await api(lender.app,'/api/lending/stop',{method:'POST',body:{confirmed:true,attemptId:laterAttempt.attempt_id}});
+ await waitFor(async()=>(await state()).currentJobs.length===1,'only the designated attempt stops',30000);
+ assert.equal((await state()).currentJobs[0].attemptId,ordinaryAttempt.attempt_id);
+ incumbent.up();
+ assert.equal((await coordinator.getJob(ordinaryLater)).attempts_started,0,'ordinary queued work was not moved to the member');
+ assert.equal((await member.getJob(ordinaryLater)).attempts_started,0,'the member retained ordinary work without dispatching it');
+ assert.equal((await coordinator.getJob(designated)).attempts_started,0,'the incumbent retained designated work without dispatching it');
+ await api(lender.app,'/api/lending/stop',{method:'POST',body:{confirmed:true,attemptId:ordinaryAttempt.attempt_id}});
+ await waitFor(async()=>(await state()).currentJobs.length===0,'ordinary attempt stops at incumbent',30000);
+ assert.equal(sbx.runs.length,3,'each accepted attempt executes once');
+ const counters=JSON.parse(await readFile(join(lender.home,'v1','app-counters.json'),'utf8'));
+ assert.equal(counters.pending,null);
+ assert.equal(Object.values(counters.accounts).reduce((sum,row)=>sum+row.jobs,0),counters.jobs,'one counter totals both authorities');
+ assert.equal((await member.getJob(designatedLater)).current_attempt.compute_stopped,true);
+ assert.equal((await coordinator.getJob(ordinary)).current_attempt.compute_stopped,true);
 });

@@ -28,9 +28,9 @@ test('status text displays exact legacy recovery guidance',async t=>{
 });
 test('lender cessation report displays exact legacy recovery guidance',async t=>{
   const f=await lenderFixture(t);f.backend.reconcileOwnedSandboxes=async()=>({removed:false,remediation:[remediation]});
-  const controller=new AbortController(),lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,onEvent:e=>f.events.push(e)});
+  const controller=new AbortController(),lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,onEvent:e=>f.events.push(e)});
   const running=lender.start(controller.signal);running.catch(()=>{});
-  try{await until(()=>f.events.some(e=>e.reason==='cessation_unverified'),'recovery refusal');const event=f.events.find(e=>e.reason==='cessation_unverified');assert.ok(event.label.includes(command));assert.match(event.label,/only if this install created the job/);}
+  try{await until(()=>f.events.some(e=>e.reason==='cleanup_pending'),'recovery refusal');const event=f.events.find(e=>e.reason==='cleanup_pending');assert.ok(event.label.includes(command));assert.match(event.label,/only if this install created the job/);}
   finally{controller.abort();await running.catch(()=>{});}
 });
 
@@ -38,9 +38,9 @@ test('pending recovery keeps guidance visible in the final cessation report',asy
   const f=await lenderFixture(t);f.policy.enabled=false;f.policy.recoveryOnly=true;
   await f.policy.storage.set({day:'2026-10-09',jobs:1,milliseconds:120000,pending:{jobId:'old-job',attemptId:'old-attempt',attempt:{attempt_id:'old-attempt'},reservedMs:120000}});
   f.backend.reconcilePending=async row=>({removed:false,attemptId:row.attemptId,remediation:[remediation]});
-  const controller=new AbortController(),lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,onEvent:e=>f.events.push(e)});
+  const controller=new AbortController(),lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,onEvent:e=>f.events.push(e)});
   const running=lender.start(controller.signal);running.catch(()=>{});
-  try{await until(()=>f.events.filter(e=>e.reason==='cessation_unverified').length>=2,'pending recovery refusal');assert.ok(lender.getState().label.includes(command));}
+  try{await until(()=>f.events.filter(e=>e.reason==='cleanup_pending').length>=2,'pending recovery refusal');assert.ok(lender.getState().label.includes(command));}
   finally{controller.abort();await running.catch(()=>{});}
 });
 test('an unknown sandbox without a safe removal command is reported, never given a command',async()=>{

@@ -122,7 +122,7 @@ test('P9 signed job, downgrade and result delivery: '+JSON.stringify(observed),a
   assert.equal(p.validateRequirements(req,{recognizedCapabilities:['patch-output']}).ok,false);
   assert.equal(p.canSatisfy(req,{harnesses:['codex'],models:[],capabilities:[],egress:report.egress,
     enforced_limits:report.enforced_limits,max_limits:report.max_limits}).ok,false);
-  const controller=new AbortController(),lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,
+  const controller=new AbortController(),lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,
     policy:f.policy,clock:f.clock,approve:async()=>true,onEvent:e=>f.events.push(e)});
   const running=lender.start(controller.signal).catch(e=>{if(!controller.signal.aborted)throw e;});
   f.stop=async()=>{controller.abort();await running;};
@@ -150,7 +150,7 @@ test('the borrower reads the sandbox checks with the verified result, apart from
   const capability=f.backend.lenderCapabilities;
   f.backend.lenderCapabilities=()=>({...capability(),capabilities:['verify_v1']});
   f.backend.verificationFiles=async()=>'';f.backend.verify=async()=>({exit:1,timed_out:false,stdout:'# pass 2\n# fail 1'});
-  const controller=new AbortController(),lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,
+  const controller=new AbortController(),lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,
     policy:f.policy,clock:f.clock,approve:async()=>true,onEvent:e=>f.events.push(e)});
   const running=lender.start(controller.signal).catch(e=>{if(!controller.signal.aborted)throw e;});
   await until(()=>f.events.some(e=>e.status==='finished'),'finished result');controller.abort();await running;
@@ -167,7 +167,7 @@ test('P9 a check sandbox that cannot start still delivers the work, signed, with
   f.backend.lenderCapabilities=()=>({...capability(),capabilities:['verify_v1']});
   f.backend.verificationFiles=async()=>'';f.backend.verify=async()=>assert.fail('no command without a check workspace');
   f.backend.prepareCheck=async()=>{throw Object.assign(new Error('sbx: raw boot failure /home/lender/secret'),{code:'sandbox_ready_timeout',cleanup_receipt:{removed:true}});};
-  const controller=new AbortController(),lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,
+  const controller=new AbortController(),lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,
     policy:f.policy,clock:f.clock,approve:async()=>true,onEvent:e=>f.events.push(e)});
   const running=lender.start(controller.signal).catch(e=>{if(!controller.signal.aborted)throw e;});
   f.stop=async()=>{controller.abort();await running;};

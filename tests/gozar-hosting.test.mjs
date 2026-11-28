@@ -219,7 +219,7 @@ test('actual App endpoint and connect command require approval and keep local au
   const {stagedExposure,shortGozarAppHome} = await import('./helpers/gozar-fixture.mjs');
   const paid = {kind:'paid',summary:'Zero-price paid fixture',amount:0,currency:'USD',period:'month'};
   const fixture = await stagedExposure(t,withCost(paid));
-  const {appFixture,api} = await import('./helpers/v1-app-fixture.mjs');
+  const {appFixture,api,waitFor} = await import('./helpers/v1-app-fixture.mjs');
   const f = await appFixture(t);
   const {connectChatgpt} = await import('../lib/v1/connect-chatgpt.mjs');
   await shortGozarAppHome(t,f,'g');
@@ -257,8 +257,25 @@ test('actual App endpoint and connect command require approval and keep local au
   assert.equal(failed.cleanup.state,'unconfirmed');
   assert.equal((await api(app,'/api/chatgpt/status')).connected,false);
   await assert.rejects(send(before.spec.target,{path:'/mcp'}),'local gateway is closed despite remote cleanup debt');
+  // The App may answer after its 1s local-close budget while the provider
+  // still owns the first attempt. Wait for that attempt to settle before
+  // changing the fake provider's answer, then preserve the real CLI result.
+  const stopPath='/api/chatgpt/disconnect';
+  const inProgress=result=>result.cleanup?.state==='unconfirmed' && result.cleanup.reason==='operation_in_progress';
+  const disconnect=()=>client.rest('POST',stopPath,{body:{}});
+  if(inProgress(failed)) {
+    let prior;
+    await waitFor(async()=>{prior=await disconnect();return !inProgress(prior);},'first provider close settled',10000);
+    assert.equal(prior.cleanup?.state,'unconfirmed');
+  }
   fixture.failClose(false);
-  await connectChatgpt({home,stop:true},{client,gozar:fixture.gozar,interaction});
+  const retryingClient={rest:async(method,path,options)=>{
+    if(method!=='POST'||path!==stopPath)return client.rest(method,path,options);
+    let result;
+    await waitFor(async()=>{result=await disconnect();return !inProgress(result);},'provider cleanup retry settled',10000);
+    return result;
+  }};
+  assert.deepEqual(await connectChatgpt({home,stop:true},{client:retryingClient,gozar:fixture.gozar,interaction}),{connected:false});
   await assert.rejects(send(address,{path:'/mcp'}));
 });
 

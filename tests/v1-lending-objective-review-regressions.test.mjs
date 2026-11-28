@@ -10,28 +10,7 @@ const emptyQueue = 0;
 const ample = () => windows({weeklyUsedMicro: 84_200_000, weeklyK: 790_000,
   shortUsedMicro: 68_400_000, shortK: 1_580_000});
 
-test('owner maxJobUsd caps total spend before worst-call headroom', () => {
-  const expectedNative = [10_680_000, 6_720_000, 1_440_000];
-  for (const [index, model] of MODELS.entries()) {
-    const decision = decideObjectiveLend({now: NOW, observedAt: NOW, windows: ample(), band: calibration(), owner: OWNER_NONE,
-      gates: GATES, laterBurnCapacityMicro: emptyQueue, ownerMaxJobUsdMicro: 12 * M,
-      job: job({friendValue: 100, requestedUsdMicro: null, estimateUsdMicro: 20 * M,
-        worstCallUsdMicro: model.headroomUsdMicro})});
-    assert.equal(decision.admitted, true);
-    assert.equal(decision.exposureUsdMicro, 12 * M);
-    assert.equal(decision.nativeBudgetUsdMicro, expectedNative[index]);
-    assert.equal(decision.nativeBudgetUsdMicro + model.headroomUsdMicro, 12 * M);
-  }
 
-  for (const model of MODELS) {
-    const decision = decideObjectiveLend({now: NOW, observedAt: NOW, windows: ample(), band: calibration(), owner: OWNER_NONE,
-      gates: GATES, laterBurnCapacityMicro: emptyQueue, ownerMaxJobUsdMicro: M,
-      job: job({friendValue: 100, requestedUsdMicro: null, estimateUsdMicro: 20 * M,
-        worstCallUsdMicro: model.headroomUsdMicro})});
-    assert.equal(decision.admitted, false, `${model.model} cannot fit under a $1 total cap`);
-    assert.equal(decision.reason, 'budget_too_small');
-  }
-});
 
 test('atomic owner service loss is evaluated as an indivisible attempt and reported; positive value inside the slack lends', () => {
   const decision = decideObjectiveLend({now: NOW, observedAt: NOW,
@@ -79,17 +58,7 @@ test('a request above the spare holds whole, and the status names what the job n
     + 'its own when enough quota is spare for the whole job.');
 });
 
-test('the owner per-job limit, when it is the binding cap, holds as a request above the limit and not as a spare hold', () => {
-  const decision = decideObjectiveLend({now: NOW, observedAt: NOW,
-    windows: ample(), band: calibration(), owner: OWNER_NONE, gates: GATES, laterBurnCapacityMicro: emptyQueue,
-    ownerMaxJobUsdMicro: 5 * M,
-    job: job({friendValue: 10, requestedUsdMicro: 20 * M, estimateUsdMicro: 20 * M})});
-  assert.equal(decision.admitted, false);
-  assert.equal(decision.reason, 'request_too_large');
-  assert.equal(decision.projection.reasonCode, 'objective_request_too_large');
-  assert.match(decision.reasonText, /per-job limit of \$5\.00 allows/);
-  assert.match(lendingStatus({reason: 'request_too_large'}).line, /asks for more than your per-job limit allows/);
-});
+
 
 // The designated weekly identity is semantic, not a spelling convention for the resource key.
 for (const source of ['history', 'model']) {

@@ -40,8 +40,6 @@ The instructions prohibit changing source tests to make the merge pass and requi
 | --- | --- |
 | #244: `tests/admission-exposure-paths.test.mjs:115` closes native holds even without full coverage. | #249: `lib/v1/lending-policy.mjs:1185` retains unrepresented spend and remaining holds until coverage or reset. |
 | #248: `tests/admission-accounting-replay.test.mjs:172` releases holds for meter rises of zero or one point. | #249 retains the reservation envelope. |
-| #247: `tests/admission-recovery-paths.test.mjs:62` expects permanent poison after a transient save fault. Its line 102 also expects an uncovered native hold to close. | #250: `lib/v1/lender-pace50.mjs:1762` reopens poisoned adapters; #249 retains uncovered native holds. |
-| #249: `tests/admission-blind-exposure.test.mjs:74` expects `quota_unknown` for `native_attempt_in_flight`. | #252: `lib/v1/lender-pace50.mjs:73` deliberately maps it to `quota_reserve`. |
 
 The accounting TLA module also needed bindings for the newer Admission parameters `CancelSafe`, `RecheckSafe` and `race`. These were added using safe flags and the idle race record. Its imported predicate `ClosedHasProof` depends only on cleanup, held and pending values, so the new bindings do not change the predicate checked.
 

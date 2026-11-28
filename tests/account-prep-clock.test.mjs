@@ -57,7 +57,8 @@ test('a signed account job prepares under the lender lease clock and its wall cl
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
   await waitFor(()=>realHeartbeats.filter(row=>row.device===lender.app.device.keyId).at(-1)?.body.accounts?.some(row=>row.accountId===account.id),'published account',30000);
-  const submitted=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,prompt:'Prep clock account job',
+  // Explicitly approve this synthetic submission before checking the lease clocks.
+  const submitted=await api(owner.app,'/api/jobs',{method:'POST',headers:{'faravan-confirm':'yes'},body:{circle:circle.id,prompt:'Prep clock account job',
     git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),harness:'codex',
     runRequest:{schemaVersion:1,models:[{providerId:'codex',modelId:'example-model'}],effortId:'high'}}});
   const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'account approval',30000);

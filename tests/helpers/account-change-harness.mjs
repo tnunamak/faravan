@@ -1,3 +1,4 @@
+import {poolFactCache} from './pool-fact-cache.mjs';
 // The production registry and the production pool over a temporary registry file and an in-memory counter store. Only the
 // lender worker is a stand-in, because the sandbox is not under test here: it records which account and slot it serves
 // and answers an offer with the pool's own hold for that account.
@@ -23,12 +24,13 @@ export function createAccountChangeHarness(t,{provider='claude-code-subscription
     pool=createLendingPool({storage,policy:{enabled:true,lendingPolicy:{accountSlots:slots,machineSlots:8}},capacity:8,adapters,
       accounts:()=>registry.list(),
       createLender:options=>{
+        const facts=poolFactCache(options.policy);
         const worker={accountKey:options.accountKey,slot:options.accountSlot,
           getState:()=>({status:'waiting',current:null}),
           // The pool's own admission check for this account, with no job in the way.
-          hold:()=>options.policy.hold({author:'someone'},{}),
-          admits:()=>options.policy.hold({author:'someone'},{}),
-          start:signal=>new Promise(resolve=>{if(signal.aborted)resolve();else signal.addEventListener('abort',()=>resolve(),{once:true});})};
+          hold:()=>facts.reason,
+          admits:()=>facts.reason,refreshAdmission:()=>facts.refresh(),
+          start:async signal=>{await facts.refresh();if(!signal.aborted)await new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));}};
         workers.push(worker);
         return worker;
       }});
@@ -42,7 +44,7 @@ export function createAccountChangeHarness(t,{provider='claude-code-subscription
     /** Opens the pool and lets it create its workers. */
     async start(){open();await settle();await settle();},
     /** Tells the running pool that the registry changed, as the app does after a settings change. */
-    async changed(){pool.reconfigure();await settle();},
+    async changed(){pool.reconfigure();await pool.refreshAdmission();await settle();},
     /** The abrupt end of a process: workers stop, the stored rows stay. */
     async restart(){stop.abort();await running;await settle();open();await settle();await settle();},
     async close(){stop?.abort();await running;},

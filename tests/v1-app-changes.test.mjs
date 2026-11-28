@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { appFixture, api } from './helpers/v1-app-fixture.mjs';
+import { appFixture, api, browserApi } from './helpers/v1-app-fixture.mjs';
 import { makeRepo, git } from './helpers/git-guest.mjs';
 import { execFileSync } from 'node:child_process';
 
@@ -48,8 +48,9 @@ test('Changes tab data flags patches that apply would refuse, and reports tree c
 
 test('the web form shape {git:{url,commit}} submits a repository job', { timeout: 20000 }, async t => {
   const f = await appFixture(t), { owner, circle } = await f.connect();
+  const ui=await browserApi(owner.app);
   const commit = '3'.repeat(40);
-  const { jobDigest } = await api(owner.app, '/api/jobs', { method: 'POST', body: { circle: circle.id,
+  const { jobDigest } = await ui('/api/jobs', { method: 'POST', body: { circle: circle.id,
     git: { url: 'https://github.com/example/synthetic.git', commit }, prompt: 'From the form', harness: 'codex' } });
   const view = await api(owner.app, jobPath(jobDigest) + '?circle=' + circle.id);
   assert.match(view.local.source, new RegExp('github.com/example/synthetic.git @ ' + commit.slice(0, 8)));

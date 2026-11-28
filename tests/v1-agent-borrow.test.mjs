@@ -1,7 +1,7 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {appFixture, api} from './helpers/v1-app-fixture.mjs';
+import {appFixture, api, browserApi} from './helpers/v1-app-fixture.mjs';
 import {mkdir, writeFile, rm, readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {makeRepo} from './helpers/git-guest.mjs';
@@ -56,13 +56,25 @@ async function allow(app,circle) {
   return browser;
 }
 
+test('the fixture sends as a confirmed owner by default; confirm:false is the unconfirmed agent send', {timeout:120000}, async t=>{
+  const f=await appFixture(t),{owner,circle}=await f.connect(),app=owner.app;
+  const repo=await makeRepo();t.after(()=>rm(repo.dir,{recursive:true,force:true}));
+  const input={circle:circle.id,prompt:'Change README',repo:{path:repo.dir}};
+  assert.equal((await api(app,'/api/jobs',{method:'POST',body:input,confirm:false,status:428})).code,'confirmation_required');
+  const sent=await api(app,'/api/jobs',{method:'POST',body:input});
+  assert.notEqual((await api(app,'/api/jobs/'+sent.jobDigest+'?circle='+circle.id)).local.sentByAgent,true,'a confirmed send is not marked as sent by an agent');
+  // The web app sends no confirm header and no token; browserApi() is that caller, so tests that model the app use it.
+  const viaApp=await (await browserApi(app))('/api/jobs',{method:'POST',body:{...input,prompt:'From the app window'}});
+  assert.notEqual((await api(app,'/api/jobs/'+viaApp.jobDigest+'?circle='+circle.id)).local.sentByAgent,true,'the app window is not an agent');
+});
+
 test('direct REST and ops share send and apply permission; a local window still sends', {timeout:120000}, async t=>{
   const f=await appFixture(t),{owner,circle}=await f.connect(),app=owner.app;
   const repo=await makeRepo();t.after(()=>rm(repo.dir,{recursive:true,force:true}));
   const input={circle:circle.id,prompt:'Change README',repo:{path:repo.dir}};
-  await api(app,'/api/jobs',{method:'POST',body:input,status:428});
+  await api(app,'/api/jobs',{method:'POST',body:input,confirm:false,status:428});
   const browser=await allow(app,circle.id);
-  const sent=await api(app,'/api/jobs',{method:'POST',body:input});
+  const sent=await api(app,'/api/jobs',{method:'POST',body:input,confirm:false});
   assert.equal((await api(app,'/api/jobs/'+sent.jobDigest+'?circle='+circle.id)).local.sentByAgent,true);
   for(const route of ['apply','working-tree']) {
     await api(app,'/api/ops/circles.set_agent_borrowing',{method:'POST',body:{circle:circle.id,enabled:false}});
@@ -86,7 +98,7 @@ test('saved permission sends committed Git only and refuses other sources withou
   const repo=await makeRepo();t.after(()=>rm(repo.dir,{recursive:true,force:true}));
   for(const source of [{repo:{path:dir}},{repo:{path:repo.dir,includeUncommitted:true}},{noSource:true},{files:[{path:'notes.txt',base64:'eA=='}]}]) {
     for(const route of ['/api/jobs','/api/ops/jobs.submit']) {
-      const refused=await api(app,route,{method:'POST',body:{circle:circle.id,prompt:'x',...source},status:400});
+      const refused=await api(app,route,{method:'POST',body:{circle:circle.id,prompt:'x',...source},confirm:false,status:400});
       assert.equal(refused.message,'Commit your changes first, then send again.');
       assert.doesNotMatch(refused.message,/confirm/i);
     }

@@ -21,7 +21,7 @@ test('live and stored app transcripts preserve safe lines and withhold oversized
     if(emitted)raw=handle._lastExecStdout=normal+image+handle._lastExecStdout;
   };
   const {owner,lender,circle}=await f.connect({backend});
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,
     git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic task',harness:'codex'}});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});

@@ -61,11 +61,6 @@ async function heldJob(page,{browser,delayGets=false,eventBurst=false}={}){
   if(eventBurst)await installSseBurst(page);
   if(delayGets) await page.route('**/api/**',async route=>{if(route.request().method()==='GET'){const start=Date.now();await new Promise(r=>setTimeout(r,3000));requestTimes.push({url:route.request().url(),delayMs:Date.now()-start});}await route.continue();});
   const setup=async(path,body)=>fetch(harness.lender+'/api/'+path,{method:'POST',headers:{'content-type':'application/json','x-faravan-session-token':'synthetic-session-lender'},body:JSON.stringify(body)});
-  const ownerSettingsResponse=await fetch(harness.lender+'/api/lending/owner-settings',{headers:{'x-faravan-session-token':'synthetic-session-lender'}});
-  const ownerSettings=await ownerSettingsResponse.json();
-  const engineMinimum=Math.max(ownerSettings.defaultMaxJobUsd,...ownerSettings.minimums.map(row=>row.minimumMaxJobUsd));
-  const cap=await setup('lending/owner-settings',{maxJobUsd:engineMinimum,reason:'Synthetic transcript journey needs room for one worst-case call.'});
-  expect(cap.ok,`owner job cap: ${await cap.clone().text()}`).toBeTruthy();
   for(const [path,body] of [['lending/limits',{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}],['agents/codex',{useForLending:true}],['lending/mode',{circle:c.id,mode:'ask'}],['lending/on',{circle:c.id}]]){const response=await setup(path,body);expect(response.ok,`${path}: ${await response.clone().text()}`).toBeTruthy();}
   const posted=await fetch(harness.owner+'/api/jobs',{method:'POST',headers:{'content-type':'application/json','x-faravan-session-token':'synthetic-session-owner'},body:JSON.stringify({circle:c.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic transcript regression',harness:'codex'})});
   expect(posted.ok,await posted.clone().text()).toBeTruthy();

@@ -1,4 +1,5 @@
 import './helpers/no-browser.mjs';
+import {fixtureAccounts,accountHeartbeat} from './helpers/run-request-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,writeFile} from 'node:fs/promises';
@@ -14,10 +15,11 @@ async function setup(t,mode,{second=false}={}) {
   const f=await appFixture(t),{owner,lender,circle,realRequests}=await f.realConnect();
   const other=second?await api(lender.app,'/api/circles',{method:'POST',body:{origin:'http://127.0.0.1:23456',name:'Other',publish:false}}):null;
   await api(lender.app,'/api/lending/circle',{method:'POST',body:{circle:circle.id}});
-  const {jobDigest}=await api(owner.app,'/api/jobs',{method:'POST',body:input(circle)});
+  const {jobDigest}=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:input(circle)});
   const client=await lender.app.device.client(circle.id),ownerClient=await owner.app.device.client(circle.id);
   const requirements=(await ownerClient.getJob(jobDigest)).job.payload.requirements;
-  const {attempt}=await client.claimNext({harnesses:['codex'],models:['example-model'],capabilities:['filtered_git_v1'],
+  const accounts=fixtureAccounts();await client.heartbeat(accountHeartbeat(accounts));
+  const {attempt}=await client.claimNext({harnesses:['codex'],models:['example-model'],capabilities:['filtered_git_v1','run_request_v1'],accounts,
     egress:['internet','provider-only'],enforced_limits:Object.keys(requirements.limits),max_limits:requirements.limits},{waitSeconds:0});
   await client.startAttempt(attempt);await client.release(attempt,'synthetic interruption');
   const observedAt=new Date().toISOString().replace(/\.\d{3}Z$/,'Z'),idempotencyKey=randomUUID();

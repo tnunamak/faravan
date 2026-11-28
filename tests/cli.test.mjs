@@ -26,7 +26,7 @@ async function withMemberHome(fn) {
 function runCli(args, { home, cwd = process.cwd(), env = {} } = {}) {
   return execFileAsync(process.execPath, [CLI, ...args], {
     cwd,
-    env: { ...process.env, FARAVAN_HOME: home, ...env },
+    env: { ...process.env, ...env, HOME: home, FARAVAN_HOME: home },
   });
 }
 
@@ -73,6 +73,69 @@ if (process.argv.includes('version') && holdFile && fs.existsSync(holdFile)) {
   await chmod(docker, 0o700);
   return {FARAVAN_SBX_BIN:sbx, PATH:`${bin}:${process.env.PATH}`};
 }
+
+async function runResidentStartUnderProfileLock(home, { releaseOnWait }) {
+  const {acquireProcessLockSync,profileWriterLockPath} = await import('../lib/v1/lock.mjs');
+  await mkdir(join(home, 'v1'), {recursive: true});
+  const release = acquireProcessLockSync(profileWriterLockPath(home), {durable: false});
+  let released = false;
+  const unlock = () => { if (!released) { released = true; release(); } };
+  const moduleUrl = new URL('../lib/v1/resident-intent.mjs', import.meta.url).href;
+  const script = `
+    import fs from 'node:fs';
+    import {setResidentQuit} from ${JSON.stringify(moduleUrl)};
+    const wait = Atomics.wait;
+    let announced = false;
+    Atomics.wait = (...args) => {
+      if (!announced) { announced = true; fs.writeSync(1, 'waiting\\n'); }
+      return wait(...args);
+    };
+    try { setResidentQuit(false, process.argv[1]); fs.writeSync(1, 'started\\n'); }
+    catch (error) { fs.writeSync(1, error.code + '\\n'); process.exitCode = 1; }
+  `;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', script, home], {
+    env: { ...process.env, HOME: home, FARAVAN_HOME: home },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '', stderr = '';
+  child.stdout.on('data', chunk => {
+    stdout += chunk;
+    if (releaseOnWait && stdout.includes('waiting\n')) unlock();
+  });
+  child.stderr.on('data', chunk => { stderr += chunk; });
+  const timer = setTimeout(() => child.kill('SIGKILL'), 6000);
+  try {
+    const code = await new Promise((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', resolve);
+    });
+    return { code, stdout, stderr };
+  } finally {
+    clearTimeout(timer);
+    unlock();
+  }
+}
+
+test('resident start waits for a brief profile write, then persists its intent', async () => {
+  await withMemberHome(async home => {
+    const result = await runResidentStartUnderProfileLock(home, {releaseOnWait: true});
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.stdout, 'waiting\nstarted\n');
+    const record = JSON.parse(await readFile(join(home, 'v1', 'resident-intent.json'), 'utf8'));
+    assert.equal(record.quit, false);
+  });
+});
+
+test('resident start does not clear Quit while the profile writer stays locked', async () => {
+  await withMemberHome(async home => {
+    setResidentQuit(true, home);
+    const result = await runResidentStartUnderProfileLock(home, {releaseOnWait: false});
+    assert.equal(result.code, 1, result.stderr);
+    assert.equal(result.stdout, 'waiting\ndevice_busy\n');
+    const record = JSON.parse(await readFile(join(home, 'v1', 'resident-intent.json'), 'utf8'));
+    assert.equal(record.quit, true);
+  });
+});
 
 test('no-argument Faravan starts and reuses the local v1 app without opening a browser', { timeout: 20000 }, async () => {
   await withMemberHome(async (home) => {
@@ -479,7 +542,7 @@ test('package manifests cover scoped runtime imports and required data', async (
   for (const file of [
     'bin/faravan-firewall-helper', 'bin/faravan-install-sbx', 'bin/faravan-install.sh',
     'profiles/faravan-docker.json', 'kits/wf-gh-cli/spec.yaml',
-    'coordinator/package.json', 'coordinator/package-lock.json',
+
     'public/v1/index.html', 'public/v1/app.mjs', 'public/v1/app.css', 'public/join/index.html',
   ]) covered(file);
 

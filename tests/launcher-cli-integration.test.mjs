@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
+import {Readable} from 'node:stream';
 import {mkdtemp, mkdir, writeFile, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -23,9 +24,10 @@ async function fixture(t, saved = failure) {
   return home;
 }
 const clientFor = home => createOpsClient({home, autostart:false, strict:true, surface:'cli'});
-async function command(home, argv, {client = clientFor(home), terminal = false} = {}) {
+async function command(home, argv, {client = clientFor(home), terminal = false, answer} = {}) {
   let out = '', err = '';
-  const code = await runOpsCommand(argv, {home, client, stdin:{isTTY:false},
+  const stdin = answer === undefined ? {isTTY:false} : Object.assign(Readable.from([answer + '\n']), {isTTY:true});
+  const code = await runOpsCommand(argv, {home, client, stdin,
     stdout:{write:value => {out += value;}}, stderr:{isTTY:terminal, write:value => {err += value;}}});
   return {code, value:out ? JSON.parse(out) : null, err};
 }
@@ -48,6 +50,36 @@ async function serverFor(t, home, reply) {
   await writeFile(join(home, 'v1', 'app.json'), JSON.stringify({pid:process.pid, port:server.address().port, token:'test-session'}));
   return {seen, server};
 }
+
+for (const [label, flags, answer, expected] of [
+  ['--yes', ['--yes'], undefined, 0],
+  ['yes at the terminal', [], 'y', 0],
+  ['no at the terminal', [], 'n', 6],
+  ['no terminal', [], undefined, 6],
+]) test('job submission confirmation: ' + label, async t => {
+  const home = await fixture(t, null);
+  const circle = {id:'circle-fixture', name:'Fixture Circle', origin:'http://127.0.0.1:9', enrollment:{state:'approved'}, rosterMembershipVerified:true};
+  const {seen} = await serverFor(t, home, row => {
+    if (row.path === '/api/circles' || row.path === '/api/ops/circles.list')
+      return {body:[circle]};
+    if (row.path === '/api/ops/jobs.submit') {
+      if (row.headers['faravan-confirm'] === 'yes') return {body:{jobDigest:'fixture-job'}};
+      return {status:428, body:{code:'confirmation_required', message:'Confirm this fixture submission.'}};
+    }
+    return {status:404, body:{code:'not_found'}};
+  });
+  const client = createOpsClient({home, autostart:false, strict:false, surface:'cli'});
+  const argv = ['ops','call','jobs.submit','--input',JSON.stringify({
+    circle:circle.name, repo:{path:home}, prompt:'Ordinary fixture prompt',
+  }),'--json',...flags];
+  const result = await command(home, argv, {client, answer, terminal:answer !== undefined});
+  assert.equal(result.code, expected, JSON.stringify(result.value));
+  const attempts = seen.filter(row => row.method === 'POST' && row.path === '/api/ops/jobs.submit');
+  const authorized = attempts.filter(row => row.headers['faravan-confirm'] === 'yes');
+  assert.equal(authorized.length, expected === 0 ? 1 : 0);
+  assert.equal(attempts.length, label === 'yes at the terminal' ? 2 : 1);
+  if (answer !== undefined) assert.match(result.err, /Go ahead\?/);
+});
 
 test('status get and ops call status.get retain the operation schema during startup retry', async t => {
   const home = await fixture(t, {...failure, message:'secret-token', stack:'/Users/private'});

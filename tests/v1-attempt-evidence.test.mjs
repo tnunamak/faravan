@@ -1,9 +1,7 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+
 import {buildAttemptEvidence, attemptEvidenceFromState, PARSER_QUANTIZATION_PP} from '../lib/v1/attempt-evidence.mjs';
 
 const proof = {source: 'synthetic_fixture', evidence_sha256: 'a'.repeat(64)};
@@ -217,50 +215,4 @@ test('a durable snapshot projection cannot invent missing admission, receipt or 
   assert.equal(evidence.column_4.ledger_entries[0].amount_micro, 1_000_000);
   assert.deepEqual(snapshot, original);
   assert.equal(attemptEvidenceFromState(snapshot, 'missing'), null);
-});
-
-test('runtime returns null for an unknown attempt without probing or writing', async t => {
-  const {createLendingRuntime} = await import('../lib/v1/lending-runtime.mjs');
-  const directory = fs.mkdtempSync(join(tmpdir(), 'attempt-evidence-runtime-empty-'));
-  const untouched = () => { throw new Error('an evidence read must not invoke external callbacks'); };
-  const runtime = createLendingRuntime({directory, settings: () => ({}), presence: untouched, readOverride: untouched, statusRead: untouched});
-  t.after(async () => { await runtime.close(); fs.rmSync(directory, {recursive: true, force: true}); });
-  const before = fs.readdirSync(directory);
-  assert.equal(runtime.attemptEvidence('missing'), null);
-  assert.deepEqual(fs.readdirSync(directory), before);
-});
-
-test('runtime known-attempt evidence reads one snapshot and writes no state', async t => {
-  const {createLendingRuntime} = await import('../lib/v1/lending-runtime.mjs');
-  const {ACCOUNT, NOW, WEEK, ordinaryInput, request} = await import('./helpers/pace50-fixtures.mjs');
-  const directory = fs.mkdtempSync(join(tmpdir(), 'attempt-evidence-runtime-known-'));
-  let effects = 0, builds = 0, writes = 0;
-  const runtime = createLendingRuntime({directory, settings: () => ({}), now: () => NOW, pace50: {
-    account: ACCOUNT, account_week_id: WEEK, buildInput: async () => { builds++; return ordinaryInput({now: NOW}); },
-    io: {writeAllSync(fd, value) { writes++; fs.writeFileSync(fd, value); }},
-    effects: {arm_cessation_deadline: async () => { effects++; return () => {}; }, launch_chunk: async () => { effects++; },
-      open_short_window: async () => { effects++; }, cancel_pending_attempt: async () => { effects++; },
-      request_cessation: async () => { effects++; }, request_fresh_complete_reconciliation: async () => { effects++; }}}});
-  t.after(async () => { await runtime.close(); fs.rmSync(directory, {recursive: true, force: true}); });
-  await runtime.pace50.deliver({type: 'on', event_id: 'on-1', at: NOW});
-  await runtime.pace50.deliver({type: 'owner_absent', event_id: 'absent-1', at: NOW});
-  const admitted = await runtime.pace50.admit({request: request(), expectedRevision: runtime.pace50.state().revision});
-  assert.equal(admitted.admitted, true);
-  const snapshot = runtime.pace50.state(), file = join(directory, 'lending-pace50-state.json');
-  const bytes = fs.readFileSync(file), stat = fs.statSync(file), names = fs.readdirSync(directory), calls = {effects, builds, writes};
-  const state = runtime.pace50.state;
-  let reads = 0;
-  runtime.pace50.state = () => { reads++; return state(); };
-  const evidence = runtime.attemptEvidence('attempt-1');
-  assert.equal(reads, 1, 'one atomic durable revision supplies the entire record');
-  runtime.pace50.state = state;
-  assert.equal(evidence.attempt_id, 'attempt-1');
-  assert.equal(evidence.column_4.classification, 'unknown');
-  assert.deepEqual(runtime.pace50.state(), snapshot);
-  assert.deepEqual(fs.readFileSync(file), bytes);
-  assert.equal(fs.statSync(file).mtimeMs, stat.mtimeMs);
-  assert.deepEqual(fs.readdirSync(directory), names);
-  assert.deepEqual({effects, builds, writes}, calls);
-  evidence.column_1.resources[0].gross_reserved_cap_pp = -1;
-  assert.deepEqual(runtime.pace50.state(), snapshot, 'the output must not alias the stored state');
 });

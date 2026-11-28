@@ -51,12 +51,13 @@ Read `enforced_limits` and `unenforced` alongside requested values and
 `limits_applied`. A number in a lender's report is a lender's report, not an independent
 measurement or proof. Unknown usage stays unknown.
 
-Fresh app settings have lending intent On and the automatic strategy; they
-initialize provider consent for both supported providers and choose Auto for
-new circles. This is not an ask-each-time default. Execution starts disabled:
-setup, agent readiness and admission checks still apply. Subscription agents
-also require an explicit lending sign-in choice; saved settings keep their
-own choices.
+Fresh app settings have lending intent On and the automatic strategy, and
+choose Auto for new circles. This is not an ask-each-time default. Fresh
+settings do not pre-grant provider consent. When an owner grants it, the app
+checks consent for that provider; an old saved pre-grant does not authorize
+it. Execution starts disabled: setup, agent readiness and admission checks
+still apply. Subscription agents also require an explicit lending sign-in
+choice; saved settings keep their own choices.
 
 No daily job count, daily minute cap or lender-wide per-job wall-time cap is
 set by default. Individual jobs still request wall-time limits. The policy

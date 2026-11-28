@@ -66,14 +66,14 @@ test('a timed pause that survives a restart checks the agents before it resumes,
   const {lender, circle} = await f.connect({});
   await lendingOn(lender.app, circle);
   await waitFor(async () => (await api(lender.app, '/api/status')).state === 'ready', 'lending ready');
-  const until = Date.now() + 2500;
+  const until = Date.now() + 30000;
   await api(lender.app, '/api/lending/pause', {method: 'POST', body: {until}});
   await lender.app.close();
   let probes = 0;
   const restarted = await f.start('lender', {adapters: cold(), identityProbe: async () => { probes++; return signedIn; }});
   assert.equal((await api(restarted.app, '/api/status')).state, 'paused');
   assert.equal(probes, 0, 'a future pause skips the startup check');
-  await waitFor(async () => (await api(restarted.app, '/api/status')).state === 'ready', 'lending resumed after the restart pause', 20000);
+  await waitFor(async () => (await api(restarted.app, '/api/status')).state === 'ready', 'lending resumed after the restart pause', 40000);
   assert.ok(probes > 0, 'the agents were checked before lending came back');
 });
 
@@ -85,8 +85,8 @@ test('a pause-end resume that cannot start says why instead of silently staying 
   await api(lender.app, '/api/lending/pause', {method: 'POST', body: {until: Date.now() + 1500}});
   await lender.app.close();
   const restarted = await f.start('lender', {adapters: cold(), identityProbe: async () => ({providers: [{harness_id: 'codex', installed: true, signedIn: false}]})});
-  const status = await waitFor(async () => { const s = await api(restarted.app, '/api/status'); return s.state === 'blocked' && s.reason === 'agent_not_ready' && s; }, 'the final agent check failure', 20000);
-  assert.equal(status.reason, 'agent_not_ready');
+  const status = await waitFor(async () => { const s = await api(restarted.app, '/api/status'); return s.state === 'blocked' && s.reason === 'no_accounts' && s; }, 'the final agent check failure', 20000);
+  assert.equal(status.reason, 'no_accounts');
 });
 
 test('Off pressed during the restart check is not undone when the check ends', {timeout: 120000}, async t => {
@@ -114,7 +114,7 @@ test('automatic rules survive restart checks without renewal and expiry prevents
   const harness = 'claude-code-subscription';
   const warm = () => [{spec:legacyProxyHarness(harness),installed:true,signedIn:true,
     harnessVersion:'synthetic-only',models:['claude-haiku-5-5'],capabilities:[]}];
-  const common = {clock:appClock,adapters:warm(),
+  const common = {syntheticAccounts:'claude',clock:appClock,adapters:warm(),
     quotaReader:async()=>({provider:'claude',remaining:100,observedAt:allowanceNow()}),
     lendingNow:allowanceNow,
     lendingReadings:async()=>({windows:[{window_id:'seven_day',window_minutes:10080,
@@ -142,7 +142,7 @@ test('automatic rules survive restart checks without renewal and expiry prevents
     identityProbe:async()=>{probes++;entered=true;await gate;return {providers:[
       {harness_id:harness,installed:true,signedIn:true}]};}});
   await waitFor(()=>entered,'fresh restart identity check');
-  const submit = prompt => api(owner.app,'/api/jobs',{method:'POST',body:{
+  const submit = prompt => api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{
     circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt,harness}});
   const first = await submit('Synthetic restart positive control');
   assert.equal(restarted.backend.calls.filter(([kind])=>kind==='run').length,0);

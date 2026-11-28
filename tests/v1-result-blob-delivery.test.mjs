@@ -9,7 +9,7 @@ import {until, deferred} from './helpers/v1-lender-fixture.mjs';
 
 function launch(f) {
   const controller = new AbortController();
-  const lender = createLender({client:f.client, backend:f.backend, adapters:f.adapters, policy:f.policy,
+  const lender = createLender({...f.runOptions,client:f.client, backend:f.backend, adapters:f.adapters, policy:f.policy,
     clock:f.clock, approve:async () => true, onEvent:event => f.events.push(event)});
   const settled = lender.start(controller.signal).catch(() => {});
   f.stop = async () => {

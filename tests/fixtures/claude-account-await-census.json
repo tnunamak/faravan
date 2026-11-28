@@ -1,6 +1,7 @@
 {
   "totals": {
-    "lib/docker-backend.mjs": 393,
+    "lib/docker-backend.mjs": 406,
+    "lib/sbx-version.mjs": 0,
     "lib/v1/cleanup-status.mjs": 0,
     "lib/sandbox-remediation.mjs": 0,
     "lib/sandbox-command-diagnostic.mjs": 0,
@@ -16,7 +17,7 @@
     "lib/v1/lending-status-copy.mjs": 0,
     "lib/sbx-runtime.mjs": 0,
     "lib/v1/lending-accounts.mjs": 0,
-    "lib/credential-generations.mjs": 166,
+    "lib/credential-generations.mjs": 176,
     "lib/claude-accounts.mjs": 32,
     "lib/sandbox-credentials.mjs": 61,
     "lib/v1/lending-account-key.mjs": 0,
@@ -34,16 +35,22 @@
     "lib/harnesses/gemini.adapter.mjs": 0,
     "lib/harnesses/gh-cli.adapter.mjs": 0,
     "lib/harnesses/opencode.adapter.mjs": 0,
+    "lib/harnesses/pi.adapter.mjs": 0,
     "lib/runtime.mjs": 0,
     "lib/network-policy.mjs": 0,
     "lib/sandbox-policy-cleanup.mjs": 3,
     "lib/sandbox-scratch.mjs": 44,
     "lib/sandbox-name.mjs": 0,
     "lib/v1/lent-claude-credential.mjs": 6,
-    "lib/sbx-image-pins.mjs": 0,
-    "lib/disk-sweep-plan.mjs": 0,
+    "lib/v1/guest-broker-tunnel.mjs": 0,
+    "lib/v1/account-transport.mjs": 11,
+    "lib/v1/accounts.mjs": 1,
     "lib/store-lock.mjs": 7,
     "lib/os-lock.mjs": 0,
+    "lib/v1/account-vault.mjs": 0,
+    "lib/v1/guest-egress-witness.mjs": 10,
+    "lib/sbx-image-pins.mjs": 0,
+    "lib/disk-sweep-plan.mjs": 0,
     "lib/disk-ownership.mjs": 0,
     "lib/disk-store.mjs": 0,
     "lib/disk-ledger.mjs": 0,
@@ -72,6 +79,7 @@
     "lib/faravan-guard-host.mjs": 0,
     "lib/v1/lending-meter.mjs": 0,
     "lib/v1/litellm-prices.mjs": 0,
+    "lib/sbx-home.mjs": 0,
     "lib/executor.mjs": 68,
     "lib/v1/probe-diagnostics.mjs": 7,
     "lib/git-source-snapshot.mjs": 0,
@@ -130,11 +138,11 @@
     },
     {
       "id": "lib/docker-backend.mjs:_admitDiskJob:1",
-      "expression": "handle ? this.runSbx(['template', 'ls', '--json'], {signal, sbxRuntime:handle._sbxRuntime}) : this._diskRunSbx(['template', 'ls', '--json'])"
+      "expression": "handle ? this.runSbx(['template', 'ls', '--all', '--digests', '--no-trunc', '--json'], {signal, sbxRuntime:handle._sbxRuntime}) : this._diskRunSbx(['template', 'ls', '--all', '--digests', '--no-trunc', '--json'])"
     },
     {
       "id": "lib/docker-backend.mjs:_settleDiskCreate:0",
-      "expression": "this._diskRunSbx(['template', 'ls', '--json'], {}, handle)"
+      "expression": "this._diskRunSbx(['template', 'ls', '--all', '--digests', '--no-trunc', '--json'], {}, handle)"
     },
     {
       "id": "lib/docker-backend.mjs:_recordSandboxImage:0",
@@ -170,7 +178,7 @@
     },
     {
       "id": "lib/docker-backend.mjs:_prepareWithOptions:2",
-      "expression": "options.sbxRuntime?withSbxRuntime(options.sbxRuntime,()=>this._prepare(validatedJob,sharedDeadline,options)):this._prepare(validatedJob,sharedDeadline,options)"
+      "expression": "daemonProofScope.run({proof:null},()=>options.sbxRuntime?withSbxRuntime(options.sbxRuntime,()=>this._prepare(validatedJob,sharedDeadline,options)):this._prepare(validatedJob,sharedDeadline,options))"
     },
     {
       "id": "lib/docker-backend.mjs:_prepare:0",
@@ -178,7 +186,7 @@
     },
     {
       "id": "lib/docker-backend.mjs:_prepare:1",
-      "expression": "this.admitJob(validatedJob,{version:initialClaudeRuntime?.version})"
+      "expression": "this.admitJob(validatedJob,{version:initialClaudeRuntime?.version,accountBroker:brokerOnly&&providerFree})"
     },
     {
       "id": "lib/docker-backend.mjs:admitClaude:0",
@@ -201,35 +209,35 @@
       "expression": "admitClaude()"
     },
     {
-      "id": "lib/docker-backend.mjs:_prepare:5",
+      "id": "lib/docker-backend.mjs:_prepare:6",
       "expression": "acquireCredentialPreparation(sbxHome(),{isolatedSources:true,signal})"
     },
     {
-      "id": "lib/docker-backend.mjs:_prepare:6",
-      "expression": "(async () => { if(admitClaude)await admitClaude(); // Keep the native-only fence under the publication lock as well as at // admission, including when this preparation is a verification sandbox. if (validatedJob.execution_scope !== 'owner' && !borrowedCredentialMechanismAllowed(validatedJob)) throw policyError('native_credentials_owner_only', BORROWED_PROXY_ONLY); const {refreshGitHubGeneration}=await import('./github-auth.mjs'); credentialGeneration=await refreshGitHubGeneration(sbxHome()); // Native generations are owner-only; borrowed jobs retain Docker's proxy. // A provider-free check never reads the lender's provider files. providerGeneration=!providerFree&&validatedJob.execution_scope==='owner'&&validatedJob.auth_strategy==='provider-file-generation' ? await refreshProviderGeneration(sbxHome(),validatedJob.image) : null; if (githubGranted && credentialGeneration) await removeLegacyGitHubSecrets(run); // A proxy value an earlier release left under this job's own provider would refuse the native generation. if (providerGeneration) await removeNativeProviderGlobalSecret(run, validatedJob, { privateHome: isPrivateSbxHome(sbxHome()), onDiagnostic: this._onDiagnostic, now: this._now }); inertServices = await restrictCredentialScope(run, validatedJob, sandboxId, credentialGeneration,providerGeneration,{ providerAccess: !providerFree }) ?? []; if(claudeAccount) { if(claudeAccount.kind==='subscription-token')await ensureClaudeBinding(sbxHome()); handle.scoped_claude_secret=claudeService(claudeAccount); } if(lentCodex)handle.scoped_claude_secret='openai'; // The cleanup record (and whether it owns a scoped GitHub value) is durable before the workspace or value exists. if (githubGranted && credentialGeneration) handle.scoped_github_secret = true; const scratch = await createSandboxScratch(sandboxId, scratchRoot(), this._scratchJournalPath(), { ownerScope:sandboxOwnerScope(),home:sbxHome(),runtime:handle.sbx_runtime, beforeCreate: scratch => { handle.scratch_dir = scratch; this.cleanupJournal.register(handle,{session:this._lendingContext.getStore()}); } }); // The kit names one fixed service, so its image is reused. The pinned generation's value is scoped to this sandbox. if (handle.scoped_github_secret) await assignSandboxGitHub(run, sbxHome(), credentialGeneration, sandboxId); return scratch; })().catch(async error => { await releasePreparation();releasePreparation=null; this.cleanupJournal.finish(handle, {}); if(!handle._cleanupId && !handle.scratch_dir)error.cleanup_receipt={removed:true,scratch_removed:true,policy_removed:true}; throw error; })"
-    },
-    {
       "id": "lib/docker-backend.mjs:_prepare:7",
-      "expression": "admitClaude()"
+      "expression": "(async () => { if(admitClaude)await admitClaude(); // Keep the native-only fence under the publication lock as well as at // admission, including when this preparation is a verification sandbox. if (validatedJob.execution_scope !== 'owner' && !borrowedCredentialMechanismAllowed(validatedJob, { accountBroker: brokerOnly && providerFree })) throw policyError('native_credentials_owner_only', BORROWED_PROXY_ONLY); const {refreshGitHubGeneration}=await import('./github-auth.mjs'); credentialGeneration=await refreshGitHubGeneration(sbxHome()); // Native generations are owner-only; borrowed jobs retain Docker's proxy. // A provider-free check never reads the lender's provider files. providerGeneration=!providerFree&&validatedJob.execution_scope==='owner'&&validatedJob.auth_strategy==='provider-file-generation' ? await refreshProviderGeneration(sbxHome(),validatedJob.image) : null; if (githubGranted && credentialGeneration) await removeLegacyGitHubSecrets(run); // A proxy value an earlier release left under this job's own provider would refuse the native generation. if (providerGeneration) await removeNativeProviderGlobalSecret(run, validatedJob, { privateHome: isPrivateSbxHome(sbxHome()), onDiagnostic: this._onDiagnostic, now: this._now }); inertServices = await restrictCredentialScope(run, validatedJob, sandboxId, credentialGeneration,providerGeneration,{ providerAccess: !providerFree }) ?? []; if(claudeAccount) { if(claudeAccount.kind==='subscription-token')await ensureClaudeBinding(sbxHome()); handle.scoped_claude_secret=claudeService(claudeAccount); } if(lentCodex)handle.scoped_claude_secret='openai'; // The cleanup record (and whether it owns a scoped GitHub value) is durable before the workspace or value exists. if (githubGranted && credentialGeneration) handle.scoped_github_secret = true; const scratch = await createSandboxScratch(sandboxId, scratchRoot(), this._scratchJournalPath(), { ownerScope:sandboxOwnerScope(),home:sbxHome(),runtime:handle.sbx_runtime, beforeCreate: scratch => { handle.scratch_dir = scratch; this.cleanupJournal.register(handle,{session:this._lendingContext.getStore()}); } }); // The kit names one fixed service, so its image is reused. The pinned generation's value is scoped to this sandbox. if (handle.scoped_github_secret) await assignSandboxGitHub(run, sbxHome(), credentialGeneration, sandboxId); return scratch; })().catch(async error => { await releasePreparation();releasePreparation=null; this.cleanupJournal.finish(handle, {}); if(!handle._cleanupId && !handle.scratch_dir)error.cleanup_receipt={removed:true,scratch_removed:true,policy_removed:true}; throw error; })"
     },
     {
       "id": "lib/docker-backend.mjs:_prepare:8",
-      "expression": "import('./github-auth.mjs')"
+      "expression": "admitClaude()"
     },
     {
       "id": "lib/docker-backend.mjs:_prepare:9",
+      "expression": "import('./github-auth.mjs')"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_prepare:10",
       "expression": "refreshGitHubGeneration(sbxHome())"
     },
     {
-      "id": "lib/docker-backend.mjs:_prepare:13",
+      "id": "lib/docker-backend.mjs:_prepare:14",
       "expression": "restrictCredentialScope(run, validatedJob, sandboxId, credentialGeneration,providerGeneration,{ providerAccess: !providerFree })"
     },
     {
-      "id": "lib/docker-backend.mjs:_prepare:14",
+      "id": "lib/docker-backend.mjs:_prepare:15",
       "expression": "ensureClaudeBinding(sbxHome())"
     },
     {
-      "id": "lib/docker-backend.mjs:_prepare:15",
+      "id": "lib/docker-backend.mjs:_prepare:16",
       "expression": "createSandboxScratch(sandboxId, scratchRoot(), this._scratchJournalPath(), { ownerScope:sandboxOwnerScope(),home:sbxHome(),runtime:handle.sbx_runtime, beforeCreate: scratch => { handle.scratch_dir = scratch; this.cleanupJournal.register(handle,{session:this._lendingContext.getStore()}); } })"
     },
     {
@@ -289,23 +297,23 @@
       "expression": "this._configureEgress(handle)"
     },
     {
-      "id": "lib/docker-backend.mjs:_prepare:46",
+      "id": "lib/docker-backend.mjs:_prepare:47",
       "expression": "this.storage.verify(handle)"
     },
     {
-      "id": "lib/docker-backend.mjs:_prepare:48",
+      "id": "lib/docker-backend.mjs:_prepare:49",
       "expression": "this.storage.recordQualification?.()"
     },
     {
-      "id": "lib/docker-backend.mjs:_prepare:49",
+      "id": "lib/docker-backend.mjs:_prepare:50",
       "expression": "this._runJobCommand(handle, ['exec', '-u', 'root', sandboxId, '--', 'sh', '-c', 'mkdir -p ' + shellQuote(scratchDir) + ' && chown 1000:1000 ' + shellQuote(scratchDir)])"
     },
     {
-      "id": "lib/docker-backend.mjs:_prepare:52",
+      "id": "lib/docker-backend.mjs:_prepare:55",
       "expression": "this._copyIn(handle, input)"
     },
     {
-      "id": "lib/docker-backend.mjs:_prepare:53",
+      "id": "lib/docker-backend.mjs:_prepare:56",
       "expression": "this.assertActive(handle)"
     },
     {
@@ -322,15 +330,19 @@
     },
     {
       "id": "lib/docker-backend.mjs:_dispatchProtected:0",
-      "expression": "this.assertActive(handle,{guestCommand:true})"
+      "expression": "this.assertActive(handle)"
     },
     {
       "id": "lib/docker-backend.mjs:_dispatchProtected:1",
-      "expression": "this.ensureSandboxAdmission?.({signal})??this.recoverSandboxDeadlines({signal})"
+      "expression": "this.ensureSandboxAdmission?.({signal}) ?? this.recoverSandboxDeadlines({signal})"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_dispatchProtected:2",
+      "expression": "this.assertActive(handle,{guestCommand:true})"
     },
     {
       "id": "lib/docker-backend.mjs:_runJobCommand:0",
-      "expression": "this.assertActive(handle,{guestCommand:args[0]==='exec'})"
+      "expression": "this.assertActive(handle,{guestCommand:args[0]==='exec' && this._injectedTransport})"
     },
     {
       "id": "lib/docker-backend.mjs:_runJobCommand:1",
@@ -349,12 +361,16 @@
       "expression": "this._runJobCommand(handle, ['policy', 'ls', handle.sandbox_id, '--json', '--type', 'network'])"
     },
     {
-      "id": "lib/docker-backend.mjs:worker:0",
+      "id": "lib/docker-backend.mjs:_verifyDecisions:0",
+      "expression": "Promise.all(Array.from({ length: Math.min(POLICY_CHECK_WORKERS, queue.length) }, worker))"
+    },
+    {
+      "id": "lib/docker-backend.mjs:worker:1",
       "expression": "this._runJobCommand(handle, ['policy', 'check', 'network', '--sandbox', handle.sandbox_id, '--json', target])"
     },
     {
-      "id": "lib/docker-backend.mjs:_verifyDecisions:0",
-      "expression": "Promise.all(Array.from({ length: Math.min(8, queue.length) }, worker))"
+      "id": "lib/docker-backend.mjs:_verifyDecisionGroup:0",
+      "expression": "Promise.all(Array.from({ length: Math.min(POLICY_CHECK_WORKERS, checks.length) }, worker))"
     },
     {
       "id": "lib/docker-backend.mjs:_configureEgress:0",
@@ -365,15 +381,15 @@
       "expression": "this._runJobCommand(handle, ['policy', action, 'network', '--sandbox', handle.sandbox_id, [...new Set(resources)].join(',')])"
     },
     {
-      "id": "lib/docker-backend.mjs:_configureEgress:3",
-      "expression": "this._verifyDecisions(handle, [target], expected, failPolicy, true)"
-    },
-    {
       "id": "lib/docker-backend.mjs:_configureEgress:4",
-      "expression": "this._readPolicy(handle, failPolicy)"
+      "expression": "this._verifyDecisionGroup(handle, sentinels.map(([target, expected]) => ({ target, expected })), failPolicy, true)"
     },
     {
       "id": "lib/docker-backend.mjs:_configureEgress:5",
+      "expression": "this._readPolicy(handle, failPolicy)"
+    },
+    {
+      "id": "lib/docker-backend.mjs:_configureEgress:6",
       "expression": "this._verifyDecisions(handle, [...sampleForChecks(plan.deny), ...keptDenied].map(probeTarget), 'denied', failPolicy)"
     },
     {
@@ -398,42 +414,46 @@
     },
     {
       "id": "lib/docker-backend.mjs:start:1",
+      "expression": "this.assertActive(handle, { agentRun: true, guestCommand: handoff })"
+    },
+    {
+      "id": "lib/docker-backend.mjs:start:2",
       "expression": "this._installGuard(handle, lending, agentSeconds)"
     },
     {
-      "id": "lib/docker-backend.mjs:start:3",
+      "id": "lib/docker-backend.mjs:start:4",
       "expression": "onLaunchDurable({at:entry.at})"
     },
     {
-      "id": "lib/docker-backend.mjs:start:4",
+      "id": "lib/docker-backend.mjs:start:5",
       "expression": "this._runJobCommand(handle,['exec',handle.sandbox_id,'--','sh','-c', 'printf %s '+shellQuote(launchSecret)+' > '+shellQuote(guard.ctl+'/launch-ack')],null,{signal})"
     },
     {
-      "id": "lib/docker-backend.mjs:start:5",
+      "id": "lib/docker-backend.mjs:start:6",
       "expression": "running"
     },
     {
-      "id": "lib/docker-backend.mjs:start:6",
+      "id": "lib/docker-backend.mjs:start:7",
       "expression": "this._runJobCommand(handle, ['exec', handle.sandbox_id, '--', 'sh', '-c', command], onLog, {signal,onExecutionStarted,agentRun:!lowBefore&&!handle._bookkeeping})"
     },
     {
-      "id": "lib/docker-backend.mjs:start:7",
+      "id": "lib/docker-backend.mjs:start:8",
       "expression": "disk.halt"
     },
     {
-      "id": "lib/docker-backend.mjs:start:8",
+      "id": "lib/docker-backend.mjs:start:9",
       "expression": "this._runJobCommand(handle, ['exec', '-u', 'root', handle.sandbox_id, '--', 'sh', '-c', INNER_CONTAINERS_OFF]).catch(() => {})"
     },
     {
-      "id": "lib/docker-backend.mjs:start:9",
+      "id": "lib/docker-backend.mjs:start:10",
       "expression": "this._runJobCommand(handle, ['exec', handle.sandbox_id, '--', 'sh', '-c', 'p=$(head -c 20 ' + shellQuote(guard.ctl + '/agent.pgid') + ' 2>/dev/null) && case \"$p\" in (*[!0-9]*|\"\") ;; (*) kill -KILL -- \"-$p\" 2>/dev/null ;; esac; true']).catch(() => {})"
     },
     {
-      "id": "lib/docker-backend.mjs:start:10",
+      "id": "lib/docker-backend.mjs:start:11",
       "expression": "this._runJobCommand(handle, ['exec', handle.sandbox_id, '--', 'sh', '-c', 'head -c 4097 ' + shellQuote(guard.ctl + '/stop.json') + ' 2>/dev/null; true'])"
     },
     {
-      "id": "lib/docker-backend.mjs:start:11",
+      "id": "lib/docker-backend.mjs:start:12",
       "expression": "this._runJobCommand(handle, ['policy', 'log', handle.sandbox_id, '--json'], undefined, {signal})"
     },
     {
@@ -474,7 +494,7 @@
     },
     {
       "id": "lib/docker-backend.mjs:_resolveCompute:0",
-      "expression": "daemonJobContext.run({handle,agentRun:false,recovery:true},async()=>{ signal?.throwIfAborted(); const cached=establishedAbsentWatch(row)&&(typeof this.cleanupJournal.abandon!=='function'||!this._oldAbsentCreate(row))&&snapshotCurrent&&!watchInventory.names.includes(row.sandbox_id); const beforeResult=cached?null:await run(['ls','--json'],{signal}); const before=cached?watchInventory.names:parseSbxListing(beforeResult); if(!before||!cached&&!completeSbxListing(beforeResult))return {removed:false}; if(before.includes(row.sandbox_id)) { // The sandbox was observed, so its create is no longer in flight. if(row.create_settled!==true)this.cleanupJournal.mark(row,{create_settled:true}); // A name this install reserved, durably dispatched, and first saw absent is ours when it appears late: the // earlier empty listing is the watch that gives the removal its authority. const watched=Number.isFinite(row.absent_since); const reserved=this.cleanupJournal.nameReserved?.(row)===true; if(row.compute_created!==true&&!watched&&!reserved)return {removed:false,unknown:'present_without_receipt'}; if(reserved&&!this.cleanupJournal.retireName(row,{computeMayRun:true}))return {removed:false}; await run(['rm','--force',row.sandbox_id],{signal}); const afterResult=await run(['ls','--json'],{signal}); const after=parseSbxListing(afterResult); return {removed:completeSbxListing(afterResult)&&Array.isArray(after)&&!after.includes(row.sandbox_id)}; } if(row.create_settled===true)return {removed:true}; // The deadline prevents another dispatch under this admission. Require // both fresh daemon absence and no live create client before releasing // its resources; the permanent fence still catches late daemon work. if(!cached&&typeof this.cleanupJournal.abandon==='function'&&row.compute_created===false&&Number.isSafeInteger(row.deadline_at)&& sandboxDeadlineRemaining(row,this.deadlineClock())<=0) { if(await this._createClientAbsent(row)!==true)return {removed:false,unknown:'creation_unproven'}; if(this.cleanupJournal.abandon?.(row)===true)return {removed:true}; } // Fresh complete absence plus the persistent late-name fence permits // resource cleanup without claiming a timed-out daemon request ended. if((this.cleanupJournal.abandoned?.(row)===true||this._oldAbsentCreate(row))&&this.cleanupJournal.abandon?.(row)===true)return {removed:true}; // Dispatched but never observed. One empty listing does not show the create cannot still appear, so the row, its // scratch and its storage stay as a watch: each later listing re-checks, and a late sandbox is removed above. const at=this._now(); let since=row.absent_since; if(!Number.isFinite(since)){since=at;this.cleanupJournal.mark(row,{absent_since:since});} const empty=at-since; // A late sandbox must find no credential or network rule bound to its name. Admission waits for verified revocation of // both (idempotent, retried on every pass); a failed or thrown revocation keeps the hold with its own reason. const revoke=args=>this._rowRun(row,args,{signal}); // The failed step and a short class of the failure are kept for the owner, never sbx output. let revocation=null; const github=await removeSandboxGitHub(revoke,row.sandbox_id).catch(()=>null); if(github!==true)revocation={step:'github_secret',error:github===null?'listing_failed':'value_remains'}; else { const detail={}; const policy=await removeSandboxPolicies(revoke,row.sandbox_id,detail,{leaveProvisioned:cached||completeSbxListing(beforeResult)}).catch(()=>{detail.failure='listing_failed';return false;}); if(policy!==true)revocation={step:'network_policy',error:detail.failure??'listing_failed'}; else if(detail.left>0&&!cached)this.cleanupJournal.mark(row,{policy_rules_left:detail.left}); } if(revocation)return {removed:false,unknown:'credential_revocation_pending',revocation}; // No receipt, hold release, deadline cancellation or row rewrite from cached absence. if(cached){this._watchInventoryCurrent(watchInventory);return {removed:false,background_watch:true};} // Only the admission hold is released here, never the obligation. Time alone never discharges the row. return empty>=CREATE_CESSATION_BOUND_MS()?{removed:false,watching:true}:{removed:false,unknown:'creation_unproven'}; })"
+      "expression": "daemonJobContext.run({handle,agentRun:false,recovery:true},async()=>{ signal?.throwIfAborted(); const cached=establishedAbsentWatch(row)&&(typeof this.cleanupJournal.abandon!=='function'||!this._oldAbsentCreate(row))&&snapshotCurrent&&!watchInventory.names.includes(row.sandbox_id); const beforeResult=cached?null:await run(['ls','--json'],{signal}); const before=cached?watchInventory.names:parseSbxListing(beforeResult); if(!before||!cached&&!completeSbxListing(beforeResult))return {removed:false}; if(before.includes(row.sandbox_id)) { // The sandbox was observed, so its create is no longer in flight. if(row.create_settled!==true)this.cleanupJournal.mark(row,{create_settled:true}); // A name this install reserved, durably dispatched, and first saw absent is ours when it appears late: the // earlier empty listing is the watch that gives the removal its authority. const watched=Number.isFinite(row.absent_since); const reserved=this.cleanupJournal.nameReserved?.(row)===true; if(row.compute_created!==true&&!watched&&!reserved)return {removed:false,unknown:'present_without_receipt'}; if(reserved&&!this.cleanupJournal.retireName(row,{computeMayRun:true}))return {removed:false}; const beforeAt=new Date().toISOString(); await run(['rm','--force',row.sandbox_id],{signal}); const afterResult=await run(['ls','--json'],{signal}); const after=parseSbxListing(afterResult); const removed=completeSbxListing(afterResult)&&Array.isArray(after)&&!after.includes(row.sandbox_id); // Only the locked, previously materialized incarnation provides a removal observation. const removalObservation=removed&&owner&&row.compute_created===true ?{create_incarnation:createIdOf(row),before_at:beforeAt,after_at:new Date().toISOString()} :undefined; return {removed,removalObservation}; } if(row.create_settled===true)return {removed:true}; // The deadline prevents another dispatch under this admission. Require // both fresh daemon absence and no live create client before releasing // its resources; the permanent fence still catches late daemon work. if(!cached&&typeof this.cleanupJournal.abandon==='function'&&row.compute_created===false&&Number.isSafeInteger(row.deadline_at)&& sandboxDeadlineRemaining(row,this.deadlineClock())<=0) { if(await this._createClientAbsent(row)!==true)return {removed:false,unknown:'creation_unproven'}; if(this.cleanupJournal.abandon?.(row)===true)return {removed:true}; } // Fresh complete absence plus the persistent late-name fence permits // resource cleanup without claiming a timed-out daemon request ended. if((this.cleanupJournal.abandoned?.(row)===true||this._oldAbsentCreate(row))&&this.cleanupJournal.abandon?.(row)===true)return {removed:true}; // Dispatched but never observed. One empty listing does not show the create cannot still appear, so the row, its // scratch and its storage stay as a watch: each later listing re-checks, and a late sandbox is removed above. const at=this._now(); let since=row.absent_since; if(!Number.isFinite(since)){since=at;this.cleanupJournal.mark(row,{absent_since:since});} const empty=at-since; // A late sandbox must find no credential or network rule bound to its name. Admission waits for verified revocation of // both (idempotent, retried on every pass); a failed or thrown revocation keeps the hold with its own reason. const revoke=args=>this._rowRun(row,args,{signal}); // The failed step and a short class of the failure are kept for the owner, never sbx output. let revocation=null; const github=await removeSandboxGitHub(revoke,row.sandbox_id).catch(()=>null); if(github!==true)revocation={step:'github_secret',error:github===null?'listing_failed':'value_remains'}; else { const detail={}; const policy=await removeSandboxPolicies(revoke,row.sandbox_id,detail,{leaveProvisioned:cached||completeSbxListing(beforeResult)}).catch(()=>{detail.failure='listing_failed';return false;}); if(policy!==true)revocation={step:'network_policy',error:detail.failure??'listing_failed'}; else if(detail.left>0&&!cached)this.cleanupJournal.mark(row,{policy_rules_left:detail.left}); } if(revocation)return {removed:false,unknown:'credential_revocation_pending',revocation}; // No receipt, hold release, deadline cancellation or row rewrite from cached absence. if(cached){this._watchInventoryCurrent(watchInventory);return {removed:false,background_watch:true};} // Only the admission hold is released here, never the obligation. Time alone never discharges the row. return empty>=CREATE_CESSATION_BOUND_MS()?{removed:false,watching:true}:{removed:false,unknown:'creation_unproven'}; })"
     },
     {
       "id": "lib/docker-backend.mjs:_resolveCompute:1",
@@ -1075,7 +1095,7 @@
     "cleanup/lib/sandbox-storage.mjs:change:7@0",
     "cleanup/lib/sandbox-storage.mjs:change:8@0",
     "cleanup/lib/sandbox-storage.mjs:change:9@0",
-    "output/lib/docker-backend.mjs:_dispatchProtected:0@0",
+    "output/lib/docker-backend.mjs:_dispatchProtected:2@0",
     "output/lib/docker-backend.mjs:assertActive:0@0",
     "output/lib/docker-backend.mjs:assertActive:1@0",
     "output/lib/docker-backend.mjs:assertActive:2@0",
@@ -1264,31 +1284,24 @@
     "prepare/lib/docker-backend.mjs:_configureEgress:0@0",
     "prepare/lib/docker-backend.mjs:_configureEgress:2@0",
     "prepare/lib/docker-backend.mjs:_configureEgress:2@1",
-    "prepare/lib/docker-backend.mjs:_configureEgress:3@0",
-    "prepare/lib/docker-backend.mjs:_configureEgress:3@1",
-    "prepare/lib/docker-backend.mjs:_configureEgress:3@2",
-    "prepare/lib/docker-backend.mjs:_configureEgress:3@3",
-    "prepare/lib/docker-backend.mjs:_configureEgress:3@4",
-    "prepare/lib/docker-backend.mjs:_configureEgress:3@5",
-    "prepare/lib/docker-backend.mjs:_configureEgress:3@6",
-    "prepare/lib/docker-backend.mjs:_configureEgress:3@7",
-    "prepare/lib/docker-backend.mjs:_configureEgress:3@8",
-    "prepare/lib/docker-backend.mjs:_configureEgress:3@9",
     "prepare/lib/docker-backend.mjs:_configureEgress:4@0",
     "prepare/lib/docker-backend.mjs:_configureEgress:5@0",
+    "prepare/lib/docker-backend.mjs:_configureEgress:6@0",
     "prepare/lib/docker-backend.mjs:_copyIn:0@0",
     "prepare/lib/docker-backend.mjs:_copyIn:1@0",
     "prepare/lib/docker-backend.mjs:_dispatchProtected:0@0",
-    "prepare/lib/docker-backend.mjs:_dispatchProtected:0@1",
-    "prepare/lib/docker-backend.mjs:_dispatchProtected:0@2",
-    "prepare/lib/docker-backend.mjs:_dispatchProtected:0@3",
-    "prepare/lib/docker-backend.mjs:_dispatchProtected:0@4",
     "prepare/lib/docker-backend.mjs:_dispatchProtected:1@0",
+    "prepare/lib/docker-backend.mjs:_dispatchProtected:2@0",
+    "prepare/lib/docker-backend.mjs:_dispatchProtected:2@1",
+    "prepare/lib/docker-backend.mjs:_dispatchProtected:2@2",
+    "prepare/lib/docker-backend.mjs:_dispatchProtected:2@3",
+    "prepare/lib/docker-backend.mjs:_dispatchProtected:2@4",
     "prepare/lib/docker-backend.mjs:_holdRuntime:0@0",
     "prepare/lib/docker-backend.mjs:_prepare:0@0",
-    "prepare/lib/docker-backend.mjs:_prepare:13@0",
+    "prepare/lib/docker-backend.mjs:_prepare:10@0",
     "prepare/lib/docker-backend.mjs:_prepare:14@0",
     "prepare/lib/docker-backend.mjs:_prepare:15@0",
+    "prepare/lib/docker-backend.mjs:_prepare:16@0",
     "prepare/lib/docker-backend.mjs:_prepare:1@0",
     "prepare/lib/docker-backend.mjs:_prepare:20@0",
     "prepare/lib/docker-backend.mjs:_prepare:21@0",
@@ -1305,12 +1318,11 @@
     "prepare/lib/docker-backend.mjs:_prepare:31@0",
     "prepare/lib/docker-backend.mjs:_prepare:35@0",
     "prepare/lib/docker-backend.mjs:_prepare:37@0",
-    "prepare/lib/docker-backend.mjs:_prepare:46@0",
-    "prepare/lib/docker-backend.mjs:_prepare:48@0",
+    "prepare/lib/docker-backend.mjs:_prepare:47@0",
     "prepare/lib/docker-backend.mjs:_prepare:49@0",
-    "prepare/lib/docker-backend.mjs:_prepare:52@0",
-    "prepare/lib/docker-backend.mjs:_prepare:53@0",
-    "prepare/lib/docker-backend.mjs:_prepare:5@0",
+    "prepare/lib/docker-backend.mjs:_prepare:50@0",
+    "prepare/lib/docker-backend.mjs:_prepare:55@0",
+    "prepare/lib/docker-backend.mjs:_prepare:56@0",
     "prepare/lib/docker-backend.mjs:_prepare:6@0",
     "prepare/lib/docker-backend.mjs:_prepare:7@0",
     "prepare/lib/docker-backend.mjs:_prepare:8@0",
@@ -1385,17 +1397,8 @@
     "prepare/lib/docker-backend.mjs:_runJobCommand:4@8",
     "prepare/lib/docker-backend.mjs:_runJobCommand:4@9",
     "prepare/lib/docker-backend.mjs:_settleDiskCreate:0@0",
+    "prepare/lib/docker-backend.mjs:_verifyDecisionGroup:0@0",
     "prepare/lib/docker-backend.mjs:_verifyDecisions:0@0",
-    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@1",
-    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@10",
-    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@2",
-    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@3",
-    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@4",
-    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@5",
-    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@6",
-    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@7",
-    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@8",
-    "prepare/lib/docker-backend.mjs:_verifyDecisions:0@9",
     "prepare/lib/docker-backend.mjs:admitClaude:0@0",
     "prepare/lib/docker-backend.mjs:admitClaude:0@1",
     "prepare/lib/docker-backend.mjs:admitClaude:0@2",
@@ -1451,6 +1454,7 @@
     "prepare/lib/docker-backend.mjs:assertActive:0@43",
     "prepare/lib/docker-backend.mjs:assertActive:0@44",
     "prepare/lib/docker-backend.mjs:assertActive:0@45",
+    "prepare/lib/docker-backend.mjs:assertActive:0@46",
     "prepare/lib/docker-backend.mjs:assertActive:0@5",
     "prepare/lib/docker-backend.mjs:assertActive:0@6",
     "prepare/lib/docker-backend.mjs:assertActive:0@7",
@@ -1573,16 +1577,16 @@
     "prepare/lib/docker-backend.mjs:runSbx:1@7",
     "prepare/lib/docker-backend.mjs:runSbx:1@8",
     "prepare/lib/docker-backend.mjs:runSbx:1@9",
-    "prepare/lib/docker-backend.mjs:worker:0@0",
-    "prepare/lib/docker-backend.mjs:worker:0@1",
-    "prepare/lib/docker-backend.mjs:worker:0@2",
-    "prepare/lib/docker-backend.mjs:worker:0@3",
-    "prepare/lib/docker-backend.mjs:worker:0@4",
-    "prepare/lib/docker-backend.mjs:worker:0@5",
-    "prepare/lib/docker-backend.mjs:worker:0@6",
-    "prepare/lib/docker-backend.mjs:worker:0@7",
-    "prepare/lib/docker-backend.mjs:worker:0@8",
-    "prepare/lib/docker-backend.mjs:worker:0@9",
+    "prepare/lib/docker-backend.mjs:worker:1@0",
+    "prepare/lib/docker-backend.mjs:worker:1@1",
+    "prepare/lib/docker-backend.mjs:worker:1@2",
+    "prepare/lib/docker-backend.mjs:worker:1@3",
+    "prepare/lib/docker-backend.mjs:worker:1@4",
+    "prepare/lib/docker-backend.mjs:worker:1@5",
+    "prepare/lib/docker-backend.mjs:worker:1@6",
+    "prepare/lib/docker-backend.mjs:worker:1@7",
+    "prepare/lib/docker-backend.mjs:worker:1@8",
+    "prepare/lib/docker-backend.mjs:worker:1@9",
     "prepare/lib/github-auth.mjs:refreshGitHubGeneration:0@0",
     "prepare/lib/host-disk.mjs:createHostDisk:0@0",
     "prepare/lib/host-disk.mjs:createHostDisk:0@1",
@@ -1667,12 +1671,12 @@
     "start/lib/credential-generations.mjs:readPrivate:3@3",
     "start/lib/credential-generations.mjs:validClaudePointer:0@0",
     "start/lib/credential-generations.mjs:validClaudePointer:1@0",
-    "start/lib/docker-backend.mjs:_dispatchProtected:0@0",
-    "start/lib/docker-backend.mjs:_dispatchProtected:0@1",
-    "start/lib/docker-backend.mjs:_dispatchProtected:0@2",
-    "start/lib/docker-backend.mjs:_dispatchProtected:0@3",
-    "start/lib/docker-backend.mjs:_dispatchProtected:0@4",
-    "start/lib/docker-backend.mjs:_dispatchProtected:0@5",
+    "start/lib/docker-backend.mjs:_dispatchProtected:2@0",
+    "start/lib/docker-backend.mjs:_dispatchProtected:2@1",
+    "start/lib/docker-backend.mjs:_dispatchProtected:2@2",
+    "start/lib/docker-backend.mjs:_dispatchProtected:2@3",
+    "start/lib/docker-backend.mjs:_dispatchProtected:2@4",
+    "start/lib/docker-backend.mjs:_dispatchProtected:2@5",
     "start/lib/docker-backend.mjs:_installGuard:0@0",
     "start/lib/docker-backend.mjs:_installGuard:1@0",
     "start/lib/docker-backend.mjs:_installGuard:2@0",
@@ -1724,6 +1728,7 @@
     "start/lib/docker-backend.mjs:assertActive:0@21",
     "start/lib/docker-backend.mjs:assertActive:0@22",
     "start/lib/docker-backend.mjs:assertActive:0@23",
+    "start/lib/docker-backend.mjs:assertActive:0@24",
     "start/lib/docker-backend.mjs:assertActive:0@3",
     "start/lib/docker-backend.mjs:assertActive:0@4",
     "start/lib/docker-backend.mjs:assertActive:0@5",
@@ -1789,8 +1794,9 @@
     "start/lib/docker-backend.mjs:start:0@0",
     "start/lib/docker-backend.mjs:start:10@0",
     "start/lib/docker-backend.mjs:start:11@0",
+    "start/lib/docker-backend.mjs:start:12@0",
     "start/lib/docker-backend.mjs:start:1@0",
-    "start/lib/docker-backend.mjs:start:3@0",
+    "start/lib/docker-backend.mjs:start:2@0",
     "start/lib/docker-backend.mjs:start:4@0",
     "start/lib/docker-backend.mjs:start:5@0",
     "start/lib/docker-backend.mjs:start:6@0",
@@ -1822,8 +1828,8 @@
     "start/lib/guest-runtime.mjs:verifyRuntime:1@0",
     "start/lib/guest-runtime.mjs:verifyRuntime:1@1",
     "start/lib/guest-runtime.mjs:verifyRuntime:1@2",
-    "verify/lib/docker-backend.mjs:_dispatchProtected:0@0",
-    "verify/lib/docker-backend.mjs:_dispatchProtected:0@1",
+    "verify/lib/docker-backend.mjs:_dispatchProtected:2@0",
+    "verify/lib/docker-backend.mjs:_dispatchProtected:2@1",
     "verify/lib/docker-backend.mjs:_runJobCommand:0@0",
     "verify/lib/docker-backend.mjs:_runJobCommand:0@1",
     "verify/lib/docker-backend.mjs:_runJobCommand:0@2",

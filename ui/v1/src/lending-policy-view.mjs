@@ -286,10 +286,10 @@ export function migrationVM(lendingPolicy) {
         (otherLines.length ? ' ' + otherLines.join('; ') + '.' : '') +
         (migration.consentReset ? ' Lending was turned off. Turn it on again and choose the agents to lend.' : '')};
   }
-  if ((migration.resetAtStartup === true || migration.perJobCapChanged === true) && Array.isArray(migration.reset) && migration.reset.length) {
+  if (migration.resetAtStartup === true && Array.isArray(migration.reset) && migration.reset.length) {
     const lines = migration.reset.map(resetLine).filter(Boolean);
     return {legacyPolicy: false, lines,
-      text: (migration.perJobCapChanged ? 'Your saved lending settings changed to the new defaults' : 'Some saved lending settings could not be used, so they were reset') + (lines.length ? ': ' + lines.join('; ') : '') +
+      text: 'Some saved lending settings could not be used, so they were reset' + (lines.length ? ': ' + lines.join('; ') : '') +
         '. Your other settings were kept.' + (migration.presenceDefaultsUncertain ? ' Your saved activity settings were kept because this version cannot tell whether you chose them. Review Only lend when I am away and Stop a running job when I return below.' : '') + (migration.consentReset ? ' Lending was turned off. Turn it on again and choose the agents to lend.' : '')};
   }
   if (migration.presenceDefaultsUncertain === true) return {legacyPolicy:false,

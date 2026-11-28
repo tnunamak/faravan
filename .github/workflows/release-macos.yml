@@ -112,7 +112,7 @@ jobs:
           VERSION: ${{ inputs.version || '0.1.0' }}
           EXPECTED_ARCH: ${{ matrix.arch }}
         run: |
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 2
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-preview\.[0-9]{8}\.[0-9]+)?$ ]] || exit 2
           actual=$(uname -m)
           test "$actual" = "$EXPECTED_ARCH" || { test "$actual" = x86_64 && test "$EXPECTED_ARCH" = x64; }
           uname -m

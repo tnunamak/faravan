@@ -24,6 +24,6 @@ test('R3 normal app retries scratch debt while Off without a recovery request',{
   const {app}=await f.start('data-debt',{backend,cleanupRecheckMs:10});
   assert.equal((await api(app,'/api/lending')).intent,'off');
   blocked=false;
-  await waitFor(()=>!existsSync(handle.scratch_dir),'normal app debt cleanup',1500);
+  await waitFor(()=>!existsSync(handle.scratch_dir)&&real.cleanupStatus().state==='clear','normal app debt cleanup',1500);
   assert.equal(real.cleanupStatus().state,'clear');
 });

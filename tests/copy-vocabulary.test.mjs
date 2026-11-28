@@ -156,7 +156,28 @@ const approvedCopy = [
 ];
 const allowed = [...baseline, ...approvedCopy].map(([path, word, text, count]) => [key({path, word, text}), count]);
 const sources = new Map(paths.map(path => [path, readFileSync(new URL('../' + path, import.meta.url), 'utf8')]));
-const current = [...sources].flatMap(([path, source]) => scan(source, path));
+// Request field names that are never printed, exempt at their exact source line, not by count: 385d9e27f (#478)
+// added the `harness` job-input key and the `--harness` flag. Any other "harness" literal, in these files too, is copy.
+const fieldNameSites = [
+  ['lib/v1/cli.mjs', 'harness', "...Object.fromEntries(['circle','harness','model','egress','budget_v1','auto_run_v1','result'].filter(k=>input[k]!==undefined).map(k=>[k,input[k]])),"],
+  ['lib/v1/run.mjs', 'harness', "const {flags,position}=parse(argv,['source','prompt-file','circle','model','effort','harness','branch','timeout'],['include-uncommitted','yes']);"],
+  ['lib/v1/run.mjs', 'harness', "...Object.fromEntries(['circle','model','harness'].filter(k=>flags[k]!==undefined).map(k=>[k,flags[k]])),"],
+];
+// Each site exempts one bare field-name hit on its own line; a copy of that line elsewhere is still a hit.
+function withoutFieldNames(hits, sourceOf) {
+  const used = new Set();
+  const kept = hits.filter(hit => {
+    const line = sourceOf(hit.path).split('\n')[hit.line - 1]?.trim();
+    const site = fieldNameSites.findIndex(([path, word, text], n) =>
+      !used.has(n) && path === hit.path && word === hit.word && hit.text === word && text === line);
+    if (site < 0) return true;
+    used.add(site);
+    return false;
+  });
+  return {kept, unused: fieldNameSites.filter((_, n) => !used.has(n))};
+}
+const {kept: current, unused: unusedFieldNameSites} = withoutFieldNames(
+  [...sources].flatMap(([path, source]) => scan(source, path)), path => sources.get(path));
 function assertNoNew(hits, allowances = allowed) {
   const added = unexpected(hits, allowances);
   assert.equal(added.length, 0, 'New banned copy (replace it using the design docs):\n' +
@@ -165,10 +186,23 @@ function assertNoNew(hits, allowances = allowed) {
 
 test('copy vocabulary: current product copy has no new banned hits', () => {
   assertNoNew(current);
+  assert.deepEqual(unusedFieldNameSites, [], 'Remove obsolete field-name site');
   const counts = new Map();
   for (const hit of current) counts.set(key(hit), (counts.get(key(hit)) || 0) + 1);
   for (const [id, count] of allowed) {
     assert.equal(counts.get(id), count, 'Remove obsolete copy allowance: ' + id);
+  }
+});
+
+test('copy vocabulary: a field-name site exempts only its own line, never printed copy in the same file', () => {
+  for (const path of ['lib/v1/cli.mjs', 'lib/v1/run.mjs']) {
+    const exempt = fieldNameSites.find(([site]) => site === path)[2];
+    for (const added of ['console.log("Choose a harness");', "const extra = ['harness'];", exempt]) {
+      const source = sources.get(path) + '\n' + added + '\n';
+      const changed = current.filter(hit => hit.path !== path)
+        .concat(withoutFieldNames(scan(source, path), () => source).kept);
+      assert.throws(() => assertNoNew(changed), /\[harness\]/, path + ' + ' + added);
+    }
   }
 });
 

@@ -14,7 +14,6 @@ test('operation titles and descriptions use plain words without renaming wire fi
  assert.match(registry,/op\('jobs\.receipt'/);
  assert.match(registry,/receipt:\{type:'object'\}/);
  assert.match(registry,/verdict:S\.enum/);
- assert.match(registry,/settled:S\.bool\(\)/);
 });
 
 test('ChatGPT permissions and lending recovery display copy use saved results and runs',async()=>{

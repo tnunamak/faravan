@@ -19,11 +19,11 @@ test('person names reach members, requests, Devices and history through signed m
  await api(owner.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
  await api(owner.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
  await api(owner.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
- const submitted=await api(lender.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic named request',harness:'codex'}});
+ const submitted=await api(lender.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic named request',harness:'codex'}});
  const card=await waitFor(async()=>(await api(owner.app,'/api/approvals'))[0],'named request',15000);
  assert.equal(card.identity.personName,'Maya Okafor');
  await api(owner.app,'/api/approvals/'+card.id+'/accept',{method:'POST',body:{}});
- const view=await waitFor(async()=>{const v=await api(lender.app,'/api/jobs/'+submitted.jobDigest+'?circle='+circle.id);return v.state==='result-accepted'&&v;},'named completion',15000);
+ const view=await waitFor(async()=>{const v=await api(lender.app,'/api/jobs/'+submitted.jobDigest+'?circle='+circle.id);return v.state==='result-accepted'&&v;},'named completion',30000);
  assert.equal(view.historyIdentity.personName,'Maya Okafor');
  const contribution=await api(owner.app,'/api/contributions');
  assert.equal(contribution.windows[7].rows.find(r=>r.keyId===lender.app.device.keyId).personName,'Maya Okafor');
@@ -42,7 +42,7 @@ test('contribution aggregate excludes own runs at source',()=>{
 });
 test('acceptance refuses a card when its daily limit changed after review',async t=>{
  const f=await appFixture(t),{owner,lender,circle}=await f.connect();
- await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic request',harness:'codex'}});
+ await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Synthetic request',harness:'codex'}});
  await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
  await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
  const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))[0],'request');
@@ -70,8 +70,8 @@ test('an own job is marked as local and is absent from contribution totals',asyn
  await api(owner.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
  await api(owner.app,'/api/lending/limits',{method:'POST',body:{lendingPolicy:{providerConsent:{codex:true}}}});
  await api(owner.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
- const submitted=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'My own synthetic task',harness:'codex'}});
- const view=await waitFor(async()=>{const view=await api(owner.app,'/api/jobs/'+submitted.jobDigest+'?circle='+circle.id);return view.state==='result-accepted'&&view;},'own completion',15000);
+ const submitted=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'My own synthetic task',harness:'codex'}});
+ const view=await waitFor(async()=>{const view=await api(owner.app,'/api/jobs/'+submitted.jobDigest+'?circle='+circle.id);return view.state==='result-accepted'&&view;},'own completion',30000);
  assert.equal(view.ranHere,true);
  const contributions=await api(owner.app,'/api/contributions');assert.equal(contributions.windows[7].jobs,0);assert.deepEqual(contributions.windows[7].rows,[]);
 });

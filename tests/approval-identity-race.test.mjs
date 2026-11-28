@@ -20,7 +20,7 @@ function heldDecisions(module) {
 test('a requester removed during the acceptance receipt write cannot have the job run',{timeout:180000},async t=>{
   const held=heldDecisions(await import('../lib/v1/decision-log.mjs'));
   const f=await appFixture(t),{owner,declining:requester,lender,circle}=await f.realConnect({lenderOptions:{decisionLog:held.factory}});
-  const sent=await api(requester.app,'/api/jobs',{method:'POST',body:gitInput(circle)});
+  const sent=await api(requester.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:gitInput(circle)});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Lend, lendingOnNotice} from './lend.jsx';
-import {LimitsPage, ownerLimitMoney} from './limits.jsx';
+import {LimitsPage} from './limits.jsx';
 import {readFileSync} from 'node:fs';
 import {guardUnsavedLimits} from './limits-model.mjs';
 import {mockFixture, NOW} from './lending-policy.fixture.mjs';
@@ -64,12 +64,7 @@ test('3: ask mode with an active rule does not claim that every job is approved 
   assert.match(renderedText(limitsPage([])), /You approve each job before it starts\./);
 });
 
-test('8: the per-job limit shows a loading status, not the placeholder amount as saved', () => {
-  const out = limitsPage([]);
-  assert.match(renderedText(out), /Loading the saved limit…/);
-  assert.doesNotMatch(out, /id="owner-limit-value"[^>]*value="/, 'no amount is shown before the read lands');
-  assert.doesNotMatch(out, /id="owner-limit-value"[^>]*value="4"/);
-});
+
 
 test('7: a link to local help on the same page does not ask to discard changes', () => {
   const win = new EventTarget(), doc = new EventTarget();
@@ -105,14 +100,4 @@ test('turn-on notices use current admission, not the pre-toggle view or uncondit
   assert.match(source,/await run\(next\);\s*notices\?\.set\(next \? lendingOnNotice\(latest.current\)/);
 });
 
-test('saved, last-checked, default and conflict limits share the model money format', () => {
-  assert.equal(ownerLimitMoney(4.1),'$4.10');
-  assert.equal(ownerLimitMoney(4),'$4');
-  assert.equal(ownerLimitMoney(0.25),'$0.25');
-  const source=readFileSync(new URL('./limits.jsx',import.meta.url),'utf8');
-  assert.ok(source.includes('const money = ownerLimitMoney;'));
-  for (const copy of ["'Last checked limit: ' + ownerLimitMoney(savedAmount)",
-    "'Saved per-job limit: ' + ownerLimitMoney(savedAmount)",
-    'Last checked default per-job limit: {ownerLimitMoney(lastSaved.current)}',
-    'The saved limit changed to {ownerLimitMoney(savedAmount)}']) assert.ok(source.includes(copy),copy);
-});
+

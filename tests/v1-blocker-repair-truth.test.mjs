@@ -102,7 +102,7 @@ test('blockers offers the fresh sign-in action even when status was read before 
 test('an expired observation does not claim Docker was proven stopped',async()=>{
  const {effectiveState}=await import('../lib/v1/lending-state.mjs'),agents=[{id:'codex',enabled:true,installed:true,signedIn:true}];
  const status=effectiveState({intent:'on',agents,blocking:{docker:{installed:null,running:null,signedIn:null},agents,checking:{machine:false,agents:[]}}});
- assert.equal(status.intent.reason,'sandbox_not_ready');
+ assert.equal(status.intent.reason,'sandbox_check_pending');
 });
 
 test('a new sign-in generation never serves a healthy answer from the previous generation while its probe hangs',{timeout:20000},async t=>{

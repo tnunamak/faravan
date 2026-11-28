@@ -24,7 +24,7 @@ test('fresh readiness failures block lending', {timeout:90000}, async t => {
     }
     return report;
   };
-  const {owner,lender,circle}=await f.connect({backend,adapters:adapters(),faravanVersion:'0.12.0'});
+  const {owner,lender,circle}=await f.connect({backend,syntheticAccounts:'codex',faravanVersion:'0.12.0'});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
 
@@ -35,14 +35,14 @@ test('fresh readiness failures block lending', {timeout:90000}, async t => {
   const home=await api(lender.app,'/api/home');
   assert.equal(home.intent.on,true,'the owner’s on choice remains intent');
   assert.equal(home.intent.state,'blocked');
-  assert.equal(home.intent.reason,'policy_unenforceable');
+  assert.equal(home.intent.reason,'sandbox_cannot_start');
   const rows=home.lending_blockers.items.filter(item=>item.key==='readiness_requirement');
   assert.deepEqual(rows.map(item=>item.cause),['network_policy','v1_limits']);
   assert.equal(rows[0].action,'Retry network setup');
   assert.doesNotMatch(JSON.stringify(readiness),/sbx policy|--fix-policy/);
   assert.ok(rows.every(item=>item.status==='blocked'&&item.observedAt===observedAt));
   assert.equal(home.lending_blockers.canLend,false);
-  await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',
+  await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',
     commit:'1'.repeat(40),prompt:'Synthetic task.',harness:'codex'}});
   await new Promise(resolve=>setTimeout(resolve,250));
   assert.equal(backend.calls.filter(([kind])=>kind==='run').length,0,'a blocked readiness projection prevents launch');
@@ -69,7 +69,7 @@ test('runtime readiness holds admission and reaches lending readiness and status
     if(broken){report.sandbox_ready=false;report.satisfied=false;}
     return report;
   };
-  const {lender,circle}=await f.connect({backend,adapters:adapters(),faravanVersion:'0.12.0'});
+  const {lender,circle}=await f.connect({backend,syntheticAccounts:'codex',faravanVersion:'0.12.0'});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
   broken=true;
@@ -79,15 +79,15 @@ test('runtime readiness holds admission and reaches lending readiness and status
   // Machine readiness and the lending pool's account/counter startup are separate.
   // A loaded parallel suite can finish the fresh machine check before the pool has a child.
   await waitFor(()=>lender.app.lendingAdmission()!=='lender_starting','lender startup after the runtime refresh',30000);
-  assert.equal(lender.app.lendingAdmission(),'guard_runtime_unavailable','the machine gate holds claims');
+  assert.equal(lender.app.lendingAdmission(),'sandbox_cannot_start','the machine gate holds claims');
   const readiness=await api(lender.app,'/api/lending/readiness');
   const row=readiness.agents.find(a=>a.id==='codex').checks.find(c=>c.code==='guard_runtime_unavailable');
   assert.equal(row.state,'fail');
   assert.match(row.line,/Update Faravan.*reinstall Faravan/);
   const status=await api(lender.app,'/api/status');
-  assert.equal(status.lendingProjection.admissionReason,'guard_runtime_unavailable');
+  assert.equal(status.lendingProjection.admissionReason,'sandbox_cannot_start');
   // The owner sees this hold by name, with its fix, not as a generic failure.
-  const lending=await waitFor(async()=>{const view=await api(lender.app,'/api/lending');return view.reason==='guard_runtime_unavailable'&&view;},'named runtime hold',30000);
+  const lending=await waitFor(async()=>{const view=await api(lender.app,'/api/lending');return view.reason==='sandbox_cannot_start'&&view;},'named runtime hold',30000);
   assert.equal(lending.label,"Faravan's job guard could not start in the sandbox. Update Faravan; if it still fails, reinstall Faravan.");
   broken=false;
   await api(lender.app,'/api/readiness?refresh=true');

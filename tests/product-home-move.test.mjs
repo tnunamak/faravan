@@ -8,7 +8,6 @@ import {spawn} from 'node:child_process';
 import {selectSbxHome} from '../lib/sbx-home.mjs';
 import {publishClaudeAccount, readClaudeAccount, createProviderSource, publishProviderGeneration, readCurrentProviderValue, createGitHubSource, publishGitHubGeneration, currentGitHubGeneration} from '../lib/credential-generations.mjs';
 import {createUsageAccountStore} from '../lib/v1/usage-account-store.mjs';
-import {createOwnerSettings} from '../lib/v1/owner-settings.mjs';
 import {migrateProductHome, productMigrationNotice, acknowledgeProductMigration} from '../lib/product-home-move.mjs';
 function fixture(t) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'faravan-data-move-'));
@@ -113,18 +112,21 @@ for (const previous of ['.local/share/Faravan Preview 20261028', '.spare' + 'kin
   if(shortHome) assert.deepEqual(await readClaudeAccount(oldSbx,id),account,'the old sandbox home is copied, never moved');
 });
 
-test('the saved spend cap and device name remain usable after circles are cleared', t => {
-  const {destination,options,profile}=fixture(t);
-  const source=profile('.local/share/Faravan Preview 20261028');
-  const oldSettings=createOwnerSettings({directory:path.join(source,'v1/owner-settings')});
-  oldSettings.set({maxJobUsd:17,by:'fixture-owner',reason:'fixture cap',now:1});
-  const audit=oldSettings.audit();
-  fs.writeFileSync(path.join(source,'v1/state.json'), '{"version":1,"ownerName":"My computer","ownerNameRevision":7,"circles":["old"],"activeCircle":"old"}');
-  migrateProductHome(destination,options);
-  const settings=createOwnerSettings({directory:path.join(destination,'v1/owner-settings')});
-  assert.deepEqual(settings.limit(),{state:'set',maxJobUsd:17});
-  assert.deepEqual(settings.audit(),audit);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(destination,'v1/state.json'))),{version:1,ownerName:'My computer',ownerNameRevision:7,circles:[],activeCircle:null});
+test('the device name remains usable after circles are cleared',t=>{
+ const {destination,options,profile}=fixture(t),source=profile('.local/share/Faravan Preview 20261028');
+ fs.writeFileSync(path.join(source,'v1/state.json'),'{"version":1,"ownerName":"My computer","ownerNameRevision":7,"circles":["old"],"activeCircle":"old"}');
+ migrateProductHome(destination,options);
+ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(destination,'v1/state.json'))),{version:1,ownerName:'My computer',ownerNameRevision:7,circles:[],activeCircle:null});
+});
+
+test('the retired dollar-cap store stays in the archive and is not restored',t=>{
+ const {destination,options,profile}=fixture(t),source=profile('.local/share/Faravan Preview 20261028');
+ const relative='v1/owner-settings';fs.mkdirSync(path.join(source,relative));
+ fs.writeFileSync(path.join(source,relative,'owner-settings.json'),'{"version":1,"values":{"maxJobUsd":17}}');
+ migrateProductHome(destination,options);
+ assert.equal(fs.existsSync(path.join(destination,relative)),false);
+ const archive=fs.readdirSync(destination).find(name=>name.startsWith('earlier-preview-'));
+ assert.equal(fs.readFileSync(path.join(destination,archive,relative,'owner-settings.json'),'utf8'),'{"version":1,"values":{"maxJobUsd":17}}');
 });
 
 test('a chosen source moves when multiple profiles exist', t => {

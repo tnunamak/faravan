@@ -188,7 +188,7 @@ test('hard gates remain ahead of injection; budget and stoppable chunk remain en
     const d=await admit(x,s=>{calls++;return lendAboveCurrentPace(s);});
     assert.equal(d.admitted,false);assert.equal(calls,0);
   }
-  for(const edit of [x=>{x.ownerMaxJobUsdMicro=M;},x=>{x.job.worstCallUsdMicro=3*M;},
+  for(const edit of [x=>{x.strategyCeilingUsdMicro=M;},x=>{x.job.worstCallUsdMicro=3*M;},
     x=>{x.job.chunkCandidates=[{id:'small',usdMicro:M,friendValue:1}];}]) {
     const x=input({dial:1});edit(x);assert.equal((await admit(x,lendAboveCurrentPace)).admitted,false);
   }

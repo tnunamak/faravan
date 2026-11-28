@@ -44,12 +44,12 @@ test('Docker signed out and back in leaves the intent on throughout, and claims 
   state.signedOut = true;
   await api(app, '/api/readiness?refresh=true');
   const blocked = await intentOn('signed out');
-  assert.equal(blocked.reason, 'docker_signed_out');
+  assert.equal(blocked.reason, 'sandbox_cannot_start');
   assert.equal(blocked.lending_blockers.first.key, 'docker_signin');
   assert.match(blocked.headline, /^Lending stopped: your Docker sign-in expired/, 'it was signed in before, so it expired');
   assert.deepEqual(blocked.lending_blockers.items.filter(x => x.key === 'agent' && x.agent === 'codex').map(x => [x.status, x.waits_for]), [['waits', 'docker_signin']]);
   assert.equal(blocked.lending_blockers.canLend, false);
-  await api(owner.app, '/api/jobs', { method: 'POST', body: gitInput(circle) });
+  await api(owner.app, '/api/jobs', {headers:{'faravan-confirm':'yes'}, method: 'POST', body: gitInput(circle) });
   await new Promise(resolve => setTimeout(resolve, 900));
   assert.deepEqual(await api(app, '/api/approvals'), [], 'a blocker prevents claims');
   await intentOn('still signed out');
@@ -78,7 +78,7 @@ test('a restart while Docker is signed out keeps the intent and resumes when it 
   await new Promise(resolve => setTimeout(resolve, 500));
   const status = await api(restarted.app, '/api/status');
   assert.equal(status.intent.on, true);
-  assert.equal(status.reason, 'docker_signed_out');
+  assert.equal(status.reason, 'sandbox_cannot_start');
   state.signedOut = false;
   await waitFor(async () => (await api(restarted.app, '/api/status')).state === 'ready', 'lending is ready again without a click', 30000);
   assert.equal((await api(restarted.app, '/api/status')).intent.on, true);
@@ -95,5 +95,5 @@ test('turning lending on while Docker is signed out keeps it on and says what wa
   const on = await api(lender.app, '/api/lending/on', { method: 'POST', body: { circle: circle.id } });
   assert.equal(on.enabled, true);
   const status = await api(lender.app, '/api/status');
-  assert.deepEqual([status.intent.on, status.reason], [true, 'docker_signed_out']);
+  assert.deepEqual([status.intent.on, status.reason], [true, 'sandbox_cannot_start']);
 });

@@ -1,9 +1,9 @@
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,writeFileSync,existsSync,mkdtempSync,mkdirSync} from 'node:fs';
-import {tmpdir} from 'node:os';
-import {join,dirname} from 'node:path';
+import {readFileSync, writeFileSync, existsSync} from "node:fs";
+
+import {join} from "node:path";
 import {fileURLToPath} from 'node:url';
 import {realLenderFixture} from './helpers/v1-real-lender-fixture.mjs';
 import {crashProcess} from './helpers/crash-process.mjs';
@@ -44,7 +44,7 @@ test('G05 a failed stopped-journal save retains the execution owner',async t=>{
     if(value.stoppedPending)throw Object.assign(new Error('disk unavailable'),{code:'EIO'});
     return set(value);
   };
-  const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,
+  const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,
     clock:f.clock,approve:async()=>true,credentialValues:async()=>[]});
   await assert.rejects(lender.start(),{code:'EIO'});
   assert.ok(f.saved().pending);

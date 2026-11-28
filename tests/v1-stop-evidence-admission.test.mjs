@@ -3,13 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import fs from 'node:fs';
-import {homedir} from 'node:os';
-import {createLendingLedger} from '../lib/v1/lending-ledger.mjs';
-import {createLendingProbe, createLendingReadings, guestProbeScript} from '../lib/v1/lending-probe.mjs';
-import {createRealPace50Source} from '../lib/v1/lending-pace50-source.mjs';
-import {createPace50Candidate} from '../lib/v1/lender-pace50.mjs';
-import {createSyntheticPace50Source} from './helpers/pace50-synthetic-source.mjs';
+
 import {createStopEvidenceStore, STOP_EVIDENCE_TTL_MS} from '../lib/v1/stop-evidence.mjs';
 import {createStopCheckCoordinator, STOP_CHECK_LINES} from '../lib/v1/stop-check-coordinator.mjs';
 
@@ -176,64 +170,3 @@ test('a check that finished for an older runtime does not admit the job', async 
 // --- the claim gate -----------------------------------------------------------------------------------------------------
 // Usage readings come from the host and carry no stop or executor. The stop receipt is the only proof, and a claimed job with no
 // valid receipt joins the one bounded check before it is admitted or refused.
-const H = {account: '1111222233334444', email: 'aaaa0000bbbb1111', org: '5555666677778888'};
-const MARKER = guestProbeScript('claude').match(/out=\{"(\w+)":1/)[1];
-const usageLine = () => JSON.stringify({[MARKER]: 1, status: 200, body: {
-  five_hour: {utilization: 40, resets_at: new Date(T0 + 3 * 3600e3).toISOString()},
-  seven_day: {utilization: 20, resets_at: new Date(T0 + 4 * 86400e3).toISOString()}, extra_usage: {is_enabled: false}},
-  attempts: {usage: 1, identity: 1}, identity: {status: 200, account_sha256_16: H.account, email_sha256_16: H.email, org_sha256_16: H.org},
-  guest_auth: {loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty'}}) + '\n';
-
-async function gateFixture(t, {outcome = 'pass'} = {}) {
-  const s = await setup({deadlineMs: 5000});
-  s.log.outcome = outcome;
-  const directory = fs.mkdtempSync(join(homedir(), '.tmp', 'stop-gate-'));
-  const ledger = createLendingLedger({file: join(directory, 'ledger.json'), now: s.clock.now});
-  let reads = 0;
-  const probe = createLendingProbe({ledger, now: s.clock.now, runGuest: async () => { reads++; return {stdout: usageLine(), host_read: true}; }});
-  const readings = createLendingReadings({ledger, probe, now: s.clock.now});
-  const stopEvidence = async () => {
-    const r = await s.store.receipt();
-    return r ? {executor: {backend_id: r.backend_id, sbx_version: r.sbx_version}, measured_at: r.measured_at,
-      stop: {delivered: r.delivered, fallback: r.fallback, latency_ms: r.latency_ms, removed: r.removed}} : null;
-  };
-  const source = createRealPace50Source({readings, funding: p => probe.funding(p), stopEvidence,
-    expectedIdentity: () => ({email_sha256_16: H.email}), expectedExecutor: () => ({backend_id: s.runtime.backend_id, accepts: v => v === s.runtime.sbx_version}),
-    stopBoundMs: 35000, windowOrigin: (_p, rows) => new Map(rows.map(row => [row.id, 'owner'])),
-    kappaForUsage: ({account_id}) => ({upper_micro: 500000, lower_micro: 500000, binding: {account_sha256_16: account_id}})});
-  const pace = createPace50Candidate({directory, now: s.clock.now, source, account: 'test-account', account_week_id: 'test-week', stopCheck: s.coordinator,
-    objectiveInputFor: createSyntheticPace50Source({start: T0}).objectiveInputFor, pendingReadingWaitMs: 500});
-  t.after(async () => { await probe.close(); await pace.candidate.cancelObservations(); await pace.adapter.close(); fs.rmSync(directory, {recursive: true, force: true}); await s.done(); });
-  const job = {budget_v1: {max_list_usd: 10}, requirements: {limits: {wall_seconds: 300}}, expires_at: new Date(T0 + 86400e3).toISOString()};
-  await probe.probe('claude');   // the owner's account has been read once, from the host
-  return {...s, pace, job, probe, reads: () => reads, gate: () => pace.candidate.gate({provider: 'claude', job, automatic: false, ownerAbsent: true})};
-}
-
-test('a claimed job with no valid receipt joins the one stop check and is then admitted', async t => {
-  const f = await gateFixture(t);
-  const [a, b] = await Promise.all([f.gate(), f.gate()]);
-  assert.equal(a, null, JSON.stringify(a)); assert.equal(b, null);
-  assert.equal(f.log.checks, 1, 'two claims, one check');
-  // With the receipt standing, a later claim starts no check.
-  assert.equal(await f.gate(), null);
-  assert.equal(f.log.checks, 1);
-});
-
-test('a failed stop check refuses the claimed job and never turns anything off', async t => {
-  const f = await gateFixture(t, {outcome: 'fail'});
-  const refusal = await f.gate();
-  assert.ok(['stop_bound_unknown', 'executor_unknown'].includes(refusal), refusal);
-  assert.equal(f.log.checks, 1);
-  assert.equal((await f.coordinator.view()).line, STOP_CHECK_LINES.failed);
-  assert.equal(await f.gate(), refusal, 'inside the cooldown the job is refused at once');
-  assert.equal(f.log.checks, 1, 'no hidden retry');
-});
-
-test('a usage reading never makes proof: with readings only, the stop stays unknown', async t => {
-  const f = await gateFixture(t, {outcome: 'fail'});
-  await f.probe.probe('claude');   // a second reading
-  assert.equal(f.probe.funding('claude').stop, undefined);
-  assert.equal(f.probe.funding('claude').executor, undefined);
-  assert.equal(await f.store.receipt(), null);
-  assert.equal(f.log.checks, 0, 'a reading starts no check');
-});

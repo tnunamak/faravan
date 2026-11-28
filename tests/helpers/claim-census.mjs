@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {DockerSbxBackend,SBX_RUN_OPTIONS} from '../../lib/docker-backend.mjs';
+import {RUN_REQUEST_CAPABILITY} from '../../lib/v1/versions.mjs';
+import {resolveSelection} from '../../lib/v1/run-request.mjs';
 import {lenderFixture} from './v1-lender-fixture.mjs';
 import {instrumentLender,withClaimAwaits} from './claim-awaits.mjs';
 
@@ -35,8 +37,9 @@ async function scenario(t,createLender,row,target=null,stale=false,statistics=nu
   let reply='success',failWrite=false,releaseHeld=false,verifyFails=false;
   const realNext=f.client.claimNext.bind(f.client),realJob=f.client.claimJob.bind(f.client),baseReport=f.backend.lenderCapabilities();
   const coordinator=new Map();
-  f.override=async({route,req,res})=>{
+  f.override=async({route,req,res,body})=>{
     const known=[...coordinator.values()].find(value=>route.startsWith('/attempts/'+value.attempt.attempt_id));
+    if(known&&route==='/attempts/'+known.attempt.attempt_id&&known.attempt.attempt_id===f.attempt().attempt_id){f.json(res,{...f.attempt(),selection:known.attempt.selection});return true;}
     if(known&&known.attempt.attempt_id!==f.attempt().attempt_id){
       const suffix=route.slice(('/attempts/'+known.attempt.attempt_id).length);
       if(suffix==='/stop-request'){f.json(res,null);return true;}
@@ -48,7 +51,7 @@ async function scenario(t,createLender,row,target=null,stale=false,statistics=nu
     if(route!=='/jobs/claim-next'&&route!=='/jobs/'+f.jobDigest.slice(7)+'/claim')return false;
     const id=req.headers['idempotency-key'];
     if(row.empty&&stage==='target'){f.json(res,null);return true;}
-    if(!coordinator.has(id))coordinator.set(id,{job_digest:f.jobDigest,job:f.job,attempt:{...f.attempt(),
+    if(!coordinator.has(id))coordinator.set(id,{job_digest:f.jobDigest,job:f.job,attempt:{...f.attempt(),selection:resolveSelection({runRequest:f.job.payload.runRequest,accounts:body.advertisement.accounts}).value,
       ...(coordinator.size?{attempt_id:randomUUID(),generation:coordinator.size+1}:{})}});
     f.json(res,coordinator.get(id));return true;
   };
@@ -87,7 +90,7 @@ async function scenario(t,createLender,row,target=null,stale=false,statistics=nu
   };
   f.policy.quota=()=>({provider:'codex',remaining:100,observedAt:f.clock.now()});
   if(!row.blind){
-    f.client.capabilities=async()=>({capabilities:['offers_v1']});
+    f.client.capabilities=async()=>({capabilities:['offers_v1',RUN_REQUEST_CAPABILITY]});
     f.client.listOffers=async function*(){yield {job_digest:f.jobDigest,job:f.job,state:'queued',published_at:'2026-10-09T12:00:00Z',current_attempt:null};};
   }
   if(row.owner){
@@ -176,7 +179,7 @@ async function scenario(t,createLender,row,target=null,stale=false,statistics=nu
   const candidate=f.policy.lendingRuntime.candidate;
   const start=()=>{
     const c=new AbortController();controller.current=c;
-    const lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,approve:async()=>true,credentialValues:()=>[],onEvent:event=>f.events.push(event)});
+    const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,approve:async()=>true,credentialValues:()=>[],onEvent:event=>f.events.push(event)});
     const loop=withClaimAwaits(context,()=>lender.start(c.signal));
     loop.catch(()=>{});
     f.stop=async()=>{c.abort();await loop.catch(()=>{});};

@@ -107,25 +107,31 @@ import * as kitReport from '../lib/disk-report.mjs';
 import { createDiskSweeper } from '../lib/disk-sweep.mjs';
 
 const kitDigest = c => c.repeat(64);
-const kitImage = (tag, c) => ({ kind: 'image', id: 'image:' + tag,
-  ref: 'docker.io/library/sandbox-kit-assembled:' + tag, imageId: c.repeat(12), bytes: 100 });
+// Image identities are full 64-hex IDs (387e4c3c0): a listing with a prefix ID is incomplete. Each image has a creation
+// time, because the cap ranks obsolete images by age (6e3cf7f83, 5d4df6d2a).
+const KIT_NOW = 1_800_000_000_000, KIT_DAY = 86_400_000;
+const kitImage = (tag, c, daysAgo = 20) => ({ kind: 'image', id: 'image:' + tag,
+  ref: 'docker.io/library/sandbox-kit-assembled:' + tag, imageId: c.repeat(64), createdAt: KIT_NOW - daysAgo * KIT_DAY, bytes: 100 });
+// Of the owned obsolete images, the two newest are retained, so \"old\" is the only eligible one only when two newer ones exist.
 function kitFixture() {
-  const images = [kitImage('current', 'a'), kitImage('previous', 'b'), kitImage('old', 'c'), kitImage('foreign', 'd')];
+  const images = [kitImage('current', 'a', 8), kitImage('previous', 'b', 7), kitImage('old', 'c', 30), kitImage('foreign', 'd', 25),
+    kitImage('retained-older', '1', 2), kitImage('retained-newest', '2', 1)];
   const generation = (digest, image) => ({ digests: [digest], images: [{ ...image, inputDigest: digest, at: 10 }] });
-  return { images, owned: Object.fromEntries(images.slice(0, 3).map(image => [image.ref, { imageId: image.imageId, kitInputDigest: image.imageId[0].repeat(64) }])),
+  return { images, owned: Object.fromEntries(images.filter(image => image.ref.split(':').pop() !== 'foreign')
+      .map(image => [image.ref, { imageId: image.imageId, kitInputDigest: image.imageId[0].repeat(64) }])),
     generations: { current: generation(kitDigest('a'), images[0]), previous: generation(kitDigest('b'), images[1]) },
-    complete: true, now: 100, sandboxes: new Map() };
+    complete: true, now: KIT_NOW, sandboxes: new Map() };
 }
 test('kit report: exact owned obsolete image only, current and previous protected', () => {
   const f = kitFixture(), result = kitPlan.kitImageReport(f);
-  assert.deepEqual(result.images.map(row => row.reason), ['current_kit', 'previous_kit', 'eligible', 'not_owned']);
+  assert.deepEqual(result.images.map(row => row.reason), ['current_kit', 'previous_kit', 'eligible', 'not_owned', 'retained_recent', 'retained_recent']);
   assert.equal(result.listedBytes, 100);
-  assert.equal(result.images[2].imageId, 'c'.repeat(12));
+  assert.equal(result.images[2].imageId, 'c'.repeat(64));
 });
 test('kit report: a second ref to a kept image ID is kept, and its size is never counted as reclaimable', () => {
   for (const kept of ['current', 'previous']) {
     const f = kitFixture(), source = kept === 'current' ? f.images[0] : f.images[1];
-    const alias = { ...kitImage('alias-' + kept, 'e'), imageId: source.imageId };
+    const alias = { ...kitImage('alias-' + kept, 'e'), imageId: source.imageId, createdAt: source.createdAt };
     f.images.push(alias);
     f.owned[alias.ref] = { imageId: alias.imageId, kitInputDigest: alias.imageId[0].repeat(64) };
     const result = kitPlan.kitImageReport(f);
@@ -150,10 +156,10 @@ test('kit report: every configured digest needs an assembly and local kits stay 
 test('kit report: incomplete inventory, create, sandbox and unresolved work each keep images', () => {
   const checks = [
     [{ complete: false }, 'inventory_incomplete'],
-    [{ leases: [{ item: 'image:*', expiresAt: 200 }] }, 'create_in_flight'],
+    [{ leases: [{ item: 'image:*', expiresAt: KIT_NOW + 100 }] }, 'create_in_flight'],
     [{ sandboxes: new Map([['sandbox', { pin: kitDigest('c') }]]) }, 'sandbox_present'],
     [{ unresolved: true }, 'work_unconfirmed'],
-    [{ leases: [{ item: 'sandbox:job', expiresAt: 200 }] }, 'work_in_progress'],
+    [{ leases: [{ item: 'sandbox:job', expiresAt: KIT_NOW + 100 }] }, 'work_in_progress'],
   ];
   for (const [change, reason] of checks) {
     const result = kitPlan.kitImageReport({ ...kitFixture(), ...change });
@@ -161,11 +167,11 @@ test('kit report: incomplete inventory, create, sandbox and unresolved work each
   }
 });
 test('kit report: changed tag identity and foreign repository lookalike are not owned', () => {
-  const f = kitFixture(); f.images[2].imageId = 'e'.repeat(12);
+  const f = kitFixture(); f.images[2].imageId = 'e'.repeat(64);
   f.images.push({ ...kitImage('old', 'c'), ref: 'other.example/sandbox-kit-assembled:old' });
   const result = kitPlan.kitImageReport(f);
   assert.equal(result.eligible, 0);
-  assert.equal(result.images[2].reason, 'not_owned'); assert.equal(result.images[4].reason, 'not_owned');
+  assert.equal(result.images[2].reason, 'not_owned'); assert.equal(result.images[6].reason, 'not_owned');
 });
 test('kit report: duplicate references count one image and unknown size stays unknown', () => {
   const f = kitFixture(); const alias = { ...f.images[2], ref: f.images[2].ref + '-alias' };
@@ -223,8 +229,8 @@ test('kit records: local assembly does not claim a registry mapping', t => {
 });
 test('kit report integration: sweep records report but still issues no image deletion', async t => {
   const ledger = kitLedger(t), f = kitFixture(), calls = [];
-  // This is an obsolete image, recorded before these two generations.
-  ledger.ownImages([f.images[2]], 'created', { digests: [kitDigest('c')], inputDigest: kitDigest('c') });
+  // These are obsolete images (the old one and the two newest that are retained), recorded before these two generations.
+  ledger.ownImages([f.images[2], f.images[4], f.images[5]], 'created', { digests: [kitDigest('c')], inputDigest: kitDigest('c') });
   for (const [digest, image] of [[kitDigest('b'), f.images[1]], [kitDigest('a'), f.images[0]]]) {
     ledger.notePins([digest]);
     ownCreatedImages({ ledger, before: [], images: [image], generation: { digests: [digest], inputDigest: digest } });
@@ -232,7 +238,7 @@ test('kit report integration: sweep records report but still issues no image del
   const sweeper = createDiskSweeper({ ledger,
     coordinator: { dir: ledger.dir, sweep: fn => fn(), exclusive: fn => fn({ held: () => true }) },
     runSbx: async args => { calls.push(args); return { code: 0, stdout: JSON.stringify(args[0] === 'template' ? f.images.map(image => ({
-      repository: image.ref.slice(0, image.ref.lastIndexOf(':')), tag: image.ref.split(':').pop(), id: image.imageId, size: image.bytes, created_at: '2020-01-01T00:00:00Z',
+      repository: image.ref.slice(0, image.ref.lastIndexOf(':')), tag: image.ref.split(':').pop(), id: image.imageId, size: image.bytes, created_at: new Date(image.createdAt).toISOString(),
     })) : []) }; },
     journal: { recorded: () => false }, pins: () => [kitDigest('a')], referenced: () => new Set(),
     measureFree: async () => 1e12, now: () => 1800000000000, removeEligible: true, lockCheck: () => ({ ok: true }),
@@ -240,7 +246,8 @@ test('kit report integration: sweep records report but still issues no image del
   const summary = await sweeper.run({ trigger: 'test' });
   assert.equal(summary.kitImages.eligible, 1);
   assert.equal(ledger.lastSweep().kitImages.eligible, 1);
-  assert.equal(summary.removed, 0); assert.equal(summary.kept.image_cleanup_unavailable, 1);
+  // The sweep plan holds back every owned obsolete image (three here); the report marks only the oldest as outside retention.
+  assert.equal(summary.removed, 0); assert.equal(summary.kept.image_cleanup_unavailable, 3);
   assert.ok(calls.every(args => args[0] === 'ls' || args[0] === 'template' && args[1] === 'ls'));
   assert.match(kitReport.diskLines(kitReport.diskReportOf(summary)).join('\n'), /Kit provenance inventory/);
 });
@@ -248,8 +255,13 @@ test('kit report integration: sweep records report but still issues no image del
 // Use the real settlement method without constructing a backend or dispatching
 // commands. The only command here is a fake, read-only image listing.
 import { DockerSbxBackend as KitBackend } from '../lib/docker-backend.mjs';
+// The two newest obsolete images the cap always retains. Without them a single obsolete image is retained too,
+// and no settlement test could tell an image kept for its provenance from one kept for its age.
+const r3Retained = () => [kitImage('retained-older', '1', 2), kitImage('retained-newest', '2', 1)];
+const ownRetained = ledger => ledger.ownImages(r3Retained(), 'created', { digests: [kitDigest('c')], inputDigest: kitDigest('c') });
 function r3Seed(t) {
-  const ledger = kitLedger(t), current = kitImage('current', 'a'), previous = kitImage('previous', 'b');
+  const ledger = kitLedger(t), current = kitImage('current', 'a', 8), previous = kitImage('previous', 'b', 7);
+  ownRetained(ledger);
   for (const [inputDigest, image] of [[kitDigest('b'), previous], [kitDigest('a'), current]]) {
     ledger.notePins([inputDigest]);
     ownCreatedImages({ ledger, before: [], images: [image], generation: { digests: [inputDigest], inputDigest } });
@@ -267,12 +279,12 @@ function r3Backend(ledger, images, agents = { claude: 'sha256:' + kitDigest('a')
   return backend;
 }
 function r3Report(ledger, images) {
-  return kitPlan.kitImageReport({ images, owned: ledger.ownedImages(), generations: ledger.kitGenerations(),
-    complete: true, sandboxes: new Map(), now: 123 });
+  return kitPlan.kitImageReport({ images: [...images, ...r3Retained()], owned: ledger.ownedImages(), generations: ledger.kitGenerations(),
+    complete: true, sandboxes: new Map(), now: KIT_NOW });
 }
 for (const phase of ['before', 'after']) for (const failureAt of [1, 2, 3]) test(
   `kit settlement: crash ${phase} write ${failureAt} cannot expose a newly owned current image`, async t => {
-    const { ledger, current, previous } = r3Seed(t), fresh = kitImage('new-current', 'd');
+    const { ledger, current, previous } = r3Seed(t), fresh = kitImage('new-current', 'd', 30);
     let writes = 0, released = false;
     const wrapped = Object.create(ledger);
     for (const name of ['ownImages', 'notePins', 'recordKitImages']) wrapped[name] = (...args) => {
@@ -294,7 +306,7 @@ for (const phase of ['before', 'after']) for (const failureAt of [1, 2, 3]) test
   });
 test('kit settlement: invalid or missing generation inputs invalidate history in the ownership write', async t => {
   for (const agents of [null, [], { claude: 'bad' }]) {
-    const { ledger, current, previous } = r3Seed(t), fresh = kitImage('unknown-input', 'd');
+    const { ledger, current, previous } = r3Seed(t), fresh = kitImage('unknown-input', 'd', 30);
     await r3Backend(ledger, [current, previous, fresh], agents)._settleDiskCreate({
       before: [current, previous].map(image => image.ref + '|' + image.imageId), run: { pin: kitDigest('a') }, gate: { release() {} },
     }, { created: true });
@@ -317,7 +329,7 @@ test('kit rollback: old-style pin rotation keeps ownership leases and sandbox ro
   assert.equal(again.sandbox('job').id, 'sbx-job');
   assert.deepEqual(again.kitGenerations(), { current: null, previous: null });
   assert.equal(r3Report(again, [current, previous]).eligible, 0);
-  const fresh = kitImage('rebuilt', 'e');
+  const fresh = kitImage('rebuilt', 'e', 30);
   ownCreatedImages({ ledger: again, before: [], images: [fresh],
     generation: { digests: [kitDigest('b')], inputDigest: kitDigest('b') } });
   assert.equal(again.damaged, false);
@@ -357,7 +369,7 @@ function oldKitWriter(file) {
   };
 }
 test('kit provenance: unchanged-pin old writer adds an unknown-origin image, never an eligible one', t => {
-  const { ledger, current, previous } = r3Seed(t), fresh = kitImage('old-writer-new', 'f');
+  const { ledger, current, previous } = r3Seed(t), fresh = kitImage('old-writer-new', 'f', 30);
   const old = oldKitWriter(ledger.file);
   old.notePins([kitDigest('a')]);
   old.ownImages([fresh], 'created');
@@ -373,17 +385,18 @@ test('kit provenance: unchanged-pin old writer adds an unknown-origin image, nev
 });
 test('kit provenance: new attributed images retain current previous and obsolete classifications', t => {
   const ledger = kitLedger(t);
-  const images = [kitImage('old', 'c'), kitImage('previous', 'b'), kitImage('current', 'a')];
+  ownRetained(ledger);
+  const images = [kitImage('old', 'c', 30), kitImage('previous', 'b', 7), kitImage('current', 'a', 8)];
   for (const image of images) {
     const inputDigest = kitDigest(image.imageId[0]);
     ownCreatedImages({ ledger, before: [], images: [image], generation: { digests: [inputDigest], inputDigest } });
   }
   const again = createDiskLedger({ file: ledger.file, now: () => 123 });
   for (const image of images) assert.equal(again.ownedImages()[image.ref].kitInputDigest, kitDigest(image.imageId[0]));
-  assert.deepEqual(r3Report(again, images).images.map(row => row.reason), ['eligible', 'previous_kit', 'current_kit']);
+  assert.deepEqual(r3Report(again, images).images.map(row => row.reason), ['eligible', 'previous_kit', 'current_kit', 'retained_recent', 'retained_recent']);
 });
 test('kit provenance: existing old ownership is not retroactively stamped', t => {
-  const { ledger, current, previous } = r3Seed(t), image = kitImage('legacy', 'd');
+  const { ledger, current, previous } = r3Seed(t), image = kitImage('legacy', 'd', 30);
   oldKitWriter(ledger.file).ownImages([image], 'created');
   ledger.ownImages([image], 'created', { digests: [kitDigest('a')], inputDigest: kitDigest('a') });
   assert.equal(ledger.ownedImages()[image.ref].kitInputDigest, undefined);

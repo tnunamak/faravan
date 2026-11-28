@@ -462,23 +462,6 @@
       ],
       "additionalProperties": false
     },
-    "owner_limit": {
-      "type": "object",
-      "properties": {
-        "maxJobUsd": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 2147483647
-        }
-      },
-      "required": [
-        "maxJobUsd"
-      ],
-      "additionalProperties": false
-    },
     "lending": {
       "type": "object",
       "properties": {
@@ -822,6 +805,7 @@
               "invalid_person_link",
               "invalid_policy",
               "invalid_request",
+              "invalid_run_request",
               "invalid_signature",
               "invalid_source",
               "invalid_working_directory",
@@ -846,7 +830,9 @@
               "lender_starting",
               "lender_stopped",
               "lending_busy",
+              "lending_off",
               "lending_recovery_required",
+              "lending_unavailable",
               "lending_window_removed",
               "limits_unenforceable",
               "local_session_required",
@@ -879,8 +865,6 @@
               "outside_hours",
               "ownership_transfer_pending",
               "ownership_transfer_required",
-              "pace50_disabled",
-              "pace50_stop_unrecorded",
               "paused",
               "payload_too_large",
               "person_blocked",
@@ -931,6 +915,7 @@
               "stale_attempt",
               "standing_rule_changed",
               "stop_report_pending",
+              "stop_unrecorded",
               "stopped_by_lender",
               "storage_unenforceable",
               "tests_failed",
@@ -941,7 +926,6 @@
               "unauthenticated",
               "unauthorized",
               "unavailable",
-              "unreadable_window_origin",
               "unsupported_version",
               "update_in_progress",
               "user_active",
@@ -1105,6 +1089,7 @@
               "invalid_person_link",
               "invalid_policy",
               "invalid_request",
+              "invalid_run_request",
               "invalid_signature",
               "invalid_source",
               "invalid_working_directory",
@@ -1129,7 +1114,9 @@
               "lender_starting",
               "lender_stopped",
               "lending_busy",
+              "lending_off",
               "lending_recovery_required",
+              "lending_unavailable",
               "lending_window_removed",
               "limits_unenforceable",
               "local_session_required",
@@ -1162,8 +1149,6 @@
               "outside_hours",
               "ownership_transfer_pending",
               "ownership_transfer_required",
-              "pace50_disabled",
-              "pace50_stop_unrecorded",
               "paused",
               "payload_too_large",
               "person_blocked",
@@ -1214,6 +1199,7 @@
               "stale_attempt",
               "standing_rule_changed",
               "stop_report_pending",
+              "stop_unrecorded",
               "stopped_by_lender",
               "storage_unenforceable",
               "tests_failed",
@@ -1224,7 +1210,6 @@
               "unauthenticated",
               "unauthorized",
               "unavailable",
-              "unreadable_window_origin",
               "unsupported_version",
               "update_in_progress",
               "user_active",
@@ -1348,21 +1333,6 @@
             null
           ]
         },
-        "owner_limit": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "ok",
-            "missing",
-            "unreadable",
-            "too_large",
-            "unsafe_path",
-            "partial",
-            null
-          ]
-        },
         "readiness": {
           "type": [
             "string",
@@ -1441,7 +1411,6 @@
       },
       "required": [
         "settings",
-        "owner_limit",
         "readiness",
         "events",
         "errors",
@@ -1456,7 +1425,6 @@
     "runtime",
     "install",
     "settings",
-    "owner_limit",
     "lending",
     "readiness",
     "events",

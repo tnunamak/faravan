@@ -33,27 +33,24 @@ async function freshAutomaticOwner(t, {lendingHistory}) {
   await api(lender.app, '/api/agents/claude-code-subscription/run', {method: 'POST', body: {model: 'claude-haiku-5-5', effort: null}});
   await api(lender.app, '/api/lending/mode', {method: 'POST', body: {circle: circle.id, mode: 'auto'}});
   await api(lender.app, '/api/lending/on', {method: 'POST', body: {circle: circle.id}});
-  await api(owner.app, '/api/jobs', {method: 'POST', body: {circle: circle.id,
-    git: {url: 'https://github.com/example/synthetic.git', commit: '1'.repeat(40)},
-    prompt: 'Synthetic Claude admission: no external execution.', harness: 'claude-code-subscription',
-    model: 'claude-haiku-5-5', budget_v1: {max_list_usd: 2}}});
   return {lender, probes, backend};
 }
 
 const decisionOf = async lender => {
   const view = await api(lender.app, '/api/lending');
-  return view.objective?.accounts?.find(account => account.provider === 'claude')?.decision ?? null;
+  return (await api(lender.app,'/api/lending/readiness')).agents.find(row=>row.id==='claude-code-subscription');
 };
 
-test('a failing optional history note writes one private warning row and lending still decides on the reading', {timeout: 180000}, async t => {
+test('a failing optional history note writes one private warning row and the explicit reading stays usable', {timeout: 180000}, async t => {
   const failing = {claude: {record() { throw new Error('PRIVATE_HISTORY_STORAGE'); }, ownerTraces: () => []}};
   const {lender, probes} = await freshAutomaticOwner(t, {lendingHistory: failing});
-  await waitFor(() => probes.length > 0, 'the waiting job to reach the quota gate, which takes the reading', 60000);
+  await api(lender.app,'/api/agents/refresh',{method:'POST',body:{agents:['claude-code-subscription']}});
+  assert.equal(probes.length,1);
   const decision = await waitFor(async () => {
     const row = await decisionOf(lender);
-    return row?.reason && row.reason !== 'objective_evidence_unknown' ? row : null;
+    return row?.hasReading?row:null;
   }, 'a specific decision from the reading despite the failed history note', 60000);
-  assert.notEqual(decision.reason, 'objective_evidence_unknown');
+  assert.equal(decision.hasReading,true);
   const file = join(lender.home, 'v1', 'lending-errors.jsonl');
   const rows = (await waitFor(async () => {
     try {

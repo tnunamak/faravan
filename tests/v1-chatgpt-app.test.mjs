@@ -69,7 +69,13 @@ test('real app: authenticated local consent, escaped client, callback and discon
     assert.match(page,/Allow ChatGPT to/);assert.match(page,/\/approve/);
     const allowed=await post(app.origin,'/api/chatgpt/actions/'+action.approval_id+'/approve',{},
       {form:true,headers:{cookie,origin:app.origin}});assert.equal(allowed.status,303);
-    return remoteTool('approvals_wait',{approval_id:action.approval_id,timeout_seconds:1});
+    // The local redirect acknowledges the decision, not the action's result.
+    // Poll the same approval without resubmitting; the enclosing test times out.
+    for (;;) {
+      t.signal.throwIfAborted();
+      const result=await remoteTool('approvals_wait',{approval_id:action.approval_id,timeout_seconds:1});
+      if (result.pending!==true&&result.status!=='needs_your_ok') return result;
+    }
   };
   const caps=await remoteTool('limits_set',{dailyJobs:20,confirm:true});assert.equal(caps.status,'needs_your_ok');
   assert.equal((await api(app,'/api/lending')).limits.dailyJobs,null);

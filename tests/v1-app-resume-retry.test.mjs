@@ -1,3 +1,5 @@
+import {setSyntheticAccountSignedIn} from './helpers/synthetic-run-account.mjs';
+import {lendingReasonText} from '../lib/v1/lending-reasons.mjs';
 import './helpers/no-browser.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,7 +31,7 @@ test('lending that was on resumes by itself when the host becomes reachable afte
     if (offline) { args.req.socket.destroy(); return true; }
     return reachable(args);
   };
-  const restarted = await f.start('lender', {adapters: cold(), identityProbe: async () => signedIn, blockerRecheckMs: 300, hostProfileMs: 300});
+  const restarted = await f.start('lender', {syntheticAccounts:'codex',adapters: cold(), identityProbe: async () => signedIn, blockerRecheckMs: 300, hostProfileMs: 300});
   // Wait for the startup resume itself to fail, not only for the host hold that a later host read clears.
   const failed = await waitFor(async () => { const s = await api(restarted.app, '/api/status');
     return s.state === 'blocked' && s.blockers?.some(b => b.kind === 'network_error') && s; },
@@ -38,7 +40,7 @@ test('lending that was on resumes by itself when the host becomes reachable afte
   offline = false;
   let last;
   // The top-level state can read ready while the intent is blocked; the intent is what says lending runs.
-  await waitFor(async () => (last = await api(restarted.app, '/api/status')).intent?.state === 'ready', 'lending resumed once the host answered', 30000)
+  await waitFor(async () => (last = await api(restarted.app, '/api/status')).intent?.state === 'ready' && last.lending.enabled===true, 'lending resumed once the host answered', 30000)
     .catch(error => { error.message += ' (last intent ' + JSON.stringify(last?.intent) + ')'; throw error; });
   assert.equal((await api(restarted.app, '/api/lending')).enabled, true);
 });
@@ -49,17 +51,18 @@ test('a resume blocked by a signed-out agent is not retried on its own', {timeou
   const {lender, circle} = await f.connect({});
   await lendingOn(lender.app, circle);
   await waitFor(async () => (await api(lender.app, '/api/status')).state === 'ready', 'lending ready');
+  await setSyntheticAccountSignedIn({...lender,api,providerId:'codex',signedIn:false});
   await lender.app.close();
   let probes = 0;
-  const restarted = await f.start('lender', {adapters: cold(), blockerRecheckMs: 300,
+  const restarted = await f.start('lender', {syntheticAccounts:'codex',adapters: cold(), blockerRecheckMs: 300,
     identityProbe: async () => { probes++; return {providers: [{harness_id: 'codex', installed: true, signedIn: false}]}; }});
-  await waitFor(async () => { const s = await api(restarted.app, '/api/status'); return s.state === 'blocked' && s.reason === 'agent_not_ready'; },
+  await waitFor(async () => { const s = await api(restarted.app, '/api/status'); return s.lendingProjection.admission === 'blocked' && s.lendingProjection.admissionReason === 'account_signed_out'; },
     'the startup resume reports the signed-out agent', 20000);
   const after = probes;
   await new Promise(resolve => setTimeout(resolve, 3000));
   const status = await api(restarted.app, '/api/status');
-  assert.equal(status.state, 'blocked');
-  assert.equal(status.reason, 'agent_not_ready');
+  assert.equal(status.lendingProjection.admission, 'blocked');
+  assert.equal(status.lendingProjection.admissionReason, 'account_signed_out');
   assert.ok(probes - after <= 1, 'no repeated automatic start attempts for a signed-out agent');
 });
 
@@ -83,7 +86,7 @@ for(const ownerAction of [null,'pause','off'])test(`active host outage preserves
   offline=true;
   const held=await waitFor(async()=>{const view=await api(lender.app,'/api/lending');return view.reason==='circle_unreachable'&&view;},'host hold',30000);
   assert.ok(failedProbes>0,'a real host probe observed the outage');
-  assert.equal(held.label,"Lending is waiting for the circle's host to reconnect.");
+  assert.equal(held.label,lendingReasonText('circle_unreachable',{until:held.until}));
   assert.equal(held.intent,'on');assert.equal(held.paused,false);
   const saved=()=>readFile(join(lender.home,'v1','app-settings.json'),'utf8').then(JSON.parse);
   assert.equal((await saved()).intent,'on');
@@ -120,8 +123,8 @@ for(const refusal of [401,403,404])test('host refusal clears a prior outage: '+r
  status=503;
  await waitFor(async()=>(await api(lender.app,'/api/lending')).reason==='circle_unreachable','outage hold',30000);
  status=refusal;
- const failed=await waitFor(async()=>{const view=await api(lender.app,'/api/lending');return view.status==='failed'&&view;},'actionable refusal',30000);
- assert.notEqual(failed.reason,'circle_unreachable');
+ const failed=await waitFor(async()=>{const view=await api(lender.app,'/api/lending');return view.reason==='circle_access_refused'&&view;},'actionable refusal',30000);
+ assert.equal(failed.reason,'circle_access_refused');
  assert.ok(!failed.label.includes('waiting for'));
  assert.match(failed.label,/membership.*host address/);
  assert.equal(failed.intent,'on');
@@ -150,14 +153,14 @@ for (const [label, status, code, blocker, retried] of [
   let failing = true;
   const reachable = f.override, refuse = answer(status, code);
   f.override = async args => failing ? refuse(args) : reachable(args);
-  const restarted = await f.start('lender', {adapters: cold(), identityProbe: async () => signedIn, blockerRecheckMs: 300, hostProfileMs: 300});
+  const restarted = await f.start('lender', {syntheticAccounts:'codex',adapters: cold(), identityProbe: async () => signedIn, blockerRecheckMs: 300, hostProfileMs: 300});
   const failed = await waitFor(async () => { const s = await api(restarted.app, '/api/status');
     return s.state === 'blocked' && s.blockers?.some(b => b.kind === blocker) && s; },
   'the startup resume reports ' + blocker, 30000);
   assert.equal(failed.intent.on, true);
   failing = false;
   if (retried) {
-    await waitFor(async () => (await api(restarted.app, '/api/status')).intent?.state === 'ready', 'lending resumed once the host answered', 30000);
+    await waitFor(async () => {const s=await api(restarted.app,'/api/status');return s.intent?.state==='ready'&&s.lending.enabled===true;}, 'lending resumed once the host answered', 30000);
     assert.equal((await api(restarted.app, '/api/lending')).enabled, true);
   } else {
     await new Promise(resolve => setTimeout(resolve, 3000));

@@ -1,4 +1,5 @@
 import './helpers/no-browser.mjs';
+import {fixtureAccounts,accountHeartbeat} from './helpers/run-request-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from 'node:fs';
@@ -109,8 +110,9 @@ test('privacy M2: startup repairs an expiry previously recorded at observation t
 
 test('privacy M3: retirement minimizes signed-job replays and keeps retries compatible',t=>{
   const f=fixture(t),publishKey=randomUUID(),claimKey=randomUUID(),job=f.publish(publishKey),digest=p.digest(job.payload);
-  const route='/jobs/'+digest.slice(7),ad={harnesses:['codex'],models:['example-model'],capabilities:['patch-output'],egress:['provider-only'],
+  const route='/jobs/'+digest.slice(7),ad={harnesses:['codex'],models:['example-model'],capabilities:['patch-output','run_request_v1'],accounts:fixtureAccounts(),egress:['provider-only'],
     enforced_limits:Object.keys(job.payload.requirements.limits),max_limits:job.payload.requirements.limits};
+  const heartbeat=accountHeartbeat(ad.accounts);f.store.heartbeat(fp[1],heartbeat,f.ctx(1,'POST','/heartbeat',heartbeat));
   const claimBody={advertisement:ad,lease_seconds:120};
   const claim=()=>f.store.claimJob(fp[1],digest,ad,f.ctx(1,'POST',route+'/claim',claimBody,{idempotency_key:claimKey}),120);
   claim();
@@ -144,8 +146,9 @@ test('host refuses an independently signed manifest containing excluded paths',t
 
 test('retirement removes a lapsed job queue entry and collection still succeeds',t=>{
   const f=fixture(t),job=f.publish(),digest=p.digest(job.payload),route='/jobs/'+digest.slice(7);
-  const ad={harnesses:['codex'],models:['example-model'],capabilities:['patch-output'],egress:['provider-only'],
+  const ad={harnesses:['codex'],models:['example-model'],capabilities:['patch-output','run_request_v1'],accounts:fixtureAccounts(),egress:['provider-only'],
     enforced_limits:Object.keys(job.payload.requirements.limits),max_limits:job.payload.requirements.limits};
+  const heartbeat=accountHeartbeat(ad.accounts);f.store.heartbeat(fp[1],heartbeat,f.ctx(1,'POST','/heartbeat',heartbeat));
   const a=f.store.claimJob(fp[1],digest,ad,f.ctx(1,'POST',route+'/claim',{advertisement:ad,lease_seconds:120}),120).attempt;
   f.store.start(fp[1],a.attempt_id,a.generation,f.ctx(1,'POST','/attempts/'+a.attempt_id+'/start',{generation:a.generation}));
   f.store.observeExecutionStart(fp[1],a.attempt_id,a.generation,f.ctx(1,'POST','/attempts/'+a.attempt_id+'/observed-start',{generation:a.generation}));

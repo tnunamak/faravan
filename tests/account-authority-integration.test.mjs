@@ -1,3 +1,4 @@
+import './helpers/no-browser.mjs';
 import {enableFixtureModel} from './helpers/account-model-fixture.mjs';
 import {tempDir} from './helpers/temp-dir.mjs';
 import './helpers/no-browser.mjs';
@@ -90,7 +91,7 @@ test('configured app enrollment produces accounts used by signed coordinator, le
     });
     assert.equal(changed.ok, true, JSON.stringify(changed));
   };
-  const submit = index => api(owner.app, '/api/jobs', {method: 'POST', body: {
+  const submit = index => api(owner.app, '/api/jobs', {headers:{'faravan-confirm':'yes'},method: 'POST', body: {
     circle: circle.id, prompt: 'Controlled account execution ' + index,
     git: 'https://github.com/example/synthetic.git', commit: '1'.repeat(40), harness: 'codex',
     runRequest: {schemaVersion: 1, models: [{providerId: 'codex', modelId: 'example-model'}], effortId: 'high'},
@@ -124,7 +125,8 @@ test('configured app enrollment produces accounts used by signed coordinator, le
       return accounts[0]===order[0];},'published account order',30000);
     const submitted = index ? await submit(index) : queued;
     const card=await waitFor(async()=>(await api(lender.app,'/api/approvals'))
-      .find(row=>row.jobDigest===submitted.jobDigest),'account approval for the same signed job',30000);
+      .find(row=>row.jobDigest===submitted.jobDigest),'account approval for the same signed job',30000).catch(async error=>{
+      console.error('ACCOUNT_APPROVAL',index,JSON.stringify({lending:await api(lender.app,'/api/lending'),job:await client.getJob(submitted.jobDigest),calls:backend.calls.map(row=>row[0])}));throw error;});
     await api(lender.app,'/api/approvals/'+card.id+'/accept',{method:'POST',body:{}});
     const view=await waitFor(async()=>{const v=await client.getJob(submitted.jobDigest);return v.state==='result-accepted'?v:null;},'account-bound signed result',20000).catch(async error=>{
       console.error('LENDING LOG',JSON.stringify(await api(lender.app,'/api/lending/log')));
@@ -138,7 +140,6 @@ test('configured app enrollment produces accounts used by signed coordinator, le
   assert.ok(backend.calls.filter(([kind])=>kind==='prepare').every(([,spec])=>spec.resources.wall_seconds===60));
   await api(lenderApp,'/api/lending/off',{method:'POST',body:{}});
 });
-
 
 for(const stop of [false,true])test(stop?'Stop reaches a running signed account job':
   'first signed Auto account job launches with cold_pace without review',{timeout:90000},async t=>{
@@ -193,7 +194,7 @@ for(const stop of [false,true])test(stop?'Stop reaches a running signed account 
   await waitFor(()=>realHeartbeats.filter(row=>row.device===lender.app.device.keyId)
     .at(-1)?.body.accounts?.some(row=>row.accountId===account.id),'published cold account',30000);
   assert.deepEqual(await api(lender.app,'/api/approvals'),[]);
-  const submitted=await api(owner.app,'/api/jobs',{method:'POST',body:{
+  const submitted=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{
     circle:circle.id,prompt:'First automatic signed account job',
     git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),harness:'codex',
     runRequest:{schemaVersion:1,models:[{providerId:'codex',modelId:'example-model'}],effortId:'high'},
@@ -299,7 +300,6 @@ test('claim A -> select same-provider B -> dispatch is fenced; revoked attempt, 
   assert.equal((await broker.proxy.dispatch({key:nextKey.value.key,request:request()})).error.code,'job_key_expired');
   assert.equal(effects,1);
 });
-
 
 // The transport owns body consumption, but only the broker may authorize the
 // actual send. Every scenario holds the last guest chunk after admission.
@@ -456,7 +456,6 @@ test('a late final authorization cannot send after caller abort',async()=>{
   assert.equal(sends,0);
 });
 
-
 import {request as httpRequest} from 'node:http';
 for(const mutation of ['expiry','release','membership'])test('full app HTTP held incoming body fences '+mutation,{timeout:90000},async t=>{
   const f=await appFixture(t);let current=Date.now(),app,connection,resumeBody,enterBody;
@@ -497,7 +496,7 @@ for(const mutation of ['expiry','release','membership'])test('full app HTTP held
   await api(app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
   await api(app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
-  const submitted=await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,prompt:'Held incoming body',
+  const submitted=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,prompt:'Held incoming body',
     git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),harness:'codex',
     runRequest:{schemaVersion:1,models:[{providerId:'codex',modelId:'example-model'}],effortId:'high'}}});
   const card=await waitFor(async()=>(await api(app,'/api/approvals'))[0],'held-body approval',30000);

@@ -1,3 +1,4 @@
+import {syntheticReadiness} from './synthetic-readiness.mjs';
 import './no-browser.mjs';
 import {initializeFixtureHome} from './home-isolation.mjs';
 import assert from 'node:assert/strict';
@@ -17,6 +18,10 @@ import { startApp } from '../../lib/v1/app.mjs';
 import { HOST_CAPABILITIES } from '../../lib/v1/versions.mjs';
 import * as p from '../../lib/protocol/index.mjs';
 import {jobWatchRevision} from '../../lib/v1/job-watch.mjs';
+import {resolveSelection} from '../../lib/v1/run-request.mjs';
+import {signLease} from '../../lib/v1/account-authority.mjs';
+import {generateKeyPairSync} from 'node:crypto';
+import {syntheticProvider,syntheticTransport,accountBackend,enrollSyntheticAccount,syntheticConfiguration,syntheticAdapters} from './synthetic-run-account.mjs';
 
 // Extends only the signed, loopback TEST coordinator; never starts a real backend.
 export async function waitFor(check, label = 'expected condition', timeout = 5000) {
@@ -43,9 +48,17 @@ export async function boundedFetch(url, options = {}) {
   const timeout = AbortSignal.timeout(Number(process.env.FARAVAN_TEST_FETCH_MS) || 30000); // a hang detector, not a speed test: this host is shared and often overloaded
   return fetch(url, {...options, signal: options.signal ? AbortSignal.any([timeout, options.signal]) : timeout});
 }
-export async function api(app, path, {method = 'GET', body, token = app.token, headers = {}, status = 200} = {}) {
+// A bare-token POST /api/jobs is an agent send, and the app refuses it with 428 until the person confirms
+// (confirmationPolicy in lib/v1/app.mjs). The fixture's caller is a confirmed HTTP client: it sends the
+// `Faravan-Confirm: yes` header that docs/agents.md documents for HTTP (scripts/bar-hosted-borrow.mjs does the same).
+// The local web app is admitted differently, as the browser owner (cookie and same Origin, no token): a test that
+// models the web app or its composer sends with browserApi(), never with this header. A test that proves the
+// refusal passes `confirm:false`; an explicit `faravan-confirm` header always wins.
+export async function api(app, path, {method = 'GET', body, token = app.token, headers = {}, status = 200, confirm = true} = {}) {
+  const confirmsSend = confirm && method === 'POST' && path === '/api/jobs' && token !== null;
   const response = await boundedFetch(app.origin + path, {method,
     headers: {...(token === null ? {} : {'x-faravan-session-token': token}),
+      ...(confirmsSend ? {'faravan-confirm':'yes'} : {}),
       ...(body === undefined ? {} : {'content-type':'application/json'}), ...headers},
     ...(body === undefined ? {} : {body: JSON.stringify(body)})});
   // Read the option without duplicating the authentication-bearing parameter declaration.
@@ -57,6 +70,14 @@ export async function api(app, path, {method = 'GET', body, token = app.token, h
   const text = await response.text();
   assert.equal(response.status, status, method + ' ' + path + ': ' + text);
   return text ? JSON.parse(text) : null;
+}
+// The caller the local web app is: no token, the same Origin, the cookie its handoff link sets, and the
+// surface label ui/v1/src/api.mjs adds. It sends no `faravan-confirm` header. Returns api() bound to that principal.
+export async function browserApi(app) {
+  const handoff = await boundedFetch(app.handoffUrl(), {redirect: 'manual'});
+  await handoff.text();
+  const headers = {cookie: handoff.headers.get('set-cookie').split(';')[0], origin: app.origin, 'faravan-surface': 'ui'};
+  return (path, options = {}) => api(app, path, {...options, token: null, headers: {...headers, ...options.headers}});
 }
 export function hostRequest(app, host) {
   return new Promise((resolve, reject) => {
@@ -88,23 +109,10 @@ export function syntheticBackend(root, options = {}) {
     // State the synthetic computer’s Docker facts explicitly; unknown facts are never ready.
     async probeCapabilities() {calls.push(['probe']);return {available:true,preflight:{ok:true,checks:[{name:'synthetic',ok:true,detail:'Ready'},
       ...['sbx_install','sbx_daemon','docker_login'].map(name=>({name,ok:true,detail:'Ready'}))]}};},
-    async protectionSummary(requirements,context={}) {
-      const report=await backend.probeCapabilities(),capabilities=await backend.lenderCapabilities();
-      const required=Object.keys(requirements.limits??{}).filter(k=>requirements.limit_modes?.[k]!=='preferred');
-      const preferred=Object.keys(requirements.limits??{}).filter(k=>requirements.limit_modes?.[k]==='preferred');
-      const enforced=capabilities.enforced_limits??[],unenforced=Object.keys(requirements.limits??{}).filter(k=>!enforced.includes(k));
-      const satisfied=required.every(k=>enforced.includes(k)&&capabilities.max_limits?.[k]>=requirements.limits[k]);
-      const sourceEnforceable=!(context.source?.kind==='git'&&requirements.egress==='provider-only')||
-        context.providerHosts?.some(host=>host==='github.com'||host==='**.github.com')===true;
-      const ready=report.available===true&&report.preflight?.ok===true&&capabilities.available===true;
-      return {source:'read-only-preflight',backend_id:'synthetic-only',observed_at:new Date().toISOString(),
-        sandbox_ready:ready,version_gate:{ok:true,status:'synthetic'},egress:{requested:requirements.egress,
-          enforceable:capabilities.egress.includes(requirements.egress),source_enforceable:sourceEnforceable},limits:{required,preferred,enforced,unenforced,satisfied},
-        satisfied:ready&&satisfied&&sourceEnforceable&&capabilities.egress.includes(requirements.egress),preflight:report.preflight};
-    },
+    async protectionSummary(requirements,context={}) {return syntheticReadiness(backend,requirements,context);},
     async prepare(spec) {
       calls.push(['prepare',spec]);
-      const handle = {sandbox_id:'synthetic-only',scratch_dir:await mkdtemp(join(root,'run-')),_entrypoint:spec.entrypoint,
+      const handle = {sandbox_id:'synthetic-only-'+randomUUID(),scratch_dir:await mkdtemp(join(root,'run-')),_entrypoint:spec.entrypoint,
         _execution:{egress_evidence:{'api.example.test':'allowed'},enforced_limits:enforced,unenforced:[]}};
       return handle;
     },
@@ -146,7 +154,8 @@ export function syntheticBackend(root, options = {}) {
     async cancel(handle) {calls.push(['cancel']);handle.cancelled=true;handle._release?.();return {compute_stopped:true};},
     async requestStop() {calls.push(['requestStop']);return {delivered:false};},
     async destroy(handle) {calls.push(['destroy']);handle._release?.();await rm(handle.scratch_dir,{recursive:true,force:true});
-      return {job_id:handle.job_id,sandbox_id:handle.sandbox_id,removed:true,scratch_removed:true,at:new Date().toISOString()};},
+      return {job_id:handle.job_id,sandbox_id:handle.sandbox_id,removed:true,scratch_removed:true,
+        policy_removed:true,storage_removed:true,at:new Date().toISOString()};},
   };
   return backend;
 }
@@ -185,6 +194,7 @@ export async function stopFixtureCoordinator(directory, installedRoot) {
 
 export async function appFixture(t, options = {}) {
   const cleanup = [], apps = [], backends = [], started = new Set(), networkTrace = [];
+  const leaseKeys=generateKeyPairSync('ed25519');
   const f = await fixture({after: fn => cleanup.push(fn)}, {managedShutdown: options.managedShutdown === true});
   f.networkTrace = networkTrace;
   const requestTimeMs = req => {
@@ -230,12 +240,13 @@ export async function appFixture(t, options = {}) {
       const signer = JSON.parse(Buffer.from(req.headers['faravan-proof'],'base64url')).payload.key_id;
       const view = [...f.jobs.values()].find(view => view.job.payload.circle === circleId &&
         view.state === 'queued' && (!namedClaim||view.job_digest==='sha256:'+route.split('/')[2]) && !(body.exclude ?? []).includes(view.job_digest) &&
-        p.canSatisfy(view.job.payload.requirements, body.advertisement).ok);
+        p.canSatisfy(view.job.payload.requirements, body.advertisement,{job:view.job.payload}).ok);
       if (!view) {if(namedClaim){res.writeHead(409,{'content-type':'application/problem+json'});res.end(JSON.stringify({type:'urn:faravan:problem:conflict',title:'conflict',code:'conflict',status:409,retryable:false,outcome:'not_applied'}));}else json(res,null);return true;}
       const claimedAt = requestTimeMs(req);
       const attempt = {attempt_id:randomUUID(),job_digest:view.job_digest,generation:(view.current_attempt?.generation ?? 0)+1,holder:signer,
         state:'active',claimed_at:requestInstant(req),lease_expires_at:new Date(Math.floor(claimedAt/1000)*1000+120000).toISOString().replace('.000Z','Z'),
-        reason:null,compute_stopped:false,stopped_at:null,execution_started_at:null,execution_observed_at:null};
+        reason:null,compute_stopped:false,stopped_at:null,execution_started_at:null,execution_observed_at:null,
+        selection:resolveSelection({runRequest:view.job.payload.runRequest,accounts:body.advertisement.accounts}).value};
       attempts.set(attempt.attempt_id, attempt);
       Object.assign(view,{state:'claimed',current_attempt:attempt});
       wakeJobWatches(view.job_digest);
@@ -255,6 +266,15 @@ export async function appFixture(t, options = {}) {
       assert.ok(attempt, 'attempt must have been claimed');
       const view = f.jobs.get(attempt.job_digest);
       if (!action) {json(res,attempt);return true;}
+      if(action==='account-lease'){
+        assert.equal(body.generation,attempt.generation);
+        assert.deepEqual(body.selection,attempt.selection);
+        const {privateKey,publicKey}=leaseKeys;
+        const binding={circle:circleId,holder:attempt.holder,jobId:attempt.job_digest,attemptId:id,
+          selection:attempt.selection,fence:attempt.generation,membershipEpoch:f.circles.get(circleId).roster.payload.epoch,
+          expiresAtMs:Date.parse(attempt.lease_expires_at)};
+        json(res,{binding,proof:signLease({...binding,challenge:body.challenge},privateKey),publicKey:publicKey.export({format:'pem',type:'spki'})});return true;
+      }
       if(action==='stop-request') {
         if(req.method==='GET'){json(res,stopRequests.get(id)??null);return true;}
         assert.equal(body.generation,attempt.generation);
@@ -293,14 +313,22 @@ export async function appFixture(t, options = {}) {
     }
     return false;
   };
+  const configuredAccounts=new Map();
   f.start = async (name = 'owner', extra = {}) => {
     const home = await f.home(name), backend = extra.backend ?? syntheticBackend(f.root, options);
+    const accountMode=extra.syntheticAccounts??configuredAccounts.get(name);
+    const withAccount=!extra.accountProviderConfigurations&&(Array.isArray(accountMode)||typeof accountMode==='string'||accountMode===true&&!extra.adapters);
+    if(withAccount)configuredAccounts.set(name,accountMode===true?'codex':accountMode);
+    const configurations=(Array.isArray(accountMode)?accountMode:[accountMode]).map(syntheticConfiguration);
+    const configuration=configurations[0];
+    if(withAccount)accountBackend(backend,configurations);
+    const fixtureAdapters=extra.adapters??(withAccount&&(configurations.length>1||configuration.descriptor.id==='claude')?syntheticAdapters(configurations):adapters(extra.codexRun??null));
     const backendFactory = extra.backendFactory ?? (async () => backend);
     const appStart = extra.startApp ?? options.startApp ?? startApp;
     backends.push(backend);
     if (extra.clock) f.clocks.set(name,extra.clock);
     const app = await appStart({home,origin:null,port:0,token:'synthetic-session-' + name,
-      backendFactory,adapters:adapters(extra.codexRun??null),lendingPace50:extra.lendingPace50??null,lendingRule:extra.lendingRule,lendingRuleAttestation:extra.lendingRuleAttestation,lendingNow:extra.lendingNow,
+      backendFactory,adapters:fixtureAdapters,lendingPace50:extra.lendingPace50??null,lendingRule:extra.lendingRule,lendingRuleAttestation:extra.lendingRuleAttestation,lendingNow:extra.lendingNow,
       // Fixtures begin from Off so each test turns lending on itself; a fresh install lends automatically (startApp's default).
       freshLending:extra.freshLending??options.freshLending??'off',shutdownProofMs:extra.shutdownProofMs,fetch:async (url,options) => {
         try {
@@ -328,7 +356,7 @@ export async function appFixture(t, options = {}) {
       lendingSignInProbe:async () => ({signedIn:null,source:'unavailable'}),
       // The lending identity check is a separate synthetic sandbox result; owner sign-in is not proxy evidence.
       lendingIdentityProbe:async ({harnessNames})=>({providers:await Promise.all(harnessNames.map(async id=>{
-        const entries=typeof extra.adapters==='function'?await extra.adapters():extra.adapters??adapters();
+        const entries=typeof extra.adapters==='function'?await extra.adapters():fixtureAdapters;
         const entry=entries.find(a=>a.spec.harness_id===id);
         return {harness_id:id,installed:entry?.installed??null,signedIn:entry?.proxySignedIn??null};
       }))}),
@@ -337,7 +365,7 @@ export async function appFixture(t, options = {}) {
       ...(extra.lendingUsageStore?{}:{faravanSignInProbe:async id=>{
         const secret=await (extra.lendingSignInProbe??(async()=>null))(id,{});
         if(secret?.signedIn===false)return false;
-        const entries=typeof extra.adapters==='function'?await extra.adapters():extra.adapters??adapters();
+        const entries=typeof extra.adapters==='function'?await extra.adapters():fixtureAdapters;
         const entry=entries.find(a=>a.spec.harness_id===id);
         const identity=extra.lendingIdentityProbe?(await extra.lendingIdentityProbe({harnessNames:[id]})).providers?.find(row=>row.harness_id===id)?.signedIn:entry?.proxySignedIn;
         if(typeof identity==='boolean')return identity;
@@ -345,18 +373,22 @@ export async function appFixture(t, options = {}) {
       }}),
       // A hermetic fixture must never fall through to a native sbx identity check.
       identityProbe:async ({harnessNames})=>({providers:await Promise.all(harnessNames.map(async id=>{
-        const entries=typeof extra.adapters==='function'?await extra.adapters():extra.adapters??adapters();
+        const entries=typeof extra.adapters==='function'?await extra.adapters():fixtureAdapters;
         const entry=entries.find(a=>a.spec.harness_id===id);
         return {harness_id:id,installed:entry?.installed??null,signedIn:entry?.signedIn??null};
       }))}),
       checkJobIsolation:async()=>({state:'pass'}),
+      ...(withAccount?{accountProviderConfigurations:configurations,accountTransportFetch:syntheticTransport}:{}),
       ...extra});
+    if(withAccount)for(const entry of configurations)await enrollSyntheticAccount(app,api,home,entry);
     const phases = [];
     for (const factory of ['client', 'lendingClient']) {
+      if(typeof app.device[factory]!=='function')continue; // Frozen rollback apps predate lendingClient.
       const getClient = app.device[factory].bind(app.device);
       app.device[factory] = async (...args) => {
         const client = await getClient(...args);
         for (const name of ['fetchArtifact','uploadResultArtifacts','resultContext','startAttempt','completeAttempt']) {
+          if(typeof client[name]!=='function')continue;
           const original = client[name].bind(client);
           client[name] = async (...values) => {
             const trace = step => {phases.push(name+':'+step);if(phases.length>30)phases.shift();};
@@ -373,7 +405,7 @@ export async function appFixture(t, options = {}) {
   };
   f.connect = async (lenderOptions = {}, ownerOptions = {}) => {
     // Borrowing owners only track jobs; avoid making their status reads monopolize the device lock.
-    const owner = await f.start('owner',{pollMs:250,...ownerOptions}), lender = await f.start('lender',lenderOptions);
+    const owner = await f.start('owner',{pollMs:250,...ownerOptions}), lender = await f.start('lender',{syntheticAccounts:true,...lenderOptions});
     await f.provisionFromHome('owner');
     const circle = await api(owner.app,'/api/circles',{method:'POST',body:{origin:f.origin,name:'Synthetic friends'}});
     const {invite} = await api(owner.app,'/api/circles/' + circle.id + '/invite',{method:'POST',body:{}});
@@ -386,7 +418,7 @@ export async function appFixture(t, options = {}) {
   };
 
   f.realConnect = async ({quotas, lenderOptions = {}, ownerOptions = {}} = {}) => {
-    const owner = await f.start('owner',{pollMs:250,...ownerOptions}), declining = await f.start('declining'), lender = await f.start('lender',lenderOptions);
+    const owner = await f.start('owner',{pollMs:250,...ownerOptions}), declining = await f.start('declining',{syntheticAccounts:true}), lender = await f.start('lender',{syntheticAccounts:true,...lenderOptions});
     let handler, store;
     const realRequests = [], realHeartbeats = [];
     // The incumbent can be taken away and returned: while it is down every connection to it is cut, as an unreachable host.

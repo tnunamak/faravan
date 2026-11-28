@@ -1,4 +1,5 @@
 import './helpers/no-browser.mjs';
+import {fixtureAccounts,accountHeartbeat} from './helpers/run-request-fixture.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -28,7 +29,7 @@ const segment = digest => digest.slice(7);
 // keys[0] author, keys[1] lender (both in the initial roster), keys[2] root, keys[3] joins later.
 const AUTHOR = 0, LENDER = 1, ROOT = 2, LATER = 3;
 const advertisement = {
-  harnesses: ['codex'], models: ['example-model'], capabilities: ['patch-output'],
+  harnesses: ['codex'], models: ['example-model'], capabilities: ['patch-output','run_request_v1'], accounts:fixtureAccounts(),
   egress: ['provider-only'], enforced_limits: Object.keys(vectors.job.payload.requirements.limits),
   max_limits: vectors.job.payload.requirements.limits,
 };
@@ -81,10 +82,14 @@ function storeFixture(t) {
       store.installRoster(roster, ctx); epoch += 1;
     },
     claim(digest, device = LENDER) {
+      const heartbeat=accountHeartbeat(advertisement.accounts);
+      store.heartbeat(fp[device],heartbeat,f.ctx(device,'POST','/heartbeat',heartbeat));
       const body = { advertisement, lease_seconds: 120 };
       return store.claimJob(fp[device], digest, advertisement, f.ctx(device, 'POST', '/jobs/' + segment(digest) + '/claim', body), 120);
     },
     claimNext(device) {
+      const heartbeat=accountHeartbeat(advertisement.accounts);
+      store.heartbeat(fp[device],heartbeat,f.ctx(device,'POST','/heartbeat',heartbeat));
       return store.claimNext(fp[device], advertisement, f.ctx(device, 'POST', '/jobs/claim-next', { advertisement, lease_seconds: 120 }), 120);
     },
     start(a, device = LENDER) {
@@ -93,7 +98,8 @@ function storeFixture(t) {
     complete(job, a, device = LENDER) {
       const result = p.signEnvelope('result', { ...vectors.result.payload, job_digest: p.digest(job.payload),
         attempt_id: a.attempt_id, generation: a.generation, executor: fp[device], roster_epoch: epoch,
-        submitted_at: iso(now) }, keys[device]);
+        submitted_at: iso(now),receipt:{...vectors.result.payload.receipt,selection:a.selection,model:a.selection.modelId,
+          capabilities_applied:[...vectors.result.payload.receipt.capabilities_applied,'run_request_v1']} }, keys[device]);
       return store.complete(result, f.ctx(device, 'POST', '/attempts/' + a.attempt_id + '/complete', result));
     },
     progress(digest, a, device = LENDER) {
@@ -110,9 +116,9 @@ function storeFixture(t) {
         remove: () => store.deleteJob(fp[device], digest, f.ctx(device, 'POST', '/jobs/' + s + '/delete', {})),
         attempt: id => store.getAttempt(fp[device], id, f.ctx(device, 'GET', '/attempts/' + id)),
         artifact: (d, method = 'GET') => store.getArtifact(fp[device], d, f.ctx(device, method, '/artifacts/' + segment(d)), method),
-        list: () => store.listJobs(fp[device], { limit: 50 }, f.ctx(device, 'GET', '/jobs?limit=50')).items.map(i => i.job_digest),
+        list: () => store.listJobs(fp[device], { limit: 50, accepts:['run_request_v1','results_v1'] }, f.ctx(device, 'GET', '/jobs?limit=50')).items.map(i => i.job_digest),
         offers: () => {
-          const poll = store.openOffersPoll(fp[device], { limit: 50 }, { ...f.ctx(device, 'GET', '/offers?limit=50'), route: '/offers?limit=50', bodyBytes: Buffer.alloc(0) });
+          const poll = store.openOffersPoll(fp[device], { limit: 50, accepts:['run_request_v1','results_v1'] }, { ...f.ctx(device, 'GET', '/offers?limit=50'), route: '/offers?limit=50', bodyBytes: Buffer.alloc(0) });
           try { return poll.poll().items.map(i => i.job_digest); } finally { poll.close(); }
         },
         cancel: () => {

@@ -33,7 +33,7 @@ test('a denied stopped legacy attempt retains its full charge',async t=>{
  const f=await lenderFixture(t),attempt=f.attempt();f.policy.enabled=false;f.policy.recoveryOnly=true;
  await f.policy.storage.set({day:'2026-10-09',jobs:1,milliseconds:120000,pending:{jobId:'old-job',attemptId:attempt.attempt_id,attempt,reservedMs:120000,agentStartDenied:true,stopReason:'stopped_by_lender',stopReleaseKey:'release',stopReportKey:'report'}});
  f.backend.reconcilePending=async row=>({removed:true,full_charge:true,attemptId:row.attemptId});
- const controller=new AbortController(),lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock});const running=lender.start(controller.signal);running.catch(()=>{});
+ const controller=new AbortController(),lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock});const running=lender.start(controller.signal);running.catch(()=>{});
  try{await until(()=>f.saved().pending===null,'legacy stop closes');assert.equal(f.saved().jobs,1);assert.equal(f.saved().milliseconds,120000);}finally{controller.abort();await running.catch(()=>{});}
 });
 
@@ -56,8 +56,8 @@ test('pending recovery rejects proof for a different recorded HOME',async t=>{
  await f.policy.storage.set({day:'2026-10-09',jobs:1,milliseconds:120000,pending:{...f.backend.sandboxOwnership(),jobId:'scoped-job',attemptId:attempt.attempt_id,attempt,reservedMs:120000}});
  f.backend.isSandboxHomeCurrent=()=>true;
  f.backend.reconcilePending=async row=>({removed:true,sbx_home:'/another/home',attemptId:row.attemptId});
- const controller=new AbortController(),lender=createLender({client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,onEvent:e=>events.push(e)});const running=lender.start(controller.signal);running.catch(()=>{});
- try{await until(()=>f.saved().pending===null||events.some(e=>e.reason==='cessation_unverified'),'bound recovery decision');assert.ok(f.saved().pending,'a different HOME cannot discharge the recorded hold');}
+ const controller=new AbortController(),lender=createLender({...f.runOptions,client:f.client,backend:f.backend,policy:f.policy,adapters:f.adapters,clock:f.clock,onEvent:e=>events.push(e)});const running=lender.start(controller.signal);running.catch(()=>{});
+ try{await until(()=>f.saved().pending===null||events.some(e=>e.reason==='cleanup_pending'),'bound recovery decision');assert.ok(f.saved().pending,'a different HOME cannot discharge the recorded hold');}
  finally{controller.abort();await running.catch(()=>{});}
 });
 

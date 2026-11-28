@@ -6,34 +6,7 @@ import {normalizeLendingPolicy} from '../../lib/v1/lending-policy.mjs';
 let harness;
 test.beforeAll(async()=>{harness=await startHarness();});
 test.afterAll(async()=>{await harness?.stop();});
-test('fresh limits page has a usable engine-backed limit at desktop and phone widths',async({browser})=>{
- const context=await browser.newContext(),page=await context.newPage();
- try {
-  const settingsResponse=page.waitForResponse(response=>response.request().method()==='GET'&&
-   new URL(response.url()).pathname==='/api/lending/owner-settings');
-  await page.goto((await harness.link('owner'))+'#/lend/limits');
-  const limit=page.getByRole('spinbutton',{name:'Most one friend’s job may spend'});
-  for(const {width,height} of [{width:1440,height:900},{width:390,height:844}]){
-   await page.setViewportSize({width,height});
-   await expect(page.getByRole('heading',{name:'What you lend',exact:true})).toBeVisible();
-   await expect(page.getByText(/strategy was migrated/i)).toHaveCount(0);
-   await expect(page.locator('main')).not.toContainText(/Protection source/i);
-   await expect(limit).toBeVisible();
-   await expect(limit).toBeEnabled();
-   await expect.poll(async()=>Number(await limit.getAttribute('min'))).toBeGreaterThan(0);
-   const minimum=Number(await limit.getAttribute('min'));
-   const settings=await (await settingsResponse).json();
-   expect(settings.minimums.map(row=>row.minimumMaxJobUsd)).toContain(minimum);
-   const current=await limit.inputValue();
-   expect(Number(current)).toBeGreaterThanOrEqual(minimum);
-   await limit.fill(current);
-   await expect(limit).toHaveValue(current);
-   await expect(page.getByRole('button',{name:'Save limit'})).toBeEnabled();
-   await mkdir(OUT,{recursive:true});
-   await page.screenshot({path:`${OUT}/fresh-limits-${width}.png`,fullPage:true});
-  }
- }finally{await context.close();}
-});
+
 async function fixture(page) {
  let version=7,rules=[],limits={timeZone:'America/Chicago',dailyJobs:null,dailyMinutes:null,maxWallSeconds:null,quotaReserve:30,idleOnly:true,lendingPolicy:normalizeLendingPolicy({})};
  const posts={limits:[],rules:[]};

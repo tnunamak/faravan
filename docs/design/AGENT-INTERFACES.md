@@ -184,11 +184,11 @@ holds the budget.
 
 | Surface | Before the registry | After |
 |---|---|---|
-| UI (web app or tray) | 130 of 148 | 130 of 148 (unchanged; the UI calls the bound routes) |
-| CLI | 23 of 148 | 148 of 148 |
-| HTTP | 125 of 148 (REST routes) | 146 of 148 (`POST /api/ops/<id>`; the 125 REST routes still work) |
-| MCP | 5 of 148 | 130 of 148 |
-| All four | 4 of 148 | 130 of 148 on CLI, HTTP and MCP (2 human-only: CLI only; 16 excluded from MCP: CLI and HTTP) |
+| UI (web app or tray) | 129 of 141 | 129 of 141 (unchanged; the UI calls the bound routes) |
+| CLI | 23 of 141 | 141 of 141 |
+| HTTP | 118 of 141 (REST routes) | 139 of 141 (`POST /api/ops/<id>`; the 118 REST routes still work) |
+| MCP | 5 of 141 | 123 of 141 |
+| All four | 4 of 141 | 123 of 141 on CLI, HTTP and MCP (2 human-only: CLI only; 16 excluded from MCP: CLI and HTTP) |
 
 Before: UI screen, CLI command, REST route and MCP tool that existed before the registry. After: generated names. A dash means none.
 
@@ -232,16 +232,9 @@ Before: UI screen, CLI command, REST route and MCP tool that existed before the 
 | `lending.off` Turn lending off | write | Lend | - | `POST /api/lending/off` | - | `faravan lending off` | `lending_off` |
 | `lending.pause` Pause lending | write | Lend, Tray | - | `POST /api/lending/pause` | - | `faravan lending pause` | `lending_pause` |
 | `lending.stop_job` Stop the running job | consequential | Lend, Home | - | `POST /api/lending/stop` | - | `faravan lending stop-job` | `lending_stop_job` |
-| `lending.release_hold` Charge and close a stopped job hold | consequential | Lend | - | `POST /api/lending/release-hold` | - | `faravan lending release-hold` | `lending_release_hold` |
 | `lending.set_mode` Set approval mode | consequential | Lend, Home | - | `POST /api/lending/mode` | - | `faravan lending set-mode` | `lending_set_mode` |
 | `lending.dismiss_prompt` Defer lending choice | write | Home | - | `POST /api/lending/prompts/dismiss` | - | `faravan lending dismiss-prompt` | - |
 | `lending.set_rules` Set standing rules | consequential | Limits | - | `POST /api/lending/rules` | - | `faravan lending set-rules` | `lending_set_rules` |
-| `lending.owner_settings` Saved lending limit | read | - | - | `GET /api/lending/owner-settings` | - | `faravan lending owner-settings` | `lending_owner_settings` |
-| `lending.set_owner_settings` Set the saved lending limit | consequential | - | - | `POST /api/lending/owner-settings` | - | `faravan lending set-owner-settings` | `lending_set_owner_settings` |
-| `lending.presence` Jobs allowed while I am here | read | - | - | `GET /api/lending/presence` | - | `faravan lending presence` | `lending_presence` |
-| `lending.allow_once` Allow one job while I am here | consequential | - | - | `POST /api/lending/presence/allow-once` | - | `faravan lending allow-once` | `lending_allow_once` |
-| `lending.window_origins` Who opened each lending window | read | - | - | `GET /api/lending/window-origins` | - | `faravan lending window-origins` | `lending_window_origins` |
-| `lending.attest_window` I opened this window | consequential | - | - | `POST /api/lending/window-origins/attest` | - | `faravan lending attest-window` | `lending_attest_window` |
 | `lending.log` Lending problem log | read | Lend | `faravan lending log` | - | - | `faravan lending log` | `lending_log` |
 | `lending.history.settings.get` Local agent log learning setting | read | Lend | - | `GET /api/lending/history-learning` | - | `faravan lending history settings get` | `lending_history_settings_get` |
 | `lending.history.settings.set` Change local agent log learning | write | Lend | - | `POST /api/lending/history-learning` | - | `faravan lending history settings set` | `lending_history_settings_set` |

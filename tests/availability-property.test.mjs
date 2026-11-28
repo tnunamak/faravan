@@ -61,7 +61,7 @@ test('C: each hard account availability fact gives one specific next action', ()
     const decision = decideLending({...baseline, ...input});
     assert.equal(decision.kind, 'hold', code);
     assert.equal(decision.code, code);
-    assert.deepEqual(Object.keys(decision).sort(), ['code','kind','nextAction','schemaVersion']);
+    assert.deepEqual(Object.keys(decision).sort(), ['code','kind','nextAction','schemaVersion',...(code==='provider_limit_reached'?['nextEvaluationAtMs']:[])].sort());
     assert.deepEqual(decision.nextAction.target, {accountId});
     assert.equal(decision.nextAction.id, action);
     assert.ok(decision.nextAction.label, code);

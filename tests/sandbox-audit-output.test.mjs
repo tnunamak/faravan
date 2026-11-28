@@ -59,7 +59,7 @@ for (const stream of ['stdout', 'stderr']) test('M3: lender cancels a cumulative
   };
   f.backend.cancel = async () => { f.calls.push(['cancel']); };
   const controller = new AbortController();
-  const lender = createLender({ client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
+  const lender = createLender({...f.runOptions, client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
     clock: f.clock, approve: async () => true, credentialValues: async () => [], onEvent: event => f.events.push(event) });
   const running = lender.start(controller.signal);
   t.after(async () => { controller.abort(); await running; });

@@ -53,7 +53,9 @@ GETs do not launch browsers, authentication, repairs or enrollment.
   actionable attention take precedence; expected daily caps and allowance reserve show "Paused",
   while eligible automatic waiting for idle keeps "Lending on". This is text for the native icon client.
 - GET /api/activity?after=ID: polling array of ordered {id,type,data,at} events.
-- GET /api/events?after=ID: SSE replay and live updates; Last-Event-ID also supported. Event types include
+- GET /api/events?after=ID: SSE replay and live updates; Last-Event-ID also supported.
+  Admission changes emit readiness {seq,ready,reason}; ready has a null reason, holds use the closed lending list.
+  Observation-only refresh events retain {refresh:true}. Event types include
   lending, approval, agents, limits, job and attention. IDs are process-local increasing integers.
   Replay retains at most 2,000 events / 2 MiB. An individual event over 256 KiB becomes
   {refresh:true,truncated:true}; refetch the affected resource. Slow readers are disconnected.
@@ -149,7 +151,9 @@ Each lent job checks network and credential isolation in its prepared sandbox be
   complete; GET /api/readiness is computed per request, so it reflects the new sign-in immediately.
   Each status change emits a "signin" event {flowId,target,status} (no url or code).
 - GET /api/lending: enabled, circle, mode, limits and lender snapshot with label/current/paused.
-- POST /api/lending/on and /resume: {circle?}; enforce readiness, selected agent and membership.
+- POST /api/lending/on and /resume: {circle?}; save lending intent and check circle membership.
+  Readiness means some advertised job can run. Per-job limits refuse an offer before claiming it.
+  A missing or signed-out account returns the lending decision in status rather than an agent_not_ready veto.
   A blocker never turns lending off (S1.1c). A failed baseline check (Docker missing, stopped or signed out, the sandbox safety
   test, the circle's host) holds new claims through the lender's gate and is named in the status; `intent.on` stays what the
   person set, the lender stays enabled, and the next passing check lets claims resume without any action. Nothing is latched
@@ -190,8 +194,7 @@ Each lent job checks network and credential isolation in its prepared sandbox be
   Missing confirmation/invalid fields return invalid_request (400); a stale attempt, no active
   execution, or an attempt already committing its result returns no_current_job (409).
   Lending is disabled and saved before aborting. The response acknowledges the stop request,
-  not sandbox removal. Follow lending events/status for stopping, cessation_unverified,
-  stop_report_pending or stopped. The executor's abort path cancels and destroys the sandbox;
+  not sandbox removal. Follow lending events/status for stopping with `cleanup_pending`, or stopped. The executor's abort path cancels and destroys the sandbox;
   release with reason {"code":"stopped_by_lender"} and /stopped are sent only after a
   cleanupReceipt.removed:true or attempt-bound backend recovery proof. Unknown removal keeps
   the reservation and blocks new work. Persisted stop intent/proof and report idempotency keys
@@ -217,15 +220,6 @@ Each lent job checks network and credential isolation in its prepared sandbox be
 - GET /api/lending/history-learning: {enabled}. Learning from local Claude Code and Codex logs is on by default and imports
   automatically without a prompt. POST /api/lending/history-learning: {enabled}. Turning it off deletes imported scores and
   samples and keeps meter records.
-- GET /api/lending/owner-settings: the saved per-job lending limit ({maxJobUsd, weeklyOverrunPoints, shortOverrunPoints}, null when unset)
-  and its audit trail. POST /api/lending/owner-settings: {maxJobUsd (USD, above one worst-case call), reason}. Unset means the runtime
-  default of $4 applies when it covers one call. For a Claude model whose worst-case call costs $4 or more, the unset default is that call allowance plus $4 for useful work ($9.28 for the default model at current catalog prices). A saved cap is always used exactly. Changes are audited with the value they replace. Available only with the internal pace-50 option.
-- GET /api/lending/presence: jobs the owner allowed to run while present that are still usable, and the audit trail.
-  POST /api/lending/presence/allow-once: {digest (sha256:<64 hex>), reason, minutes (1-30, default 15)}. One named job, spent by its
-  own admission, expiring. Nothing else is allowed. Available only with the internal pace-50 option.
-- GET /api/lending/window-origins: the window records (lent, or opened by the owner) and the open short windows the lender saw recently.
-  POST /api/lending/window-origins/attest: {instance, reason}. The owner attests a window the lender saw open recently; a window a lent
-  job opened cannot be attested. Available only with the internal pace-50 option.
 - GET /api/approvals: review cards with id, verified requester key (the UI resolves the roster device_name and shows a key code), circle/job, source reference with archive artifact.bytes, full prompt,
   source reference, harness, model options, runtimeSeconds, network, credentialInGuest, startsNow and
   protection. Protection is evaluated for this card's exact requirements, not just app defaults.

@@ -128,7 +128,8 @@ const projectionOf = (admissionReason, over = {}) => ({schemaVersion:2, kind:'le
 
 test('an automatic wait says why and offers no action, on every surface', async () => {
   const {lendingSummary} = await import('../lib/v1/lending-summary.mjs');
-  for (const admissionReason of ['user_active', 'observation_changed', 'daily_limit', 'quota_reserve']) {
+  // The summary reads the projection's closed reason list (createLendingProjection translates the retired private causes first).
+  for (const admissionReason of ['owner_active', 'readiness_changed', 'daily_limit', 'no_spare']) {
     const summary = lendingSummary(projectionOf(admissionReason));
     assert.equal(summary.action, null, admissionReason + ' clears by itself');
     assert.ok(summary.reason.length > 0, admissionReason + ' says why');

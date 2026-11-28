@@ -56,6 +56,14 @@
     "expression": "exec('git',['-C',cwd,'-c','core.fsmonitor=false','-c','safe.bareRepository=explicit',...args],{\n  encoding:'utf8',maxBuffer:64*1024*1024,\n  env:{...process.env,GIT_OPTIONAL_LOCKS:'0',GIT_TERMINAL_PROMPT:'0'},\n})"
   },
   {
+    "file": "lib/git-source-status.mjs",
+    "line": 16,
+    "scope": "git",
+    "callee": "exec",
+    "key": "74a9a475a5757058b527b32c8b0c372f81ad0a88b0f500520c94ba77eca36834",
+    "expression": "exec('git',['--no-lazy-fetch','--no-replace-objects','-C',cwd,\n    '-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','safe.bareRepository=explicit',\n    '-c','protocol.allow=never',...args],{\n    encoding:'utf8',maxBuffer:64*1024*1024,timeout:5000,killSignal:'SIGKILL',env:environment(extra,dataConfig),...capture,\n  })"
+  },
+  {
     "file": "lib/github-auth.mjs",
     "line": 29,
     "scope": "spawnCapture",
@@ -153,10 +161,10 @@
   },
   {
     "file": "lib/source-package.mjs",
-    "line": 102,
+    "line": 78,
     "scope": "packageSourceDirectory",
     "callee": "execFileAsync",
-    "key": "8787c8a1c5b222b71d02735685b636b2c46e353a6966ce27a4d46502d875e634",
+    "key": "9750f071ce0ea09fcb4f2e36a1f9fb2b10e098cdddf784112f7fc3e6a8e8fdcb",
     "expression": "execFileAsync('tar', ['-cf', '-', '--no-xattrs', '--exclude=.git', '-C', dir, '.'], { maxBuffer: 1024 * 1024 * 1024, encoding: 'buffer' })"
   },
   {
@@ -377,18 +385,18 @@
   },
   {
     "file": "lib/v1/macos-update-helper.mjs",
-    "line": 77,
+    "line": 79,
     "scope": "verifyBundle",
     "callee": "exec",
-    "key": "cd6ae2a0c7827cbdeb0445fecaa6fbf64f739a5606e3c25e4ec1edfe50e0a25e",
+    "key": "846bdbaff26a41a303723814dea65c895d834ebbcfd4b407d20441fa9fa76da7",
     "expression": "exec('/usr/bin/plutil',['-extract','CFBundleIdentifier','raw','-o','-',join(path,required[0])],{timeout:10000,encoding:'utf8'})"
   },
   {
     "file": "lib/v1/macos-update-helper.mjs",
-    "line": 79,
+    "line": 81,
     "scope": "verifyBundle",
     "callee": "exec",
-    "key": "83791510afe3c9bc5f46df8d4271e85478874d2ec02d9e47a769770cd7d944e7",
+    "key": "140a951a9046fca75425eac50d00597adb9e494c0cbfd59b399e04acb12beb5b",
     "expression": "exec('/usr/bin/codesign',['--verify','--deep','--strict',path],{timeout:30000})"
   },
   {
@@ -633,10 +641,10 @@
   },
   {
     "file": "packaging/journey/smoke.mjs",
-    "line": 96,
+    "line": 98,
     "scope": "spawnApp",
     "callee": "fork",
-    "key": "43ce3c165382aa7f7bac7766e8eaa16e8be6629799beba7fee737619dc6cca6e",
+    "key": "5fcc16cfb410af993546f919d58860e4f09e522be66b9538e1292da16d365276",
     "expression": "fork(join(HERE, 'smoke-child.mjs'), [JSON.stringify(cfg)], {execPath: join(installRoot, 'runtime/bin/node'),\n    env: childEnv(role), cwd: dirs[role].base, stdio: ['ignore', out, out, 'ipc']})"
   },
   {
@@ -763,5 +771,21 @@
     "key": "31714222c6a6ef0309796867d6bd0a65a9f6b5fb7131d587b03233b89fdb8b7b",
     "expression": "execFile(shell,args,{env,timeout:timeoutMs,maxBuffer:1<<20,encoding:'utf8'},(error,stdout)=>error?reject(error):resolve(stdout))",
     "reason": "Runs only the person's own login shell to print its PATH, so Faravan can find their claude or codex command; never sbx."
+  },
+  {
+    "file": "lib/v1/mcp.mjs",
+    "line": 267,
+    "scope": "runMcpServer",
+    "callee": "execFileSync",
+    "key": "7545aff8fa2d6aa0dad24527714b1e4095504136931cf735c945aa6a8b094ad5",
+    "expression": "execFileSync('git',['-C',cwd,'-c','core.fsmonitor=false','rev-parse','--show-toplevel'],{encoding:'utf8',stdio:['ignore','pipe','ignore'],timeout:10000})"
+  },
+  {
+    "file": "lib/v1/mcp.mjs",
+    "line": 372,
+    "scope": "runTool",
+    "callee": "execFileSync",
+    "key": "2f90098b588561e5a185b3dac9458157ece3d882dc8a8ea7c6e19d179474f390",
+    "expression": "execFileSync('git',['-C',opInput.repo.path,'-c','core.fsmonitor=false','rev-parse','--show-toplevel'],{encoding:'utf8',stdio:['ignore','pipe','ignore'],timeout:10000})"
   }
 ]

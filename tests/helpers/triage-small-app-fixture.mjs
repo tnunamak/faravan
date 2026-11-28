@@ -1,9 +1,8 @@
 import {appFixture as baseFixture, waitFor as baseWaitFor, api} from './v1-app-fixture.mjs';
-import {createSyntheticPace50Source} from './pace50-synthetic-source.mjs';
 export * from './v1-app-fixture.mjs';
 const activeApps = new Set();
-export async function waitFor(...args) {
-  try { return await baseWaitFor(...args); }
+export async function waitFor(check,label,timeout=30000) {
+  try { return await baseWaitFor(check,label,timeout); }
   catch (error) {
     const states = await Promise.all([...activeApps].map(async app => {
       try { const view = await api(app, '/api/lending');
@@ -20,11 +19,8 @@ export async function waitFor(...args) {
 export async function appFixture(t, options = {}) {
   const f = await baseFixture(t, options);
   const start = f.start;
-  const sources = new Map();
   f.start = async (name = 'owner', extra = {}) => {
-    if (!sources.has(name)) sources.set(name, createSyntheticPace50Source({start: Date.now()}));
-    const result = await start(name, {lendingPace50: {source: sources.get(name),
-      account_week_id: 'synthetic-week-1'}, codexRun: {model: 'gpt-6-luna'}, ...extra});
+    const result = await start(name, {syntheticAccounts:true,codexRun:{model:'gpt-6-luna'},...extra});
     // startApp replaces adapter run hints with saved settings; configure through the real owner API.
     const agents = await api(result.app, '/api/agents');
     if (agents.find(row => row.id === 'codex')?.run?.model == null)

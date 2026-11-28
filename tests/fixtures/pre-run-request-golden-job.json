@@ -1,0 +1,57 @@
+{
+  "warning": "TEST-ONLY SYNTHETIC KEYS. Fixed repeated-byte seeds have no account or production identity. NEVER use these keys for real enrollment.",
+  "revision": "dc3432854ea309e4f6595ae808906c6e0fce2150",
+  "publicKey": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+  "job": {
+    "payload": {
+      "schema": "faravan.job.v1",
+      "circle": "11111111-1111-4111-8111-111111111111",
+      "author": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
+      "roster_epoch": 7,
+      "intent_id": "22222222-2222-4222-8222-222222222222",
+      "created_at": "2026-10-09T12:00:00Z",
+      "expires_at": "2026-10-09T13:00:00Z",
+      "max_attempts": 3,
+      "source": {
+        "kind": "archive",
+        "artifact": {
+          "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "bytes": 1000,
+          "media_type": "application/gzip"
+        }
+      },
+      "prompt": {
+        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "bytes": 80,
+        "media_type": "text/plain"
+      },
+      "requirements": {
+        "harness": [
+          "codex"
+        ],
+        "model": {
+          "any_of": [
+            "example-model"
+          ]
+        },
+        "capabilities": [
+          "patch-output"
+        ],
+        "egress": "provider-only",
+        "limits": {
+          "wall_seconds": 600,
+          "cpu": 2,
+          "memory_bytes": 2147483648,
+          "disk_bytes": 4294967296,
+          "output_bytes": 10485760
+        }
+      },
+      "input_protection": "none"
+    },
+    "signature": {
+      "algorithm": "Ed25519",
+      "key_id": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
+      "value": "URH9wrqsIyMrDRT2olbokF0oGFAonY5ShBeXMwMaa0M9FksE23C3nXukT8abVBTQS8A_yxq6I3hERwJqPHbnCw"
+    }
+  }
+}

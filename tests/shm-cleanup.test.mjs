@@ -97,11 +97,10 @@ for (const helper of ['owned', 'plain']) {
 
 // Passing runs of the suites that create directories. One per creator: telemetry-offline (tel-offline-, the simulateOutage
 // pair), telemetry-epochs (tel-epoch-), telemetry-crash (tel-test-, the harness), v1-circle-profile (lock sidecars beside homes),
-// v1-lending-persisted-holds (persisted-hold-), v1-lending-native-meter-session (native-meter-journal-), v1-lender-pace50-provider-roster
-// (real-provider-roster-).
+// v1-lending-native-meter-session (direct native guard fixture). Retired candidate suites no longer allocate directories.
 const SUITES = [
   'tests/telemetry-offline.test.mjs', 'tests/telemetry-epochs.test.mjs', 'tests/telemetry-crash.test.mjs', 'tests/v1-circle-profile.test.mjs',
-  'tests/v1-lending-persisted-holds.test.mjs', 'tests/v1-lending-native-meter-session.test.mjs', 'tests/v1-lender-pace50-provider-roster.test.mjs',
+  'tests/v1-lending-native-meter-session.test.mjs',
 ];
 for (const file of SUITES) {
   test(`a passing run of ${basename(file)} leaves no temporary directory behind`, { timeout: 330000 }, async () => {

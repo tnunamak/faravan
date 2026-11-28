@@ -27,10 +27,8 @@ test('Quit continues after the shutdown bound when a usage check never settles, 
   await api(lender.app, '/api/agents/claude-code-subscription/run', {method: 'POST', body: {model: 'claude-haiku-5-5', effort: null}});
   await api(lender.app, '/api/lending/mode', {method: 'POST', body: {circle: circle.id, mode: 'auto'}});
   await api(lender.app, '/api/lending/on', {method: 'POST', body: {circle: circle.id}});
-  await api(owner.app, '/api/jobs', {method: 'POST', body: {circle: circle.id,
-    git: {url: 'https://github.com/example/synthetic.git', commit: '1'.repeat(40)},
-    prompt: 'Synthetic Claude admission: no external execution.', harness: 'claude-code-subscription',
-    model: 'claude-haiku-5-5', budget_v1: {max_list_usd: 2}}});
+  const refresh=api(lender.app,'/api/agents/refresh',{method:'POST',body:{agents:['claude-code-subscription']}});
+  refresh.catch(()=>{});
   await waitFor(() => started > 0, 'the usage check to start and hang', 60000);
   const began = Date.now();
   const closed=await lender.app.close();

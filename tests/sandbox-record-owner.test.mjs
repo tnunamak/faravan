@@ -466,7 +466,9 @@ test('case 3b: a live watcher whose record makes no progress is not a replacemen
   const f=fixture(t),row=f.adopted(f.row());f.persist(row);
   saveAck(f,row,await f.watcher().acknowledge(row));
   const serving=need(watcherModule.sharedWatchServing,'sharedWatchServing');
-  assert.ok(serving(row),'the watcher serves while it makes progress');
+  // The child can already be in its next record action when acknowledgement
+  // returns. A fresh tenure has no progress until that action finishes.
+  await until(()=>serving(row),'the watcher serves while it makes progress',{timeout:5000});
   // The status heartbeat stays fresh and the process stays alive; only the record's progress stops. A clock jump shows it.
   const later=Date.now()+ownerModule.STALL_MS+60000;
   assert.equal(serving(row,{now:later}),null,'a fresh status heartbeat cannot acknowledge the hand-off');

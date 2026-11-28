@@ -1,4 +1,5 @@
 import './helpers/no-browser.mjs';
+import {fixtureAccounts,accountHeartbeat} from './helpers/run-request-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -25,7 +26,7 @@ const base = '/v1/circles/' + circle;
 const start = Date.parse('2026-10-09T12:00:00Z') / 1000;
 const iso = n => new Date(n * 1000).toISOString().replace('.000Z', 'Z');
 const ad = {
-  harnesses: ['codex'], models: ['example-model'], capabilities: ['patch-output'], egress: ['provider-only'],
+  harnesses: ['codex'], models: ['example-model'], capabilities: ['patch-output','run_request_v1'], accounts:fixtureAccounts(), egress: ['provider-only'],
   enforced_limits: Object.keys(vectors.job.payload.requirements.limits), max_limits: vectors.job.payload.requirements.limits,
 };
 const sourceBytes = Buffer.from('test-only compressed source fixture'), promptBytes = Buffer.from('test-only prompt');
@@ -77,7 +78,7 @@ async function fixture(t) {
       const proof = p.buildRequestProof({ circle, roster_epoch: epoch, method, target: origin + base + route, body: bytes,
         content_type: read ? '' : 'application/json', artifact_media_type: '', idempotency_key: key, created: now,
         nonce: randomBytes(24).toString('base64url') }, keys[index]);
-      return fetch(origin + base + route, { method, headers: { 'Faravan-Proof': proof, ...headers,
+      return fetch(origin + base + route, { method, headers: { 'Faravan-Proof': proof,'Faravan-Client-Capabilities':'run_request_v1', ...headers,
         ...(read ? {} : { 'Content-Type': 'application/json', 'Content-Length': String(bytes.length), ...(key ? { 'Idempotency-Key': key } : {}) }) },
         ...(read ? {} : { body: bytes }) });
     },
@@ -90,6 +91,7 @@ async function fixture(t) {
       return (await borrower.submitJob(payload)).jobDigest;
     },
   };
+  for(const index of [1,3])await f.client(index).heartbeat(accountHeartbeat(ad.accounts));
   return f;
 }
 
@@ -142,7 +144,7 @@ test('borrower observes an anonymous decline and its watch wakes', async t => {
 test('job list and detail agree on comma-spaced client capabilities', async t => {
   const f=await fixture(t),digest=await f.publish(f.client(0));
   await f.client(1).declineJob(digest);
-  for(const value of ['results_v1, decline_count_v1','  decline_count_v1  ','unknown_v1, decline_count_v1, invalid-token']){
+  for(const value of ['results_v1, decline_count_v1, run_request_v1','  decline_count_v1 , run_request_v1  ','unknown_v1, decline_count_v1, run_request_v1, invalid-token']){
     const headers={'Faravan-Client-Capabilities':value};
     const list=await (await f.raw(0,'GET','/jobs?limit=50',undefined,f.epoch,headers)).json();
     const detail=await (await f.raw(0,'GET','/jobs/'+digest.slice(7),undefined,f.epoch,headers)).json();

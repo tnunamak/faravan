@@ -14,7 +14,8 @@
     },
     "requirements": {
       "capabilities": [
-        "patch-output"
+        "patch-output",
+        "run_request_v1"
       ],
       "egress": "provider-only",
       "harness": [
@@ -26,14 +27,19 @@
         "memory_bytes": 2147483648,
         "output_bytes": 10485760,
         "wall_seconds": 600
-      },
-      "model": {
-        "any_of": [
-          "example-model"
-        ]
       }
     },
     "roster_epoch": 7,
+    "runRequest": {
+      "effortId": null,
+      "models": [
+        {
+          "modelId": "example-model",
+          "providerId": "codex"
+        }
+      ],
+      "schemaVersion": 1
+    },
     "schema": "faravan.job.v1",
     "source": {
       "artifact": {
@@ -47,6 +53,6 @@
   "signature": {
     "algorithm": "Ed25519",
     "key_id": "sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
-    "value": "1Ijfou4bzz35o0nCKfbFywAi3a5BT4XP1mt1sxXA25WAuCjkNy2OXwY3dPZpIT5EImSRWFX3fm88d-xbp_w_Cg"
+    "value": "M3FAlzg53MhGmXmxz0JrCCu9SOPt2ULdH0NTXM_rcTRxUBrT8XezuhiMIFNXACPVLUOD0syRV00EXD8le8GTDw"
   }
 }

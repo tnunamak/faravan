@@ -14,7 +14,7 @@ test('an accepted incoming job stays listed while preparing without counting as 
   try {
     const input = {circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),
       prompt:'Keep the accepted request visible',harness:'codex'};
-    const sent = await api(owner.app,'/api/jobs',{method:'POST',body:input});
+    const sent = await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:input});
     await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
     await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
     await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});
@@ -28,7 +28,7 @@ test('an accepted incoming job stays listed while preparing without counting as 
     };
     await api(lender.app,'/api/approvals/'+card.id+'/accept',{method:'POST',body:{}});
     await preparing;
-    const queued = await api(owner.app,'/api/jobs',{method:'POST',body:{...input,prompt:'An unrelated waiting request'}});
+    const queued = await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{...input,prompt:'An unrelated waiting request'}});
     const rows = await api(lender.app,'/api/jobs');
     const row = rows.find(job => job.job_digest === sent.jobDigest);
     assert.ok(row,'accepted job is reachable while sandbox preparation is held');

@@ -11,7 +11,7 @@ const DEFAULTS = {
 };
 
 function input({strategy = 'automatic', strategyConfig = DEFAULTS, requestedUsdMicro = 25 * M,
-  ownerMaxJobUsdMicro = null, resetAtMs = RESET, known = true, weeklyUsedMicro = 10 * M,
+  resetAtMs = RESET, known = true, weeklyUsedMicro = 10 * M,
   shortUsedMicro = 10 * M, weeklyCommittedMicro = 0, shortCommittedMicro = 0,
   weeklyK = M, shortK = M, lentMicro = 0, friendValue = 100} = {}) {
   const resourceWindows = windows({weeklyUsedMicro, shortUsedMicro, weeklyCommittedMicro, shortCommittedMicro,
@@ -26,7 +26,7 @@ function input({strategy = 'automatic', strategyConfig = DEFAULTS, requestedUsdM
     worstCallUsdMicro:M, friendValue});
   return {now:NOW, observedAt:NOW, windows:resourceWindows, band:calibration({weeks:19,score:0}),
     owner:OWNER_NONE, gates:GATES, laterBurnCapacityMicro:0,
-    ownerMaxJobUsdMicro, strategy, strategyConfig, weeklyResource:'seven_day', job:task};
+    strategy, strategyConfig, weeklyResource:'seven_day', job:task};
 }
 
 test('switching strategy changes the capacity decision on identical provider evidence', () => {
@@ -68,10 +68,10 @@ test('a selected fixed-share strategy with no saved percentages holds with a spe
 
 test('every strategy stays inside the shared reset, usage, stop, and total-spend envelope', () => {
   for (const strategy of ['automatic','fixed_share','custom']) {
-    const make = patch => input({strategy, requestedUsdMicro:null, ownerMaxJobUsdMicro:5 * M, ...patch});
+    const make = patch => input({strategy, requestedUsdMicro:5 * M, ...patch});
     const admitted = decideObjectiveLend(make({}));
     assert.equal(admitted.admitted,true,`${strategy}: ${admitted.reasonCode}`);
-    assert.equal(admitted.exposureUsdMicro,5 * M,`${strategy} total owner cap`);
+    assert.equal(admitted.exposureUsdMicro,5 * M,`${strategy} requested size`);
     assert.equal(admitted.nativeBudgetUsdMicro,4 * M,`${strategy} deducts one worst call`);
 
     const stopped = decideObjectiveLend({...make({}), stopped:true});
@@ -100,7 +100,6 @@ test('strategy capacity property holds across usage, commitments, conversions an
         weeklyK:(80 + sample % 41) * 10_000,
         shortK:(70 + sample % 53) * 10_000,
         requestedUsdMicro:(1 + sample % 24) * M,
-        ownerMaxJobUsdMicro:sample % 5 === 0 ? 6 * M : null,
         lentMicro:(sample % 21) * M,
       }));
       if (!d.admitted) continue;
@@ -108,7 +107,6 @@ test('strategy capacity property holds across usage, commitments, conversions an
       assert.equal(d.nativeBudgetUsdMicro + d.worstCallUsdMicro, d.exposureUsdMicro,
         `${strategy} sample ${sample} reserves the full total spend`);
       assert.ok(d.exposureUsdMicro <= (1 + sample % 24) * M);
-      assert.ok(d.exposureUsdMicro <= ((sample % 5 === 0) ? 6 * M : Number.MAX_SAFE_INTEGER));
       assert.ok(d.reservePointsMicro.seven_day <= d.projection.lendablePoints.seven_day * M + 1);
       assert.ok(d.reservePointsMicro.five_hour <= d.projection.lendablePoints.five_hour * M + 1);
       assert.ok(Object.values(d.projection.resetsAt).every(reset => Date.parse(reset) > NOW + 150_000));

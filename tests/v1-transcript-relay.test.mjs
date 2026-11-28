@@ -1,4 +1,5 @@
 import './helpers/no-browser.mjs';
+import {fixtureAccounts,accountHeartbeat} from './helpers/run-request-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -22,7 +23,7 @@ const ids=keys.map(k=>p.fingerprint(p.exportPublicKey(k)));
 const vectors=Object.fromEntries(Object.entries(golden.objects).map(([k,v])=>[k,v.envelope]));
 const circle=vectors.job.payload.circle,base='/v1/circles/'+circle;
 const iso=n=>new Date(n*1000).toISOString().replace('.000Z','Z');
-const ad={harnesses:['codex'],models:['example-model'],capabilities:['patch-output'],egress:['provider-only'],
+const ad={harnesses:['codex'],models:['example-model'],capabilities:['patch-output','run_request_v1'],accounts:fixtureAccounts(),egress:['provider-only'],
   enforced_limits:Object.keys(vectors.job.payload.requirements.limits),max_limits:{...vectors.job.payload.requirements.limits,wall_seconds:10000}};
 const route=id=>'/jobs/'+id.slice(7)+'/transcript';
 const rejected=(fn,code)=>assert.rejects(fn,{code});
@@ -62,7 +63,7 @@ async function fixture(t,{quotas={},limits={}}={}) {
         requirements:{...vectors.job.payload.requirements,limits:{...vectors.job.payload.requirements.limits,wall_seconds:10000}},...overrides};
       return (await clients[0].submitJob(payload)).jobDigest;
     },
-    async claim(id,i=1,start=true) {const {attempt}=await clients[i].claimJob(id,ad);return start?clients[i].startAttempt(attempt):attempt;},
+    async claim(id,i=1,start=true) {await clients[i].heartbeat(accountHeartbeat(ad.accounts));const {attempt}=await clients[i].claimJob(id,ad);return start?clients[i].startAttempt(attempt):attempt;},
     post(id,a,{seq=1,text='{"type":"text","text":"synthetic"}\n',truncated=false}={},i=1) {
       const body={attempt:a.attempt_id,seq,text,truncated};return store.postLiveTranscript(ids[i],id,body,f.ctx(i,'POST',route(id),body));
     },
@@ -216,7 +217,6 @@ test('relay client gates old hosts and rejects malformed snapshots and acknowled
   value={job_digest:id,attempt:a.attempt_id,seq:2,at:iso(f.now)};
   await rejected(()=>make().postLiveTranscript(a,{seq:1,text:'',truncated:false}),'invalid_response');
 });
-
 
 test('relay atomic HTTP races and a second store preserve sequence, rate and replacement',async t=>{
   const f=await fixture(t),id=await f.job(),a=await f.claim(id);

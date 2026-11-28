@@ -37,9 +37,9 @@ test('a job that starts while the update downloads stops the swap, and lending c
   const {owner, lender, circle} = await f.connect({updater});
   await lendingOn(lender.app, circle);
   await waitFor(async () => (await api(lender.app, '/api/status')).state === 'ready', 'lending ready');
-  await api(owner.app, '/api/jobs', {method: 'POST', body: gitInput(circle)});
+  await api(owner.app, '/api/jobs', {headers:{'faravan-confirm':'yes'},method: 'POST', body: gitInput(circle)});
   await accept(lender.app);
-  await waitFor(() => lender.backend.calls.some(([kind]) => kind === 'run'), 'a job is running');
+  await waitFor(async()=>(await api(lender.app,'/api/status')).currentJob!==null,'the app observes the running job');
   updater.finish();
   assert.equal(await updater.asking, null, 'the exclusion refuses: a job is running');
   const status = await api(lender.app, '/api/status');
@@ -58,7 +58,7 @@ test('when nothing is running the exclusion stops new claims until its owner res
   const release = await updater.asking;
   assert.equal(typeof release, 'function');
   // While held, a job that arrives is not taken.
-  await api(owner.app, '/api/jobs', {method: 'POST', body: gitInput(circle)});
+  await api(owner.app, '/api/jobs', {headers:{'faravan-confirm':'yes'},method: 'POST', body: gitInput(circle)});
   await new Promise(resolve => setTimeout(resolve, 800));
   assert.deepEqual(await api(lender.app, '/api/approvals'), [], 'no job is claimed while the update holds the lender');
   release();

@@ -9,7 +9,7 @@ import {createSyntheticPace50Source} from './helpers/pace50-synthetic-source.mjs
 const gitInput=circle=>({circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Decision receipt test',harness:'codex'});
 test('explicit decline records its own decision and approval state',{timeout:120000},async t=>{
   const f=await appFixture(t),{owner,declining:lender,circle}=await f.realConnect();
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:{...gitInput(circle),send_anyway:true}});
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{...gitInput(circle),send_anyway:true}});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
@@ -32,7 +32,7 @@ test('explicit decline records its own decision and approval state',{timeout:120
 for(const decision of ['accept','skip'])test('local '+decision+' records the owner, device, job and time before responding',{timeout:120000},async t=>{
   const f=await appFixture(t),{owner,lender,circle}=await f.connect();
   await api(lender.app,'/api/devices',{method:'POST',body:{name:'Review laptop',ownerName:'Sam'}});
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:gitInput(circle)});
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:gitInput(circle)});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
@@ -60,21 +60,20 @@ test('freeze audience refuses an old host before uploading prompt or source',{ti
   const {owner,circle}=await f.connect();
   const uploads=()=>f.requests.filter(r=>r.method==='PUT'||r.route?.includes('artifact-reservations')).length;
   const before=uploads();
-  const response=await api(owner.app,'/api/jobs',{method:'POST',body:{...gitInput(circle),freeze_audience:true},status:409});
+  const response=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{...gitInput(circle),freeze_audience:true},status:409});
   assert.equal(response.code,'host_too_old');assert.equal(uploads(),before);
 });
 
 test('automatic lending records the policy and decider for each acceptance',{timeout:120000},async t=>{
   const now=Date.now(),source=createSyntheticPace50Source({start:now});
   const harness='claude-code-subscription';
-  const f=await appFixture(t),{owner,lender,circle}=await f.connect({adapters:adapters().map(a=>({...a,spec:legacyProxyHarness(harness)})),
-    lendingPace50:{source,account_week_id:'synthetic-week-1'}});
+  const f=await appFixture(t),{owner,lender,circle}=await f.connect({syntheticAccounts:'claude'});
   await api(lender.app,'/api/agents/'+harness+'/run',{method:'POST',body:{model:'claude-haiku-5-5',effort:null}});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false,
     lendingPolicy:{strategy:'fixed_share',strategyParams:{fixedSharePct:20,keepPct:30},providerConsent:{claude:true},accountPlans:{claude:'max20'}}}});
   await api(lender.app,'/api/agents/'+harness,{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'auto'}});
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:{...gitInput(circle),harness}});
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{...gitInput(circle),harness}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
   const row=await waitFor(async()=>{const log=await api(lender.app,'/api/decisions');return log.events.find(e=>e.jobDigest===sent.jobDigest&&e.source==='standing-rule');},'automatic decision receipt');
   assert.equal(row.decision,'accept');assert.equal(row.decider.deviceKey,lender.app.device.keyId);assert.ok(row.rule);
@@ -100,12 +99,12 @@ test('an audit write failure cannot enable automatic lending',{timeout:120000},a
 test('frozen submit signs the current devices and a draft cannot broaden them',{timeout:120000},async t=>{
   const f=await appFixture(t),{owner,circle}=await f.connect();
   const input={...gitInput(circle),freeze_audience:true,draft_id:'frozen-draft-0001'};
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:input});
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:input});
   const payload=f.jobs.get(sent.jobDigest).job.payload;
   const roster=(await owner.app.device.rosterCache(circle.id).get()).current.payload;
   assert.deepEqual(payload.audience.device_keys,roster.members.map(m=>m.key_id).sort());
-  const replay=await api(owner.app,'/api/jobs',{method:'POST',body:input});assert.equal(replay.jobDigest,sent.jobDigest);
-  const changed=await api(owner.app,'/api/jobs',{method:'POST',body:{...input,freeze_audience:false},status:409});assert.equal(changed.code,'draft_changed');
+  const replay=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:input});assert.equal(replay.jobDigest,sent.jobDigest);
+  const changed=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{...input,freeze_audience:false},status:409});assert.equal(changed.code,'draft_changed');
 });
 
 test('a refused combined limits and mode save leaves every limit unchanged',{timeout:120000},async t=>{
@@ -129,7 +128,7 @@ test('concurrent duplicate declines share one decision and never invalidate its 
     return {...log,record:async row=>{if(row.kind==='job'&&row.decision==='skip'&&!row.supersedes){records++;entered();await held;}return log.record(row);}};
   }});
   t.after(()=>release());
-  const sent=await api(owner.app,'/api/jobs',{method:'POST',body:gitInput(circle)});
+  const sent=await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:gitInput(circle)});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});

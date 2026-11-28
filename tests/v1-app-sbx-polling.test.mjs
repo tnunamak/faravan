@@ -52,7 +52,7 @@ test('an actual running job keeps observation polling without a visible window',
   let observations=0;const summary=backend.protectionSummary;
   backend.protectionSummary=async(...args)=>{if(args[1]?.observation)observations++;return summary(...args);};
   const {owner,lender,circle}=await f.connect({backend,blockerRecheckMs:40,readinessCacheMs:40});
-  await api(owner.app,'/api/jobs',{method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Polling fixture',harness:'codex'}});
+  await api(owner.app,'/api/jobs',{headers:{'faravan-confirm':'yes'},method:'POST',body:{circle:circle.id,git:'https://github.com/example/synthetic.git',commit:'1'.repeat(40),prompt:'Polling fixture',harness:'codex'}});
   await api(lender.app,'/api/lending/limits',{method:'POST',body:{dailyJobs:3,dailyMinutes:60,maxWallSeconds:1200,idleOnly:false}});
   await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
   await api(lender.app,'/api/lending/mode',{method:'POST',body:{circle:circle.id,mode:'ask'}});

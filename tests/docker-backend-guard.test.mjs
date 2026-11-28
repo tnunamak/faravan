@@ -177,16 +177,33 @@ test('failed launch acknowledgement is coded and cannot release the agent', {tim
   } finally {await guest.cleanup();}
 });
 
-test('aborting before durable launch acknowledgement cannot release the agent', {timeout:30000}, async () => {
-  const guest=await localGuest();let entered=false,release;
+test('aborting before durable launch acknowledgement cannot release the agent', {timeout:30000}, async t => {
+  const guest=await localGuest();let notify,release,settle;
+  const entered=new Promise(resolve=>{notify=resolve;});
   const pending=new Promise(resolve=>{release=resolve;});
+  const settled=new Promise(resolve=>{settle=resolve;});
+  const watchdog=once(t.signal,'abort').then(()=>{throw t.signal.reason;});
+  void watchdog.catch(()=>{});
   try {
     const backend=new DockerSbxBackend({guardTimings:fastTimings});
     const handle=handleFor(guest,fake('fake-claude.mjs','finish'));
-    const running=backend.start(handle,{onLaunchDurable:()=>{entered=true;return pending;},onExecutionStarted:()=>{}});
-    running.catch(()=>{});await until(()=>entered,3000);
+    const running=backend.start(handle,{onLaunchDurable:()=>{
+      // Signal when the real acknowledgement continuation has accepted or refused release.
+      const lending=handle._lending;let observationError=lending.observationError;
+      Object.defineProperty(lending,'observationError',{
+        get:()=>observationError,
+        set:error=>{observationError=error;settle({launched:false,error});},
+      });
+      notify();
+      return pending;
+    },onExecutionStarted:()=>settle({launched:true})});
+    const earlyEnd=running.then(()=>assert.fail('guard finished instead of reaching durable launch'));
+    await Promise.race([entered,earlyEnd,watchdog]);
     handle._deadline.controller.abort();await assert.rejects(running);
-    release();await new Promise(resolve=>setTimeout(resolve,100));
+    release();
+    const result=await Promise.race([settled,watchdog]);
+    assert.equal(result.launched,false,'late acknowledgement cannot release the agent');
+    assert.ok(result.error,'the late acknowledgement actually settled with a refusal');
     assert.equal(existsSync(path.join(guest.work,'edit.txt')),false);
   } finally {release();await guest.cleanup();}
 });

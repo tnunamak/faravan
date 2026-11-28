@@ -21,13 +21,17 @@ import { parseArgs } from 'node:util';
 import {validateManifestAssets} from '../lib/v1/update-assets.mjs';
 import {parseUpdateVersion} from '../lib/v1/macos-update-version.mjs';
 
-export function buildSignedManifest({tarball, version, tarballUrl, privateKeyPem, releasedAt = new Date(), notes, releaseNotesUrl, assets, deb, sourceSha}) {
+export function buildSignedManifest({tarball, version, tarballUrl, privateKeyPem, releasedAt = new Date(), notes, releaseNotesUrl, assets, deb, sourceSha, privateHead}) {
   if(!parseUpdateVersion(version))throw new Error('Invalid update version');
   const manifest = {schema: 1, version, tarball: tarballUrl, sha256: createHash('sha256').update(tarball).digest('hex'),
     size: tarball.length, released: releasedAt.toISOString()};
   if(sourceSha!==undefined) {
     if(typeof sourceSha!=='string'||! /^[0-9a-f]{40}$/.test(sourceSha))throw new Error('sourceSha must be a full 40-character source commit');
     manifest.sourceSha=sourceSha;
+  }
+  if(privateHead!==undefined) {
+    if(typeof privateHead!=='string'||!/^[0-9a-f]{40}$/i.test(privateHead))throw new Error('privateHead must be a full 40-character private branch commit');
+    manifest.privateHead=privateHead.toLowerCase();
   }
   if(assets!==undefined) {
     if(!Array.isArray(assets))throw new Error('Update assets must be an array');
@@ -60,8 +64,8 @@ export function buildSignedManifest({tarball, version, tarballUrl, privateKeyPem
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const {values} = parseArgs({options: {tarball: {type: 'string'}, version: {type: 'string'}, key: {type: 'string'}, out: {type: 'string'}, 'tarball-url': {type: 'string'}, 'notes-file': {type: 'string'}, 'release-notes-url': {type: 'string'}, 'asset-map': {type: 'string'},
     'mac-zip': {type:'string'}, 'mac-url': {type:'string'}, 'mac-channel': {type:'string'}, 'mac-bundle-id': {type:'string'},
-    'linux-channel': {type:'string'}, 'linux-arch': {type:'string'}, deb: {type:'string'}, 'deb-arch': {type:'string'}, 'source-sha': {type:'string'}}});
-  if (!values.tarball || !values.version || !values.key || !values.out) { console.error('usage: sign-update.mjs --tarball F --version VERSION --key PRIVATE.pem --out DIR [--tarball-url URL] [--notes-file F] [--release-notes-url URL] [--asset-map F | --mac-zip F --mac-url URL --mac-channel LABEL --mac-bundle-id ID] [--linux-channel LABEL --linux-arch ARCH] [--deb F --deb-arch ARCH] [--source-sha COMMIT]'); process.exit(2); }
+    'linux-channel': {type:'string'}, 'linux-arch': {type:'string'}, deb: {type:'string'}, 'deb-arch': {type:'string'}, 'source-sha': {type:'string'}, 'private-head': {type:'string'}}});
+  if (!values.tarball || !values.version || !values.key || !values.out) { console.error('usage: sign-update.mjs --tarball F --version VERSION --key PRIVATE.pem --out DIR [--tarball-url URL] [--notes-file F] [--release-notes-url URL] [--asset-map F | --mac-zip F --mac-url URL --mac-channel LABEL --mac-bundle-id ID] [--linux-channel LABEL --linux-arch ARCH] [--deb F --deb-arch ARCH] [--source-sha COMMIT] [--private-head COMMIT]'); process.exit(2); }
   let assets, deb;
   const macOptions=['mac-zip','mac-url','mac-channel','mac-bundle-id'];
   if(macOptions.some(k=>values[k]!==undefined)) {
@@ -90,7 +94,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   const {bytes, signature} = buildSignedManifest({tarball, version: values.version,
     tarballUrl, privateKeyPem: await readFile(values.key, 'utf8'),
-    assets, deb, sourceSha:values['source-sha'], notes: values['notes-file'] ? await readFile(values['notes-file'], 'utf8') : undefined, releaseNotesUrl: values['release-notes-url']});
+    assets, deb, sourceSha:values['source-sha'], privateHead:values['private-head'], notes: values['notes-file'] ? await readFile(values['notes-file'], 'utf8') : undefined, releaseNotesUrl: values['release-notes-url']});
   await mkdir(values.out, {recursive: true});
   await writeFile(join(values.out, 'update.json'), bytes);
   await writeFile(join(values.out, 'update.json.sig'), signature);

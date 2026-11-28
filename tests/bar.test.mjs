@@ -4,7 +4,47 @@ import assert from 'node:assert/strict';
 import {mkdtemp, mkdir, readFile, rm, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {runBar, testCheck, ownerOfflineCheck, main, createRows} from '../scripts/bar.mjs';
+import {runBar, testCheck, ownerOfflineCheck, main, createRows, repositoryName, trunkHead, candidateCheck} from '../scripts/bar.mjs';
+
+test('private head lookup targets the configured branch', async()=>{
+  const sha='a'.repeat(40), ref='refs/heads/fixture/private-branch';
+  const run=async(command,args)=>{
+    assert.equal(command,'git');
+    assert.deepEqual(args,['ls-remote','origin',ref]);
+    return {stdout:sha+'\t'+ref+'\n'};
+  };
+  assert.equal(await trunkHead({run,branch:'fixture/private-branch'}),sha);
+});
+
+test('R1 compares the signed private head, not public export, and checks file sizes', async()=>{
+  const privateHead='a'.repeat(40);
+  const manifest={sourceSha:'b'.repeat(40),privateHead,tarball:'https://example.invalid/signed.tar.gz',size:4,
+    assets:[{platform:'darwin',url:'https://example.invalid/app.zip',size:8}],deb:{file:'signed.deb',size:6}};
+  const checked=[];
+  const deps={read:async()=>manifest,head:async()=>privateHead,headFile:async(url,options)=>{
+    assert.equal(options.method,'HEAD');checked.push(url.pathname);
+    const size={'/signed.tar.gz':4,'/app.zip':8,'/signed.deb':6}[url.pathname];
+    return new Response(null,{headers:{'content-length':String(size)}});
+  }};
+  assert.equal((await candidateCheck(deps)).pass,true);
+  assert.deepEqual(checked,['/signed.tar.gz','/app.zip','/signed.deb']);
+  assert.equal((await candidateCheck({...deps,read:async()=>({...manifest,privateHead:'c'.repeat(40)})})).pass,false);
+  assert.deepEqual(await candidateCheck({...deps,read:async()=>({...manifest,privateHead:undefined})}),
+    {pass:false,reason:'candidate lacks signed privateHead'});
+  await assert.rejects(candidateCheck({...deps,headFile:async()=>new Response(null,{headers:{'content-length':'0'}})}),/size differs/);
+});
+
+
+test('hosted checks follow the origin repository through the public move',async()=>{
+  for(const remote of ['git@github.com:tnunamak/faravan.git','https://github.com/tnunamak/faravan.git','ssh://git@github.com/tnunamak/faravan.git']) {
+    const run=async(command,args)=>{
+      assert.equal(command,'git');assert.deepEqual(args,['remote','get-url','origin']);
+      return {stdout:remote+'\n'};
+    };
+    assert.equal(await repositoryName(run),'tnunamak/faravan');
+  }
+  await assert.rejects(repositoryName(async()=>({stdout:'/local/repo'})),/GitHub origin/);
+});
 
 test('R7 requires tests and the real member-home path and names both outcomes',async()=>{
   let timeout,realCalls=0;

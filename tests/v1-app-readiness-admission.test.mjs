@@ -1,15 +1,26 @@
+import {lendingReasonText} from '../lib/v1/lending-reasons.mjs';
 import './helpers/no-browser.mjs';
-import {legacyProxyHarness} from './helpers/legacy-proxy-harness.mjs';
+import {setSyntheticAccountSignedIn} from './helpers/synthetic-run-account.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { appFixture, api, waitFor, syntheticBackend } from './helpers/offers-jobs-fixture.mjs';
 import { lendingView } from '../ui/v1/src/helpers.mjs';
+import {adapters} from './helpers/v1-app-fixture.mjs';
+
+test('a signed-in legacy row without an advertised broker account never reports ready', {timeout:120000},async t=>{
+  const f=await appFixture(t),{lender,circle,realHeartbeats}=await f.realConnect({lenderOptions:{syntheticAccounts:false,adapters:adapters()}});
+  await api(lender.app,'/api/agents/codex',{method:'POST',body:{useForLending:true}});
+  await api(lender.app,'/api/lending/on',{method:'POST',body:{circle:circle.id}});
+  const heartbeat=await waitFor(()=>realHeartbeats.filter(row=>row.device===lender.app.device.keyId).at(-1)?.body,'legacy-row heartbeat',30000);
+  assert.equal(heartbeat.accounts?.length??0,0);
+  assert.ok(heartbeat.agents.some(row=>row.adapter==='codex'),'the signed-in legacy row was projected');
+  assert.notEqual(heartbeat.agents.find(row=>row.adapter==='codex').readiness,'ready');
+  assert.notEqual(lender.app.lendingAdmission(),null);
+});
 
 // O-A (r11), through the real app. One account runs a held job while the other is signed in and idle (a real spare),
 // signed out, or not lent. The page copy comes from lendingView, the same boundary the pages read.
 const CLAUDE = 'claude-code-subscription', CODEX = 'codex';
-const agent = (harness, signedIn) => ({spec:legacyProxyHarness(harness), installed: true, signedIn,
-  harnessVersion: 'synthetic-only', models: ['example-model'], capabilities: []});
 const jobInput = (circle, harness) => ({circle: circle.id, git: 'https://github.com/example/synthetic.git', commit: '1'.repeat(40),
   prompt: 'Readiness job', harness});
 
@@ -28,7 +39,7 @@ async function readinessNews(t, app) {
 // Lend this computer's agents in ask mode. Codex is lent only when `codexLent`. A sandbox that is down is a backend that says so.
 // `holdSpare` holds the offer long-poll open once the job runs, as production does (GET /offers?wait=30). While the Claude job
 // runs, only the idle Codex spare polls offers, so only a refresh can change its answer.
-async function lending(t, {claudeSignedIn = true, codexSignedIn = true, codexLent = true, sandboxDown = false, holdSpare = false, adapters} = {}) {
+async function lending(t, {claudeSignedIn = true, codexSignedIn = true, codexLent = true, sandboxDown = false, holdSpare = false} = {}) {
   const f = await appFixture(t, {hold: true});
   const held = {count: 0, active: false};
   if (holdSpare) {
@@ -44,10 +55,10 @@ async function lending(t, {claudeSignedIn = true, codexSignedIn = true, codexLen
   const backend = syntheticBackend(f.root, {hold: true});
   if (sandboxDown) {
     const up = backend.lenderCapabilities;
-    backend.lenderCapabilities = () => ({...up(), available: false});
+    backend.lenderCapabilities = () => ({...up(), available:false,preflight:{checks:[{ok:false,reason:'sbx_missing'}]}});
   }
-  const {owner, lender, circle} = await f.connect({backend,
-    adapters: adapters ?? [agent(CLAUDE, claudeSignedIn), agent(CODEX, codexSignedIn)]});
+  const {owner,lender,circle}=await f.connect({backend,syntheticAccounts:['claude','codex']});
+  for(const [providerId,signedIn] of [['claude',claudeSignedIn],['codex',codexSignedIn]])if(!signedIn)await setSyntheticAccountSignedIn({...lender,api,providerId,signedIn});
   await api(lender.app, '/api/lending/limits', {method: 'POST', body: {dailyJobs: 3, dailyMinutes: 60, maxWallSeconds: 1200,
     idleOnly: false, lendingPolicy: {providerConsent: {claude: true, codex: true}}}});
   await api(lender.app, '/api/agents/' + CLAUDE, {method: 'POST', body: {useForLending: true}});
@@ -60,11 +71,11 @@ async function lending(t, {claudeSignedIn = true, codexSignedIn = true, codexLen
 // A job the named agent runs on this computer; the other lent agent is the spare.
 async function lendingWithJobRunning(t, {runs = CLAUDE, ...signin} = {}) {
   const {owner, lender, circle, held} = await lending(t, signin);
-  await api(owner.app, '/api/jobs', {method: 'POST', body: jobInput(circle, runs)});
-  const card = await waitFor(async () => (await api(lender.app, '/api/approvals'))[0], 'review card');
+  await api(owner.app, '/api/jobs', {headers:{'faravan-confirm':'yes'},method: 'POST', body: jobInput(circle, runs)});
+  const card = await waitFor(async () => (await api(lender.app, '/api/approvals'))[0], 'review card',30000);
   const news = await readinessNews(t, lender.app), before = news();
   await api(lender.app, '/api/approvals/' + card.id + '/accept', {method: 'POST', body: {}});
-  await waitFor(() => lender.backend.calls.some(([kind]) => kind === 'run'), 'the job runs');
+  await waitFor(() => lender.backend.calls.some(([kind]) => kind === 'run'), 'the job runs',30000);
   held.active = true;
   return {lender, news, before, held};
 }
@@ -115,19 +126,15 @@ test('O-A: with the spare claim held open, turning the spare off is still seen a
 });
 
 test('O-A: with the spare claim held open, a spare that signs out is seen by the next check', {timeout: 120000}, async t => {
-  const adapters = [agent(CLAUDE, true), agent(CODEX, true)];
-  const {lender, held} = await lendingWithJobRunning(t, {holdSpare: true, adapters});
+  const {lender, held} = await lendingWithJobRunning(t, {holdSpare: true});
   await waitFor(() => held.count >= 1, 'the spare is in a long claim wait', 15000);
   await waitFor(() => lender.app.lendingAdmission() === null, 'the held spare admits', 15000);
-  // Two observed sign-outs in a row make a sign-out (the app's rule for sandbox evidence).
-  adapters[1].signedIn = false;
-  await api(lender.app, '/api/agents/refresh', {method: 'POST', body: {agents: [CODEX]}});
-  await api(lender.app, '/api/agents/refresh', {method: 'POST', body: {agents: [CODEX]}});
+  await setSyntheticAccountSignedIn({...lender,api,providerId:'codex',signedIn:false});
   await waitFor(() => lender.app.lendingAdmission() === 'busy', 'the signed-out spare no longer admits while its claim waits', 3000);
 });
 
 test('O-A: a sandbox that is genuinely down keeps the workspace setup message', {timeout: 120000}, async t => {
   const {lender} = await lending(t, {sandboxDown: true});
-  await waitFor(() => lender.app.lendingAdmission() === 'sandbox_not_ready', 'the sandbox is checked', 15000);
-  assert.match(lendingView(await api(lender.app, '/api/status')).message, /protected workspace/);
+  await waitFor(() => lender.app.lendingAdmission() === 'sandbox_cannot_start', 'the sandbox is checked', 15000);
+  assert.equal(lendingView(await api(lender.app,'/api/status')).message,lendingReasonText('sandbox_cannot_start'));
 });

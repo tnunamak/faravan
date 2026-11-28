@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign, verify } from 'node:crypto';
 import { verifyAndOpenRelease } from '../../packaging/release-verification.mjs';
 
 const sha = 'a'.repeat(40);
@@ -95,4 +95,41 @@ test('caller and verifier mutation cannot substitute opened artifact or signed p
   await verifyAndOpenRelease(f.input, f.pinned, f.effects);
   assert.deepEqual(f.calls[0].bytes, original);
   assert.equal(f.calls[0].sourceSha, sha);
+});
+
+test('ephemeral Ed25519 authenticates the selected Mac bytes before handoff', async t => {
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+  const otherKey = generateKeyPairSync('ed25519').publicKey;
+  const pem = key => key.export({ type: 'spki', format: 'pem' });
+  const makeMacFixture = () => {
+    const f = fixture();
+    const name = 'app-macos.zip';
+    Object.assign(f.pinned, { publicKey: pem(publicKey), name, platform: 'darwin', arch: 'universal', kind: 'zip' });
+    rewrite(f, ({ manifest }) => {
+      Object.assign(manifest.packages[0], { name, platform: 'darwin', arch: 'universal', kind: 'zip',
+        url: new URL('releases/' + sha + '/' + name, f.pinned.baseURL).href });
+    });
+    f.input.signature = sign(null, f.input.envelopeBytes, privateKey);
+    f.effects.verify = async ({ publicKey, message, signature }) => verify(null, message, publicKey, signature);
+    return f;
+  };
+
+  await t.test('opens exactly one byte-identical Mac artifact', async () => {
+    const f = makeMacFixture();
+    assert.equal(await verifyAndOpenRelease(f.input, f.pinned, f.effects), 'opened');
+    assert.equal(f.calls.length, 1);
+    assert.deepEqual(f.calls[0].bytes, f.input.artifactBytes);
+    assert.deepEqual([f.calls[0].platform, f.calls[0].arch, f.calls[0].sourceSha], ['darwin', 'universal', sha]);
+  });
+
+  for (const [name, change] of [
+    ['envelope changed after signing', f => { f.input.envelopeBytes = Buffer.concat([f.input.envelopeBytes, Buffer.from(' ')]); }],
+    ['different pinned key', f => { f.pinned.publicKey = pem(otherKey); }],
+    ['a different artifact of the same size', f => { f.input.artifactBytes[0] ^= 1; }],
+  ]) await t.test(name + ' never opens an artifact', async () => {
+    const f = makeMacFixture();
+    change(f);
+    await assert.rejects(() => verifyAndOpenRelease(f.input, f.pinned, f.effects));
+    assert.deepEqual(f.calls, []);
+  });
 });

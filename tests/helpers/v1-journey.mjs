@@ -210,13 +210,17 @@ export async function fixture(t, {managedShutdown = false} = {}) {
     const transcript=Buffer.from(transcriptText??'{"synthetic":true}\n');
     const ref=(b,media_type)=>{const digest=p.digestBytes(b);artifacts.set(digest,b);artifactMediaTypes.set(digest,media_type);return{digest,bytes:b.length,media_type};};
     const now=instant(),holder=p.fingerprint(p.exportPublicKey(key)),attempt_id=randomUUID();
+    const model=receiptExtra.model??(job.runRequest.models==='any'?'test-model':job.runRequest.models[0].modelId);
+    const providerId=job.runRequest.models==='any'
+      ?(job.requirements.harness?.[0]?.startsWith('claude')?'claude':'codex'):job.runRequest.models[0].providerId;
+    const selection={providerId,accountId:'synthetic-completed-account',modelId:model,effortId:job.runRequest.effortId};
     const result=p.signEnvelope('result',{schema:'faravan.result.v1',circle:job.circle,job_digest:id,attempt_id,generation:1,executor:holder,
       roster_epoch:job.roster_epoch,submitted_at:now,...(output?{output}:{}),candidate:ref(candidate,candidateMediaType),transcript:ref(transcript,'application/x-ndjson'),
       receipt:{schema:'faravan.receipt.v1',self_reported:true,harness:job.requirements.harness?.[0]??'test-agent',harness_version:'test',
-        model:job.requirements.model?.any_of[0]??'test-model',backend:'synthetic',limits_applied:job.requirements.limits,
+        model,selection,backend:'synthetic',limits_applied:job.requirements.limits,
         egress_applied:job.requirements.egress,capabilities_applied:job.requirements.capabilities,started_at:now,finished_at:now,duration_ms:0,source:job.source,...receiptExtra}},key);
     Object.assign(view,{state:'result-accepted',attempts_started:1,result_digest:p.digest(result.payload),result,
-      current_attempt:{attempt_id,job_digest:id,generation:1,holder,state:'completed',claimed_at:now,execution_started_at:now,lease_expires_at:now,reason:null,compute_stopped:true,stopped_at:now}});
+      current_attempt:{attempt_id,job_digest:id,generation:1,holder,selection,state:'completed',claimed_at:now,execution_started_at:now,lease_expires_at:now,reason:null,compute_stopped:true,stopped_at:now}});
     return result;
   };
   t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));await rm(root,{recursive:true,force:true});

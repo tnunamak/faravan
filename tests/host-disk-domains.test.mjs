@@ -203,8 +203,8 @@ test('app readiness, blocker headline and machine hold preserve unreadable disk 
     appSection('const checks=(report?.preflight?.checks??[])', 'const names=value=>') + 'return checks;');
   const checks = normalize({ preflight: { checks: [failed] } }, x => typeof x === 'string' ? x.slice(0, 1024) : '', c => c.fix);
   assert.equal(checks[0].reason, 'host_disk_unreadable');
-  const requirements = new Function('readinessCache', 'daemonRestart',
-    appSection('const readinessRequirements=', 'const hold=recoveryReadHold()') + 'return readinessRequirements;')({ checks }, null);
+  const requirements = new Function('readiness', 'daemonRestart',
+    appSection('const readinessRequirements=', 'const within=started=>') + 'return readinessRequirements;')({ checks }, null);
   assert.equal(requirements[0].cause, 'host_disk_unreadable');
   const model = lendingBlockers({docker: { installed: true, running: true, signedIn: true },readinessRequirements: requirements,intent: { on: true },agents: [{ id: 'claude', enabled: true, installed: true, signedIn: true }]});
   assert.match(model.headline, /could not read free disk space/);
@@ -214,7 +214,7 @@ test('app readiness, blocker headline and machine hold preserve unreadable disk 
     appSection('function machineHold()', 'let blockerCheck=') + 'return machineHold();').bind(null, recoveryGate);
   const record = new Function('createGate', 'checks',
     'let preflight; const deadlineRecovery=createGate(); const sandboxHealth={observe(){}}, settings={}, now=()=>1, noteDocker=()=>{}, dockerSignedOutFrom=()=>false;' +
-    appSection('function noteChecks(checks)', 'async function checkDocker(') +
+    appSection('function noteChecks(checks)', 'const DOCKER_CONFIRMATION_BACKOFF_MS=') +
     'noteChecks(checks); return preflight;').bind(null, recoveryGate);
   for (const input of [checks, [failed]]) {
     const preflight = record(input);
@@ -229,7 +229,8 @@ test('app readiness, blocker headline and machine hold preserve unreadable disk 
     'backend={protectionSummary:async()=>report}, JOB_DEFAULTS={}, refreshAbort={signal:undefined},' +
     'safeLine=x=>typeof x==="string"?x.slice(0,1024):"", appRemedy=c=>c.fix, boundaryVerified=()=>null, boundaryRecords=[],' +
     'refreshTestCache=async()=>{}, dockerProblem=()=>({}), defaultReadiness=({observation})=>readiness(undefined,{observation});' +
-    appSection('function noteChecks(checks)', "const SIGNED_OUT_REMEDY=") +
+    appSection('function noteChecks(checks)', 'const DOCKER_CONFIRMATION_BACKOFF_MS=') +
+    appSection('async function checkDocker(', "const SIGNED_OUT_REMEDY=") +
     appSection('async function readiness(', 'async function jobReadiness(') +
     'await checkDocker({force:true}); return preflight; })();').bind(null, recoveryGate);
   assert.equal(hold(await raw({ preflight: { checks: [failed] } })), 'host_disk_unreadable');

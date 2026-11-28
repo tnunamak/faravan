@@ -14,7 +14,7 @@ for(const state of ['pass','failed','inconclusive'])test('isolation '+state+' pr
   },onIsolationFailure:async()=>{pauses++;}
  }});
  const controller=new AbortController();
- const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,approve:async()=>true,onEvent:e=>f.events.push(e)});
+ const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,approve:async()=>true,onEvent:e=>f.events.push(e)});
  const running=lender.start(controller.signal);
  t.after(async()=>{controller.abort();await running;});
  if(state==='pass'){
@@ -35,7 +35,7 @@ test('an inconclusive isolation check records the step and elapsed time in the f
  const details={step:'credential_probe',elapsedMs:20400,budgetMs:20000},logged=[];
  const f=await lenderFixture(t,{policy:{checkJobIsolation:async()=>({state:'inconclusive',code:'isolation_check_inconclusive',details})}});
  const controller=new AbortController();
- const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,approve:async()=>true,
+ const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,approve:async()=>true,
   onEvent:e=>f.events.push(e),onDiagnostic:entry=>logged.push(entry)});
  const running=lender.start(controller.signal);
  t.after(async()=>{controller.abort();await running;});
@@ -49,7 +49,7 @@ import {realLenderFixture} from './helpers/v1-real-lender-fixture.mjs';
 for(const state of ['failed','inconclusive'])test('real host re-offers isolation '+state+' without spending a start',{timeout:60000},async t=>{
  const f=await realLenderFixture(t,{members:true,policy:{checkJobIsolation:async()=>({state,code:'isolation_check_'+state,blocker:'The sandbox could reach your home network. Check Docker Sandboxes, then resume lending.'})}});
  const controller=new AbortController();
- const lender=createLender({client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,approve:async()=>true,onEvent:e=>f.events.push(e)});
+ const lender=createLender({...f.runOptions,client:f.client,backend:f.backend,adapters:f.adapters,policy:f.policy,clock:f.clock,approve:async()=>true,onEvent:e=>f.events.push(e)});
  const running=lender.start(controller.signal);let released=false;
  const release=f.client.release.bind(f.client);f.client.release=async(...args)=>{const result=await release(...args);released=true;return result;};
  f.stop=async()=>{controller.abort();await running;};

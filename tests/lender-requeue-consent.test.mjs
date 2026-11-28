@@ -130,7 +130,8 @@ async function loadLender(h) {
     './versions.mjs': {
       MODEL_EFFORT_PAIRS_CAPABILITY: 'model_effort_pairs_v1',
       AUTO_RUN_CAPABILITY: 'auto_run_v1',
-      RUN_REQUEST_CAPABILITY: 'run_request_v1'
+      RUN_REQUEST_CAPABILITY: 'run_request_v1',
+      DESIGNATED_MEMBER_CAPABILITY: 'designated_member_v1'
     },
     // No account is advertised in this fixture, so no signed run request can resolve.
     './run-request.mjs': {
@@ -160,6 +161,8 @@ async function loadLender(h) {
       }
     },
     './lock.mjs': { acquireProcessLock: forbidden('process_lock') },
+    // The fake backend has no native sandbox create receipt.
+    './sandbox-record-owner.mjs': { createIdOf: () => null },
     '../source-archive.mjs': {
       extractSourceArchive: forbidden('archive'), SOURCE_ARCHIVE_INPUT_BYTES: 1048576
     },

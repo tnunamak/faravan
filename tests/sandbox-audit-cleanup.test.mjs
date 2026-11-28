@@ -101,7 +101,7 @@ test('N1: result delivery retains a separate scratch retry record after compute 
   const f = await lenderFixture(t);
   f.backend.destroy = async () => { f.calls.push(['destroy']); return { removed: true, scratch_removed: false }; };
   const controller = new AbortController();
-  const lender = createLender({ client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
+  const lender = createLender({...f.runOptions, client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
     clock: f.clock, approve: async () => true, credentialValues: async () => [], onEvent: event => f.events.push(event) });
   const running = lender.start(controller.signal);
   t.after(async () => { controller.abort(); await running; });
@@ -113,7 +113,7 @@ test('N1: result delivery retains a separate scratch retry record after compute 
   let retries = 0, removable = false;
   f.backend.reconcilePending = async record => { retries++; return { removed: true, scratch_removed: removable, attemptId: record.attemptId }; };
   const restartController = new AbortController();
-  const restarted = createLender({ client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
+  const restarted = createLender({...f.runOptions, client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
     clock: f.clock, approve: async () => true, credentialValues: async () => [] });
   const recovery = restarted.start(restartController.signal);
   t.after(async () => { restartController.abort(); await recovery; });
@@ -159,7 +159,7 @@ test('R2: failed check preparation survives result delivery and retries after re
   f.backend.prepareCheck = async () => { throw Object.assign(new Error('check preparation failed'),
     { cleanup_receipt: { removed: true, scratch_removed: false } }); };
   const controller = new AbortController();
-  const lender = createLender({ client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
+  const lender = createLender({...f.runOptions, client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
     clock: f.clock, approve: async () => true, credentialValues: async () => [] });
   const running = lender.start(controller.signal);
   t.after(async () => { controller.abort(); await running; });
@@ -171,7 +171,7 @@ test('R2: failed check preparation survives result delivery and retries after re
   f.backend.reconcilePending = async record => { recovered = record;
     return { removed: true, scratch_removed: true, attemptId: record.attemptId }; };
   const restart = new AbortController();
-  const recovery = createLender({ client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
+  const recovery = createLender({...f.runOptions, client: f.client, backend: f.backend, adapters: f.adapters, policy: f.policy,
     clock: f.clock, approve: async () => true, credentialValues: async () => [] }).start(restart.signal);
   t.after(async () => { restart.abort(); await recovery; });
   await until(() => recovered && f.saved().scratchPending.length === 0, 'check cleanup retry');

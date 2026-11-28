@@ -121,7 +121,6 @@ test('every blocker the app reports has a human reason and a fix', async () => {
     {blocking:{docker:{installed:true, running:false}, agents:[agent]}},
     {blocking:{docker:{...docker, signedIn:false}, agents:[agent]}},
     ...['guard_runtime_unavailable', 'v1_limits', 'network_policy', 'sbx_version'].map(cause => ({blocking:requirement(cause)})),
-    {blocking:{docker, isolationFailure:'The sandbox could read a file outside the job.', agents:[agent]}},
     {blocking:{docker, circle:{name:'Friends', reachable:false, host:'Sam'}, agents:[agent]}},
     {blocking:{docker, circle:{name:'Friends', hostVersion:'0.1.0', needVersion:'0.2.0'}, agents:[agent]}},
     {blocking:{docker, agents:[{...agent, signedIn:false}]}, agents:[{...agent, signedIn:false}]},
@@ -143,8 +142,16 @@ test('every blocker the app reports has a human reason and a fix', async () => {
     assert.equal(out.next_steps.some(step => /see status\.get/.test(step)), false, JSON.stringify(out.next_steps));
   }
   assert.deepEqual([...seen].sort(), ['agent_not_ready', 'agent_signed_out', 'circle_not_joined', 'circle_unreachable', 'circle_update_needed',
-    'docker_not_installed', 'docker_not_running', 'docker_signed_out', 'guard_runtime_unavailable', 'isolation_check_failed',
+    'docker_not_installed', 'docker_not_running', 'docker_signed_out', 'guard_runtime_unavailable',
     'lending_not_started', 'no_agents', 'policy_unenforceable', 'requirements_unsupported', 'sandbox_not_ready']);
+  // 580b3ed49 retired the saved isolation latch: an old isolationFailure is no blocker and holds nothing.
+  const effectiveInput = {intent:'on', now:20000, launchedAt:0, agents:[agent], blocking:{docker, agents:[agent]}};
+  const baseline = effectiveState(effectiveInput);
+  const stale = effectiveState({...effectiveInput,
+    blocking:{...effectiveInput.blocking, isolationFailure:'The sandbox could read a file outside the job.'}});
+  assert.deepEqual(stale, baseline, 'a retired isolation latch does not change effective lending state');
+  const retired = await blockers({status:stale, agents:[{...agent, useForLending:true}]});
+  assert.deepEqual(retired.blockers, [], 'a retired isolation latch raises no blocker');
 });
 
 test('the running app reports a mismatched account alike over HTTP, the CLI and MCP', {timeout:150000}, async t => {
@@ -157,6 +164,8 @@ test('the running app reports a mismatched account alike over HTTP, the CLI and 
   const call = (id, input = {}) => api(lender.app, '/api/ops/' + id, {method:'POST', body:input, headers:{'faravan-confirm':'yes'}});
   await call('agents.select', {id:'codex', useForLending:true});
   await call('lending.on', {circle:circle.id});
+  // An explicit On reads no quota until a job waits (v1-app-fresh-owner-first-reading), so the owner's Check agents takes the reading.
+  await call('agents.check');
   const out = await waitFor(async () => {
     const value = await call('status.blockers');
     return value.blockers.some(b => b.kind === 'account_held' && b.reason === 'identity_mismatch') ? value : null;

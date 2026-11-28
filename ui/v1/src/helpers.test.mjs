@@ -186,7 +186,7 @@ test('exactly three icon labels, separate expected pauses from attention',()=>{
   assert.equal(iconState({enabled:true,reason:'daily_limit'}),'Paused');
   assert.equal(iconState({enabled:true,reason:'quota_reserve'}),'Paused');
   assert.equal(iconState({enabled:true,paused:true,circle:'friends'}),'Paused');
-  for(const reason of ['policy_unenforceable','readiness_changed','lease_expired','unknown'])assert.equal(iconState({enabled:true,reason}),'Needs attention');
+  for(const reason of ['cannot_run_here','execution_failed','unknown'])assert.equal(iconState({enabled:true,reason}),'Needs attention');
   assert.equal(iconState({enabled:true,reason:'user_active'}),'Lending on');
   assert.equal(iconState({enabled:true,reason:'daily_limit',label:'Cap'},[{label:'Cap'}]),'Paused');
 });
@@ -307,7 +307,7 @@ test('review consumes realistic per-job app API protection, not legacy flags',()
 });
 
 test('signed LAN metadata shows exact warning before a separate enrollment action',async()=>{
-  const calls=[],metadata={name:'Weekend projects',origin:'http://10.23.1.2:4000',
+  const calls=[],metadata={name:'Weekend projects',origin:'http://192.168.1.2:4000',
     lanMode:true,warning:LAN_WARNING,expiresAt:'2026-10-10T00:00:00Z'};
   const state=createJoinReview(async link=>{calls.push(['preview',link]);return metadata;},
     async body=>{calls.push(['join',body]);return {name:'Weekend projects',enrollment:{state:'pending'}};});
@@ -361,9 +361,11 @@ test('failed or malformed preview cannot provide consent; unknown enrollment is 
 });
 
 test('stop request never displays stopped before removal and report acknowledgement',()=>{
+  assert.deepEqual(statusView('cleanup_pending'),{label:'Finishing cleanup',message:'This computer is finishing sandbox cleanup.',remedy:'Wait for cleanup'});
   const state=withLendingProjection({enabled:false,circle:'circle',status:'stopping',reason:'stopped_by_lender'},
     {intent:'off',intentState:'off',admission:'blocked',admissionReason:'stop_report_pending',execution:'stopping',executionJob:'attempt-1'});
-  assert.equal(lendingView(state).label,'Stop report pending');
+  assert.equal(state.lendingProjection.admissionReason,'cleanup_pending');
+  assert.equal(lendingView(state).label,'Stopping');
   const waiting=withLendingProjection({enabled:false,circle:'circle',status:'stopping',reason:'cessation_unverified'},
     {intent:'off',intentState:'off',admission:'blocked',admissionReason:'cessation_unverified',execution:'stopping',executionJob:'attempt-2'});
   assert.equal(lendingView(waiting).label,'Stopping');
@@ -435,9 +437,9 @@ test('owner request view shows the signed name and match code, and refuses an un
   assert.equal(enrollmentView({proof_valid:true,device_code:'zzz'}).code,null);
 });
 test('joining computer waits for a named owner only in approve-each mode',()=>{
-  const each=joinStatusView({name:'Critics',enrollment:{state:'pending'},joinInfo:{approval:'each',ownerName:'Tessa’s laptop',code:'A1B2C3'}});
-  assert.deepEqual(each,{waiting:true,message:'Waiting for Tessa’s laptop to approve this computer',code:'A1B2C3'});
-  const auto=joinStatusView({name:'Critics',enrollment:{state:'pending'},joinInfo:{approval:'automatic',ownerName:'Tessa’s laptop',code:'A1B2C3'}});
+  const each=joinStatusView({name:'Critics',enrollment:{state:'pending'},joinInfo:{approval:'each',ownerName:'Sam’s laptop',code:'A1B2C3'}});
+  assert.deepEqual(each,{waiting:true,message:'Waiting for Sam’s laptop to approve this computer',code:'A1B2C3'});
+  const auto=joinStatusView({name:'Critics',enrollment:{state:'pending'},joinInfo:{approval:'automatic',ownerName:'Sam’s laptop',code:'A1B2C3'}});
   assert.doesNotMatch(auto.message,/^Waiting for/);assert.equal(auto.code,null);
   assert.equal(joinStatusView({enrollment:{state:'approved'}}).waiting,false);
 });
@@ -510,7 +512,7 @@ test('Home picks one primary action per persona',()=>{
 });
 
 test('join review names the inviter only when the signed invitation carries a name', () => {
-  assert.equal(joinPreviewView({name:'Weekend projects',origin:'https://q.example',lanMode:false,ownerName:'Rowan Vale'}).ownerName,'Rowan Vale');
+  assert.equal(joinPreviewView({name:'Weekend projects',origin:'https://q.example',lanMode:false,ownerName:'Sam Rivera'}).ownerName,'Sam Rivera');
   assert.equal(joinPreviewView({name:'Weekend projects',origin:'https://q.example',lanMode:false}).ownerName,'');
   assert.equal(joinPreviewView({name:'Weekend projects',origin:'https://q.example',lanMode:false,ownerName:'sha256:'+'a'.repeat(64)}).ownerName,'');
 });
@@ -812,7 +814,7 @@ test('a signed-out agent is explained with its product name and one next step', 
   assert.equal(agentSignedOutHeadline('Codex'),"Codex isn't signed in inside Faravan's sandbox anymore.");
   assert.equal(agentSignedOutMessage(''),"This agent isn't signed in inside Faravan's sandbox anymore. Sign in again on the Lend page, then lending resumes.");
   const lending={enabled:true,paused:false,status:'failed',reason:'agent_signed_out',agent:'codex',label:'PRIVATE_DIAGNOSTIC'};
-  assert.deepEqual(lendingView(lending),{label:'Sign-in needed',message:'Codex is no longer signed in to Faravan’s sandbox. Sign in again on the Lend page, then lending can resume.',remedy:'Sign in'});
+  assert.deepEqual(lendingView(lending),{label:'Sign-in needed',message:'The agent account is signed out.',remedy:'Sign in to the account'});
   assert.equal(statusView('agent_signed_out').label,'Sign-in needed');
   assert.ok(STATUS_KEYS.includes('agent_signed_out'));
   assert.equal(iconState(lending,[]),'Needs attention');
@@ -944,27 +946,20 @@ test('unknown conversion offers an update without claiming a hold',()=>{
     assert.notEqual(statusView(key).remedy,'Choose another model',key+' has no lender model selector');
 });
 
-// The test Mac 11-01: a lending wait read "Check protected workspace setup" when the cause was an agent.
-test('a lending wait follows its reason; only a sandbox reason says protected workspace',()=>{
-  const view=(reason,agentName)=>statusView('waiting_for_sandbox',{reason,agentName});
-  assert.deepEqual(view('agent_signed_out','Claude'),{label:'Sign-in needed',message:'Claude is signed out in Faravan.',remedy:'Sign in'});
-  assert.deepEqual(view('agent_not_chosen','Codex'),{label:'Not lent',message:"Codex isn't chosen for lending.",remedy:'Choose agents'});
-  assert.equal(view('agent_not_chosen').message,"This agent isn't chosen for lending.");
-  assert.equal(view('no_ready_agent').remedy,'Set up an agent');
-  assert.equal(view('lender_starting','Claude').message,'Checking whether Claude is signed in…');
-  assert.equal(view('native_credentials_owner_only').remedy,'Open Lending');
-  assert.match(view('host_disk_low').message,/low on disk space/);
-  for(const reason of ['agent_signed_out','agent_not_chosen','no_ready_agent','lender_starting','native_credentials_owner_only','host_disk_low','host_disk_unreadable'])
-    assert.doesNotMatch(view(reason,'Claude').message,/protected workspace/,reason);
-  const generic={label:'Waiting for setup',message:"Lending is on, but this computer can't run jobs right now. Check protected workspace setup.",remedy:'Open setup'};
-  assert.deepEqual(view('sandbox_not_ready'),generic);
-  assert.deepEqual(view('some_future_reason'),generic,'unknown reasons keep the generic text');
-  assert.deepEqual(statusView('waiting_for_sandbox'),generic);
-  const notChosen=withLendingProjection({lending:{enabled:true}},{intent:'on',intentState:'blocked',admission:'blocked',admissionReason:'agent_not_chosen'});
-  assert.equal(lendingView(notChosen).remedy,'Choose agents');
+// Owner's Mac 11-01: a lending wait read "Check protected workspace setup" when the cause was an agent.
+test('a lending wait uses the closed reason and its one next step',()=>{
+  const view=reason=>statusView('waiting_for_sandbox',{reason});
+  assert.deepEqual(view('account_signed_out'),{label:'Sign-in needed',message:'The agent account is signed out.',remedy:'Sign in to the account'});
+  assert.deepEqual(view('lending_off'),{label:'Not lent',message:'Lending is turned off.',remedy:'Turn lending on'});
+  assert.deepEqual(view('no_accounts'),{label:'Add an account',message:'No agent account is configured.',remedy:'Add an agent account'});
+  assert.deepEqual(view('sandbox_cannot_start'),{label:'Sandbox setup needed',message:'The sandbox cannot start on this computer.',remedy:'Open sandbox setup'});
+  assert.deepEqual(view('some_future_reason'),{label:'Waiting',message:'This computer is checking whether it can lend.',remedy:'Wait for the next check'});
+  const notChosen=withLendingProjection({lending:{enabled:true}},{intent:'on',intentState:'blocked',admission:'blocked',admissionReason:'lending_off'});
+  assert.equal(notChosen.lendingProjection.admissionReason,'lending_off');
+  assert.equal(lendingView(notChosen).remedy,'Turn lending on');
 });
 
 test('contribution copy counts a named person once across computers',()=>{
-  const rows=[{keyId:'a',run:1,personName:'Tessa'}, {keyId:'b',run:1,personName:'Tessa'}, {keyId:'c',run:1,personName:'Maya'}];
-  assert.equal(contributionLine({devices:3,jobs:3,rows}), 'You helped Tessa and Maya with 3 jobs in the last 7 days.');
+  const rows=[{keyId:'a',run:1,personName:'Sam'}, {keyId:'b',run:1,personName:'Sam'}, {keyId:'c',run:1,personName:'Maya'}];
+  assert.equal(contributionLine({devices:3,jobs:3,rows}), 'You helped Sam and Maya with 3 jobs in the last 7 days.');
 });
